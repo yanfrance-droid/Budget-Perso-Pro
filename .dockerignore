@@ -1,0 +1,43 @@
+# Bases de données locales SQLite et journaux
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Sauvegardes et historiques personnels
+data/backups/
+src/services/backups/
+loans_history.csv
+xl/
+src/services/productionDiagnosticAndRepair.ts
+
+# Scripts de maintenance, d'extraction et de diagnostic
+scripts/
+diagnose.js
+dump_ldb.js
+find_orig.cjs
+find_tpl_record.cjs
+test*.js
+test*.cjs
+test-db.ts
+testRender.tsx
+dom.html
+dom_revenus.html
+
+# Fichiers d'environnement et secrets locaux
+.env
+.env.*
+!.env.example
+
+# Logs et rapports
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Fichiers générés et dépendances
+dist/
+dist-ssr/
+node_modules/
+dist-package/
+.dist_staging/
