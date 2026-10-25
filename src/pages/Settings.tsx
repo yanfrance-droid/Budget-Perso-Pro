@@ -40,8 +40,27 @@ export default function Settings() {
   const { user, isAuthenticated, logout } = useAuth();
   const { theme, setTheme, isPrivacyMode, togglePrivacyMode } = useUIPreferences();
 
-  // Navigation par sections
-  const [activeSection, setActiveSection] = useState<'accounts' | 'payers' | 'categories' | 'loans_history' | 'preferences' | 'backup' | 'server' | 'help'>('accounts');
+  // Navigation par sections (prise en charge de l'onglet demandé par URL ex: ?tab=help en environnement navigateur)
+  const getInitialTab = (): 'accounts' | 'payers' | 'categories' | 'loans_history' | 'preferences' | 'backup' | 'server' | 'help' => {
+    if (typeof window !== 'undefined' && window.location) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'help') return 'help';
+    }
+    return 'accounts';
+  };
+
+  const [activeSection, setActiveSection] = useState<'accounts' | 'payers' | 'categories' | 'loans_history' | 'preferences' | 'backup' | 'server' | 'help'>(
+    getInitialTab()
+  );
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'help') {
+        setActiveSection('help');
+      }
+    }
+  }, []);
 
   // Données métier depuis le serveur SQLite
   const categories = serverData ? serverData.categories : [];
@@ -1894,13 +1913,10 @@ export default function Settings() {
               color: 'var(--text-secondary, #777)',
               fontSize: '0.85rem'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Heart size={15} color="#ef4444" fill="#ef4444" />
-                <span>PersonalBudgetPro • Conçu et développé par <strong>Yann Donne</strong></span>
+              <div>
+                <span>PersonalBudgetPro • Conçu et développé par <strong>Yann Donne</strong> • Application souveraine et autonome</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <span>Application souveraine et autonome</span>
-                <span>•</span>
                 <button
                   type="button"
                   onClick={() => setActiveSection('help')}
@@ -2064,7 +2080,7 @@ export default function Settings() {
 
             {/* PIED DE PAGE DU MANUEL */}
             <div style={{ textAlign: 'center', marginTop: '1.5rem', color: 'var(--text-secondary, #888)', fontSize: '0.85rem' }}>
-              Le manuel complet est également accessible au format Markdown dans le dossier <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>docs/manuel.md</code> du projet.
+              Le manuel complet est également accessible au format Markdown dans le fichier <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>README.md</code> à la racine du projet.
             </div>
           </div>
         </div>
