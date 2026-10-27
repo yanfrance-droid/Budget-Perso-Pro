@@ -115,28 +115,12 @@ PersonalBudgetPro a été développé avec une exigence de sobriété et d'absen
 #### A. Clonage du dépôt Git
 Connectez-vous à votre machine ou conteneur Proxmox et clonez le dépôt :
 ```bash
-git clone https://github.com/yanfrance-droid/PersonalBudgetPro.git
-cd PersonalBudgetPro
+git clone https://github.com/yanfrance-droid/Budget-Perso-Pro.git
+cd Budget-Perso-Pro
 ```
 
 #### B. Structure du Dockerfile
-Le projet dispose d'un conteneur optimisé multi-stage :
-```dockerfile
-FROM node:22-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM node:22-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server ./server
-EXPOSE 3001
-CMD ["node", "server/index.ts"]
+Le Dockerfile fourni à la racine du dépôt est la référence officielle pour construire l'application. Il utilise Node.js 24, compile le frontend React, installe les dépendances de production et configure le serveur Node.js avec SQLite et Chromium. Il est recommandé d'utiliser directement ce fichier plutôt que de recopier un exemple de Dockerfile dans cette documentation.
 ```
 
 #### C. Lancement avec Docker Compose
