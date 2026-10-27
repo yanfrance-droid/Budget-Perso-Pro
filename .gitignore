@@ -1,0 +1,46 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Bases de données SQLite et sauvegardes
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/backups/
+dist-package/
+.dist_staging/
+
+# Variables d'environnement locales
+.env
+.env.production
+.env.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Protection supplémentaire des données locales
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+.env.*
+!.env.example
