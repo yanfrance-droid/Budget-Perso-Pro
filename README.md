@@ -2,7 +2,7 @@
 
 > **Application souveraine, autonome et hautement résiliente de gestion budgétaire et de patrimoine personnel.**  
 > **Conception, Architecture & Développement :** Yann Donne  
-> **Dépôt officiel :** [https://github.com/yanfrance-droid/PersonalBudgetPro.git](https://github.com/yanfrance-droid/PersonalBudgetPro.git)  
+> **Dépôt officiel :** https://github.com/yanfrance-droid/Budget-Perso-Pro
 > **Stack technologique :** React 19 • Vite • TypeScript • SQLite natif (`node:sqlite`) • Docker • Proxmox VE  
 
 ---
