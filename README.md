@@ -120,35 +120,24 @@ cd Budget-Perso-Pro
 ```
 
 #### B. Structure du Dockerfile
-Le Dockerfile fourni à la racine du dépôt est la référence officielle pour construire l'application. Il utilise Node.js 24, compile le frontend React, installe les dépendances de production et configure le serveur Node.js avec SQLite et Chromium. Il est recommandé d'utiliser directement ce fichier plutôt que de recopier un exemple de Dockerfile dans cette documentation.
-```
+
+Le Dockerfile fourni à la racine du dépôt est la référence officielle pour construire l'application. Il utilise Node.js 24, compile le frontend React et configure le serveur Node.js avec SQLite et Chromium. Il est recommandé d'utiliser directement ce fichier plutôt que de recopier un exemple de Dockerfile dans cette documentation.
 
 #### C. Lancement avec Docker Compose
-Le fichier `docker-compose.yml` pré-configuré :
-```yaml
-version: '3.8'
 
-services:
-  budget-perso-pro:
-    build: .
-    container_name: budget-perso-pro
-    restart: always
-    ports:
-      - "3001:3001"
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - PORT=3001
-      - DB_PATH=/app/data/budget.db
-      - NODE_ENV=production
-```
+Le fichier `docker-compose.yml` fourni à la racine du dépôt contient la configuration du conteneur : construction de l'image, ports, volumes persistants pour les données et les journaux, paramètres du serveur, contrôle de santé et rotation des journaux Docker.
 
-Démarrez le conteneur en arrière-plan :
+Pour installer l'application, placez-vous dans le répertoire du projet et exécutez :
+
 ```bash
 docker compose up -d --build
 ```
-L'application est immédiatement accessible sur `http://<IP-DE-VOTRE-SERVEUR>:3001`.
+
+Cette commande construit l'image Docker et démarre le conteneur. Sur une installation existante, vérifiez que vos données sont sauvegardées avant de reconstruire l'application.
+
+L'application est accessible à l'adresse suivante, en remplaçant `IP-DE-VOTRE-SERVEUR` par l'adresse IP de votre serveur :
+
+`http://IP-DE-VOTRE-SERVEUR:3001`
 
 ---
 
@@ -161,16 +150,20 @@ Pour accéder à PersonalBudgetPro depuis votre iPhone ou PC portable à l'exté
 ---
 
 ### 4. Moteur SQLite & Mode WAL (Write-Ahead Logging)
-À chaque démarrage, le backend configure SQLite avec les directives industrielles suivantes :
+
+Le backend utilise SQLite pour stocker les données de l'application. Le mode WAL (*Write-Ahead Logging*) facilite la coexistence des opérations de lecture et d'écriture.
+
+Les paramètres SQLite configurés par le backend sont les suivants :
+
 ```sql
 PRAGMA journal_mode = WAL;
 PRAGMA busy_timeout = 5000;
 PRAGMA foreign_keys = ON;
 PRAGMA synchronous = NORMAL;
 ```
-- **Concurrence sans blocage** : les lectures effectuées depuis votre mobile ne bloquent jamais les écritures de votre PC.
-- **Résistance aux pannes** : le journal WAL assure l'intégrité transactionnelle ACID même en cas de coupure de courant inopinée.
 
+- **Concurrence** : le mode WAL permet aux lectures et aux écritures de coexister dans la plupart des situations, tout en limitant les blocages.
+- **Intégrité des données** : SQLite assure la cohérence transactionnelle. Le mode WAL contribue à la gestion des écritures, mais ne dispense pas de sauvegardes régulières ni de précautions contre les pannes matérielles.
 ---
 
 ### 5. Sauvegardes Automatiques Quotidiennes (7 jours)
