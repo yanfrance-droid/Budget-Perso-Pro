@@ -20,6 +20,16 @@ data/backups/
 dist-package/
 .dist_staging/
 historique_credits_pret_a_importer.csv
+src/services/backups/
+*.csv
+/xl/
+scripts/xl/
+scripts/extracted_all_records.json
+dom.html
+dom_revenus.html
+*.png
+!src/assets/*.png
+!public/*.png
 
 # Variables d'environnement locales
 .env

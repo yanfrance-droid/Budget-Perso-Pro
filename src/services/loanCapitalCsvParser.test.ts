@@ -31,7 +31,7 @@ describe('loanCapitalCsvParser', () => {
     expect(res.records[1].consumerCapital).toBe(14700.50);
   });
 
-  it('2. Parsing d\'un CSV avec le fichier réel loans_history.csv du projet (en-têtes anglais et colonnes vides)', () => {
+  it('2. Parsing d\'un CSV avec en-têtes anglais et colonnes vides', () => {
     const csvContent = `month;mortgageCapital;consumerCapital
 2020-01;150000.00;
 2020-02;149000.00;
@@ -41,12 +41,12 @@ describe('loanCapitalCsvParser', () => {
     expect(res.errors).toHaveLength(0);
     expect(res.records).toHaveLength(3);
 
-    // 2019-07 n'a pas de crédit conso
+    // 2020-01 n'a pas de crédit conso
     expect(res.records[0].month).toBe('2020-01');
     expect(res.records[0].realEstateCapital).toBe(150000.00);
     expect(res.records[0].consumerCapital).toBeNull();
 
-    // 2025-03 a les deux
+    // 2025-05 a les deux
     expect(res.records[2].month).toBe('2025-05');
     expect(res.records[2].realEstateCapital).toBe(105000.00);
     expect(res.records[2].consumerCapital).toBe(25000.00);
