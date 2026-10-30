@@ -124,9 +124,6 @@ export default function Loans() {
         type: 'loan_payment'
       };
       await serverData.saveTransaction(paymentPayload);
-      if (status === 'cleared') {
-        await serverData.updateLoanPaymentStatus(paymentPayload.id!, 'cleared');
-      }
     }
 
     setIsPaymentModalOpen(false);

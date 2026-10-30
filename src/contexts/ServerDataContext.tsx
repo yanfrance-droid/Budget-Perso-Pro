@@ -211,17 +211,42 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
       return [saved, ...prev];
     });
+    if (saved.type === 'loan_payment' || transaction.type === 'loan_payment') {
+      try {
+        const freshLoans = await apiClient.loans.getAll();
+        setLoans(freshLoans);
+      } catch (err) {
+        console.error('Erreur rafraîchissement des crédits après enregistrement mensualité:', err);
+      }
+    }
     return saved;
   };
 
   const deleteTransaction = async (id: string): Promise<void> => {
+    const target = transactions.find(t => t.id === id);
     await apiClient.transactions.delete(id);
     setTransactions(prev => prev.filter(t => t.id !== id));
+    if (target?.type === 'loan_payment') {
+      try {
+        const freshLoans = await apiClient.loans.getAll();
+        setLoans(freshLoans);
+      } catch (err) {
+        console.error('Erreur rafraîchissement des crédits après suppression mensualité:', err);
+      }
+    }
   };
 
   const updateTransactionStatus = async (id: string, status: Transaction['status']): Promise<Transaction> => {
     const updated = await apiClient.transactions.updateStatus(id, status);
     setTransactions(prev => prev.map(t => t.id === id ? updated : t));
+    if (updated.type === 'loan_payment') {
+      try {
+        const freshLoans = await apiClient.loans.getAll();
+        setLoans(freshLoans);
+      } catch (err) {
+        console.error('Erreur rafraîchissement des crédits après mise à jour statut mensualité:', err);
+      }
+    }
     return updated;
   };
 

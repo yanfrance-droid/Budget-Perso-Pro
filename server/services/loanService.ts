@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import crypto from 'node:crypto';
-import { getTransactionById, saveTransaction } from './transactionService.ts';
+import { getTransactionById, type TransactionData } from './transactionService.ts';
 
 export interface LoanData {
   id?: string;
@@ -139,13 +139,168 @@ export function saveLoan(db: DatabaseSync, data: LoanData): LoanData {
   return getLoanById(db, id)!;
 }
 
+export function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
+  const spName = `sp_${crypto.randomUUID().replace(/-/g, '_')}`;
+  db.exec(`SAVEPOINT ${spName};`);
+  try {
+    const result = fn();
+    db.exec(`RELEASE ${spName};`);
+    return result;
+  } catch (err) {
+    db.exec(`ROLLBACK TO ${spName}; RELEASE ${spName};`);
+    throw err;
+  }
+}
+
+/**
+ * Calcule la part de capital amorti pour une mensualité de crédit.
+ * Règle métier : mensualité - intérêts - assurance.
+ * Si les intérêts et l'assurance dépassent ou égalent la mensualité (ex: différé),
+ * aucun capital n'est amorti (retourne 0).
+ * Arrondi au centime d'euro le plus proche (2 décimales).
+ */
+export function calculateAmortizedCapitalServer(
+  amount: number,
+  remainingCapital: number,
+  interestRate?: number,
+  insurancePart?: number
+): number {
+  if (isNaN(amount) || amount <= 0 || isNaN(remainingCapital) || remainingCapital < 0) {
+    return 0;
+  }
+  const rate = Number(interestRate) || 0;
+  const insurance = Number(insurancePart) || 0;
+  const remaining = Number(remainingCapital) || 0;
+
+  const monthlyRate = rate / 100 / 12;
+  const interest = remaining * monthlyRate;
+  const capitalPart = amount - interest - insurance;
+
+  if (capitalPart <= 0) {
+    return 0;
+  }
+
+  return Math.round(capitalPart * 100) / 100;
+}
+
+/**
+ * Synchronise atomiquement le capital restant dû du/des crédits associés lors
+ * d'une création, modification, changement de statut ou suppression de mensualité.
+ * Doit être appelé à l'intérieur d'une transaction SQLite / SAVEPOINT.
+ */
+export function syncLoanCapitalForTransaction(
+  db: DatabaseSync,
+  oldTx: TransactionData | null,
+  newTx: TransactionData | null
+): void {
+  const isOldClearedLoanPayment = Boolean(
+    oldTx &&
+    oldTx.type === 'loan_payment' &&
+    oldTx.status === 'cleared' &&
+    oldTx.linkedId
+  );
+
+  const isNewClearedLoanPayment = Boolean(
+    newTx &&
+    newTx.type === 'loan_payment' &&
+    newTx.status === 'cleared' &&
+    newTx.linkedId
+  );
+
+  // Cas 1 : Aucun impact sur les crédits
+  if (!isOldClearedLoanPayment && !isNewClearedLoanPayment) {
+    return;
+  }
+
+  // Cas 2 : Même crédit et les deux transactions sont 'cleared' (modification montant ou amorti)
+  if (isOldClearedLoanPayment && isNewClearedLoanPayment && oldTx!.linkedId === newTx!.linkedId) {
+    const loan = getLoanById(db, newTx!.linkedId!);
+    if (!loan) return;
+
+    const oldAmortized = oldTx!.amortizedCapital !== undefined && oldTx!.amortizedCapital !== null
+      ? Math.round(Number(oldTx!.amortizedCapital) * 100) / 100
+      : 0;
+
+    let newAmortized = newTx!.amortizedCapital;
+    if (newAmortized === undefined || newAmortized === null || isNaN(Number(newAmortized))) {
+      // Pour recalculer la nouvelle part amortie avec précision si non fournie,
+      // la base de capital avant cette mensualité est loan.remainingCapital + oldAmortized
+      const baseCapital = Math.round((loan.remainingCapital + oldAmortized) * 100) / 100;
+      newAmortized = calculateAmortizedCapitalServer(
+        newTx!.amount,
+        baseCapital,
+        loan.interestRate,
+        loan.insurancePart
+      );
+      newTx!.amortizedCapital = newAmortized;
+      if (newTx!.id) {
+        const updateTxStmt = db.prepare('UPDATE transactions SET amortizedCapital = ? WHERE id = ?');
+        updateTxStmt.run(newAmortized, newTx!.id);
+      }
+    } else {
+      newAmortized = Math.round(Number(newAmortized) * 100) / 100;
+    }
+
+    const delta = Math.round((oldAmortized - newAmortized) * 100) / 100;
+    if (delta !== 0) {
+      const updatedRemainingCapital = Math.max(0, Math.round((loan.remainingCapital + delta) * 100) / 100);
+      const stmt = db.prepare('UPDATE loans SET remainingCapital = ? WHERE id = ?');
+      stmt.run(updatedRemainingCapital, loan.id!);
+    }
+    return;
+  }
+
+  // Cas 3 : Restitution du capital sur l'ancien prêt si l'ancienne mensualité était réglée
+  if (isOldClearedLoanPayment) {
+    const oldLoan = getLoanById(db, oldTx!.linkedId!);
+    if (oldLoan) {
+      const restoredCapital = oldTx!.amortizedCapital !== undefined && oldTx!.amortizedCapital !== null
+        ? Math.round(Number(oldTx!.amortizedCapital) * 100) / 100
+        : 0;
+      if (restoredCapital > 0) {
+        const updatedRemainingCapital = Math.round((oldLoan.remainingCapital + restoredCapital) * 100) / 100;
+        const stmt = db.prepare('UPDATE loans SET remainingCapital = ? WHERE id = ?');
+        stmt.run(updatedRemainingCapital, oldLoan.id!);
+      }
+    }
+  }
+
+  // Cas 4 : Déduction du capital sur le nouveau prêt si la nouvelle mensualité est réglée
+  if (isNewClearedLoanPayment) {
+    const newLoan = getLoanById(db, newTx!.linkedId!);
+    if (newLoan) {
+      let amortized = newTx!.amortizedCapital;
+      if (amortized === undefined || amortized === null || isNaN(Number(amortized))) {
+        amortized = calculateAmortizedCapitalServer(
+          newTx!.amount,
+          newLoan.remainingCapital,
+          newLoan.interestRate,
+          newLoan.insurancePart
+        );
+        newTx!.amortizedCapital = amortized;
+        if (newTx!.id) {
+          const updateTxStmt = db.prepare('UPDATE transactions SET amortizedCapital = ? WHERE id = ?');
+          updateTxStmt.run(amortized, newTx!.id);
+        }
+      } else {
+        amortized = Math.round(Number(amortized) * 100) / 100;
+      }
+
+      if (amortized > 0) {
+        const updatedRemainingCapital = Math.max(0, Math.round((newLoan.remainingCapital - amortized) * 100) / 100);
+        const stmt = db.prepare('UPDATE loans SET remainingCapital = ? WHERE id = ?');
+        stmt.run(updatedRemainingCapital, newLoan.id!);
+      }
+    }
+  }
+}
+
 export function updateLoanPaymentStatus(
   db: DatabaseSync,
   paymentId: string,
   newStatus: 'planned' | 'pending' | 'cleared' | 'disabled'
 ): { payment: any; loan: LoanData } {
-  db.exec('BEGIN IMMEDIATE;');
-  try {
+  return withTransaction(db, () => {
     const payment = getTransactionById(db, paymentId);
     if (!payment) {
       throw new Error(`Mensualité de prêt ${paymentId} introuvable.`);
@@ -161,62 +316,26 @@ export function updateLoanPaymentStatus(
 
     const oldStatus = payment.status;
     if (oldStatus === newStatus) {
-      db.exec('COMMIT;');
       return { payment, loan };
     }
 
-    // Calcul du capital amorti
-    let capitalToDeduct = payment.amortizedCapital;
-    if (capitalToDeduct === undefined) {
-      // Déduire le capital à partir de la mensualité et des taux
-      const insurance = Number(loan.insurancePart) || 0;
-      const annualRate = Number(loan.interestRate) || 0;
-      const monthlyRate = annualRate / 100 / 12;
-      const interest = loan.remainingCapital * monthlyRate;
-      capitalToDeduct = payment.amount - insurance - interest;
-    }
+    const oldTx = { ...payment };
+    const newTx = { ...payment, status: newStatus };
 
-    if (capitalToDeduct === undefined || isNaN(capitalToDeduct) || capitalToDeduct < 0) {
-      throw new Error(`Impossible de calculer le capital amorti de la mensualité ${paymentId}.`);
-    }
+    syncLoanCapitalForTransaction(db, oldTx, newTx);
 
-    let updatedRemainingCapital = loan.remainingCapital;
-
-    // Règle 1 : Passage vers 'cleared' -> déduction du capital restant
-    if (newStatus === 'cleared' && oldStatus !== 'cleared') {
-      updatedRemainingCapital = Math.max(0, loan.remainingCapital - capitalToDeduct);
-    }
-    // Règle 2 : Rétablissement depuis 'cleared' vers autre statut -> restitution du capital
-    else if (oldStatus === 'cleared' && newStatus !== 'cleared') {
-      updatedRemainingCapital = loan.remainingCapital + capitalToDeduct;
-    }
-
-    // Mise à jour de la mensualité
     const updatePaymentStmt = db.prepare(`
       UPDATE transactions
       SET status = ?, amortizedCapital = ?
       WHERE id = ?
     `);
-    updatePaymentStmt.run(newStatus, capitalToDeduct, paymentId);
-
-    // Mise à jour du capital restant du crédit
-    const updateLoanStmt = db.prepare(`
-      UPDATE loans
-      SET remainingCapital = ?
-      WHERE id = ?
-    `);
-    updateLoanStmt.run(updatedRemainingCapital, loan.id!);
-
-    db.exec('COMMIT;');
+    updatePaymentStmt.run(newStatus, newTx.amortizedCapital ?? null, paymentId);
 
     return {
       payment: getTransactionById(db, paymentId)!,
       loan: getLoanById(db, loan.id!)!
     };
-  } catch (err) {
-    db.exec('ROLLBACK;');
-    throw err;
-  }
+  });
 }
 
 export function deleteLoan(db: DatabaseSync, id: string): void {
