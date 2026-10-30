@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Wallet, CreditCard, PiggyBank, Settings, FileText, HeartPulse, Building, BarChart3, LogOut, AlertCircle, RotateCcw, Eye, EyeOff, Moon, Sun, ShoppingBag, HelpCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom';
+import { LayoutDashboard, Wallet, CreditCard, PiggyBank, Settings, FileText, HeartPulse, Building, BarChart3, LogOut, AlertCircle, RotateCcw, Eye, EyeOff, Moon, Sun, ShoppingBag, HelpCircle, Menu, X } from 'lucide-react';
 import Incomes from './pages/Incomes';
 import FixedExpenses from './pages/FixedExpenses';
 import VariableExpenses from './pages/VariableExpenses';
@@ -22,6 +22,13 @@ function AppContent() {
   const { isAuthenticated, isLoading: isAuthLoading, user, logout } = useAuth();
   const serverData = useServerDataOptional();
   const { isPrivacyMode, togglePrivacyMode, theme, setTheme } = useUIPreferences();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const location = useLocation();
+
+  // Fermeture automatique du menu mobile lors du changement d'URL
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname, location.search]);
 
   return (
     <>
@@ -70,8 +77,64 @@ function AppContent() {
           </button>
         </div>
       )}
+
+      {/* HEADER MOBILE (Visible uniquement sous 768px via CSS) */}
+      <header className="mobile-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <button
+            type="button"
+            className="mobile-menu-toggle"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label={isMobileMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu de navigation'}
+          >
+            {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--text-light, #fff)' }}>Budget Perso Pro</span>
+            <div style={{ fontSize: '0.68rem', opacity: 0.8, color: 'var(--text-light, #fff)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ 
+                width: 6, 
+                height: 6, 
+                borderRadius: '50%', 
+                backgroundColor: serverData?.error ? '#ef4444' : (serverData ? '#22c55e' : '#f59e0b'), 
+                display: 'inline-block' 
+              }} />
+              <span>{serverData?.error ? 'Hors ligne' : 'Serveur connecté'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <button
+            type="button"
+            title={isPrivacyMode ? 'Désactiver le mode discret' : 'Activer le mode discret'}
+            onClick={togglePrivacyMode}
+            className="mobile-header-btn"
+          >
+            {isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+          <button
+            type="button"
+            title={theme === 'dark' ? 'Thème clair' : 'Thème sombre'}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="mobile-header-btn"
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </div>
+      </header>
+
+      {/* BACKDROP MOBILE */}
+      {isMobileMenuOpen && (
+        <div 
+          className="mobile-backdrop" 
+          onClick={() => setIsMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <div className="app-container">
-        <aside className="sidebar">
+        <aside className={`sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
           <div className="sidebar-header" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span>Budget Perso Pro</span>
@@ -134,7 +197,7 @@ function AppContent() {
             <NavLink to="/analyse-depenses"><BarChart3 size={18} style={{marginRight: '8px'}} /> Analyse des dépenses</NavLink>
             <NavLink to="/sante"><HeartPulse size={18} style={{marginRight: '8px'}} /> Santé</NavLink>
             <NavLink to="/credits"><Building size={18} style={{marginRight: '8px'}} /> Crédits</NavLink>
-            <NavLink to="/epargne"><PiggyBank size={18} style={{marginRight: '8px'}} /> Épargne</NavLink>
+            <NavLink to="/epargne"><PiggyBank size={18} style={{marginRight: '8px'}} /> Épargne & transferts</NavLink>
           </nav>
 
           <div className="sidebar-bottom">
@@ -182,6 +245,8 @@ function AppContent() {
             <Route path="/credits" element={<Loans />} />
             <Route path="/epargne" element={<Savings />} />
             <Route path="/parametres" element={<SettingsPage />} />
+            {/* Redirection par défaut vers le Tableau de bord pour toute route inconnue ou malformée */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>

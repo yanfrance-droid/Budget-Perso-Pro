@@ -35,19 +35,44 @@ export function getAccountById(db: DatabaseSync, id: string): AccountData | null
 }
 
 export function saveAccount(db: DatabaseSync, data: AccountData): AccountData {
-  if (!data.name || data.name.trim().length === 0) {
+  const existing = data.id ? getAccountById(db, data.id) : null;
+
+  const resolvedName = (data.name !== undefined ? data.name : (existing?.name || '')).trim();
+  const resolvedType = data.type || existing?.type;
+  const resolvedSubType = data.subType !== undefined ? data.subType : (existing?.subType || null);
+  const resolvedRefDate = data.referenceDate || existing?.referenceDate;
+
+  if (!resolvedName || resolvedName.length === 0) {
     throw new Error('Le nom du compte est obligatoire.');
   }
-  if (!['checking', 'savings', 'cash'].includes(data.type)) {
-    throw new Error(`Type de compte invalide : ${data.type}`);
+  if (!resolvedType || !['checking', 'savings', 'cash'].includes(resolvedType)) {
+    throw new Error(`Type de compte invalide : ${resolvedType}`);
   }
-  if (!data.referenceDate || !/^\d{4}-\d{2}-\d{2}$/.test(data.referenceDate)) {
+  if (!resolvedRefDate || !/^\d{4}-\d{2}-\d{2}$/.test(resolvedRefDate)) {
     throw new Error('La date de référence doit être au format YYYY-MM-DD.');
   }
 
   const id = data.id || crypto.randomUUID();
-  const isClosed = data.isClosed ? 1 : 0;
-  const initialBalance = Number(data.initialBalance) || 0;
+  const isClosed = data.isClosed !== undefined ? (data.isClosed ? 1 : 0) : (existing?.isClosed ? 1 : 0);
+  const initialBalance = data.initialBalance !== undefined 
+    ? (Number(data.initialBalance) || 0) 
+    : (existing?.initialBalance ?? 0);
+
+  const interestRate = data.interestRate !== undefined 
+    ? (data.interestRate === null ? null : Number(data.interestRate))
+    : (existing?.interestRate ?? null);
+
+  const targetAmount = data.targetAmount !== undefined
+    ? (data.targetAmount === null ? null : Number(data.targetAmount))
+    : (existing?.targetAmount ?? null);
+
+  const closedDate = data.closedDate !== undefined 
+    ? data.closedDate 
+    : (existing?.closedDate || null);
+
+  const closedBalance = data.closedBalance !== undefined
+    ? (data.closedBalance === null ? null : Number(data.closedBalance))
+    : (existing?.closedBalance ?? null);
 
   const stmt = db.prepare(`
     INSERT INTO accounts (id, name, type, subType, initialBalance, referenceDate, interestRate, targetAmount, isClosed, closedDate, closedBalance)
@@ -67,16 +92,16 @@ export function saveAccount(db: DatabaseSync, data: AccountData): AccountData {
 
   stmt.run(
     id,
-    data.name.trim(),
-    data.type,
-    data.subType || null,
+    resolvedName,
+    resolvedType,
+    resolvedSubType || null,
     initialBalance,
-    data.referenceDate,
-    data.interestRate !== undefined ? Number(data.interestRate) : null,
-    data.targetAmount !== undefined ? Number(data.targetAmount) : null,
+    resolvedRefDate,
+    interestRate !== null && !isNaN(interestRate) ? interestRate : null,
+    targetAmount !== null && !isNaN(targetAmount) ? targetAmount : null,
     isClosed,
-    data.closedDate || null,
-    data.closedBalance !== undefined ? Number(data.closedBalance) : null
+    closedDate || null,
+    closedBalance !== null && !isNaN(closedBalance) ? closedBalance : null
   );
 
   return getAccountById(db, id)!;

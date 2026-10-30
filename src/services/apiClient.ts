@@ -398,6 +398,12 @@ export const apiClient = {
     }>('/api/maintenance/backups', {
       method: 'DELETE'
     }),
+    restartServer: () => request<{
+      success: boolean;
+      message: string;
+    }>('/api/maintenance/restart', {
+      method: 'POST'
+    }),
     restoreDbFile: async (file: File) => {
       const baseUrl = getApiBaseUrl();
       const token = getAuthToken();

@@ -642,6 +642,235 @@ describe('Dashboard component', () => {
       // Reste exactement à 1000.00 € sans double comptabilisation
       expect(container.textContent).toContain('Solde prévisionnel en banque1000.00 €');
     });
+
+    it('neutralise strictement un virement interne entre un livret d\'épargne et un compte courant secondaire (aucun impact sur le compte principal)', () => {
+      localStorage.setItem('manualBalance', '2000');
+      localStorage.setItem('manualBalance_test', '2000');
+      mockAccounts = [
+        { id: 'acc-courant-principal', name: 'Courant Principal', type: 'checking', isClosed: false },
+        { id: 'acc-courant-secondaire', name: 'Courant Secondaire', type: 'checking', isClosed: false },
+        { id: 'acc-livretA', name: 'Livret A', type: 'savings', isClosed: false }
+      ];
+      mockDashboardSettings = {
+        manualBalance: '2000',
+        card1: '0',
+        card2: '0',
+        primaryAccountId: 'acc-courant-principal'
+      };
+
+      // Virement prévu ou en attente depuis Livret A vers le compte courant SECONDAIRE (ex: 500 €)
+      mockTransactions = [
+        {
+          id: 'tx-virement-secondaire-1',
+          date: `${currentMonth}-12`,
+          type: 'transfer',
+          amount: 500,
+          status: 'pending',
+          accountId: 'acc-livretA',
+          destinationAccountId: 'acc-courant-secondaire'
+        }
+      ];
+
+      const { container } = render(<Dashboard />);
+      // Le solde prévisionnel du compte principal doit rester STRICTEMENT à 2000.00 € (et NON 2500 €)
+      expect(container.textContent).toContain('Solde prévisionnel en banque2000.00 €');
+      expect(container.textContent).not.toContain('2500.00 €');
+    });
+
+    it('neutralise strictement un virement du compte courant secondaire vers un livret (pas déduit du compte principal)', () => {
+      localStorage.setItem('manualBalance', '2000');
+      localStorage.setItem('manualBalance_test', '2000');
+      mockAccounts = [
+        { id: 'acc-courant-principal', name: 'Courant Principal', type: 'checking', isClosed: false },
+        { id: 'acc-courant-secondaire', name: 'Courant Secondaire', type: 'checking', isClosed: false },
+        { id: 'acc-livretA', name: 'Livret A', type: 'savings', isClosed: false }
+      ];
+      mockDashboardSettings = {
+        manualBalance: '2000',
+        card1: '0',
+        card2: '0',
+        primaryAccountId: 'acc-courant-principal'
+      };
+
+      // Virement prévu depuis le compte courant secondaire vers le livret A
+      mockTransactions = [
+        {
+          id: 'tx-vers-livret-sec',
+          date: `${currentMonth}-14`,
+          type: 'transfer',
+          amount: 300,
+          status: 'planned',
+          accountId: 'acc-courant-secondaire',
+          destinationAccountId: 'acc-livretA'
+        }
+      ];
+
+      const { container } = render(<Dashboard />);
+      // Le solde prévisionnel du compte principal reste à 2000.00 € (et NON 1700 €)
+      expect(container.textContent).toContain('Solde prévisionnel en banque2000.00 €');
+      expect(container.textContent).not.toContain('1700.00 €');
+    });
+
+    it('déduit bien du solde prévisionnel du compte principal un virement en attente vers un compte secondaire', () => {
+      localStorage.setItem('manualBalance', '2000');
+      localStorage.setItem('manualBalance_test', '2000');
+      mockAccounts = [
+        { id: 'acc-courant-principal', name: 'Courant Principal', type: 'checking', isClosed: false },
+        { id: 'acc-courant-secondaire', name: 'Courant Secondaire', type: 'checking', isClosed: false },
+        { id: 'acc-livretA', name: 'Livret A', type: 'savings', isClosed: false }
+      ];
+      mockDashboardSettings = {
+        manualBalance: '2000',
+        card1: '0',
+        card2: '0',
+        primaryAccountId: 'acc-courant-principal'
+      };
+
+      // Virement en attente de 350 € du compte principal vers le compte secondaire
+      mockTransactions = [
+        {
+          id: 'tx-main-to-sec-pending',
+          date: `${currentMonth}-10`,
+          type: 'transfer',
+          amount: 350,
+          status: 'pending',
+          accountId: 'acc-courant-principal',
+          destinationAccountId: 'acc-courant-secondaire'
+        }
+      ];
+
+      const { container } = render(<Dashboard />);
+      // Le solde prévisionnel du compte principal doit déduire les 350 € : 2000 - 350 = 1650.00 €
+      expect(container.textContent).toContain('Solde prévisionnel en banque1650.00 €');
+    });
+
+    it('au passage à cleared d\'un virement principal vers secondaire, il n\'est plus dans le reste à payer (pas de double comptabilisation)', () => {
+      // Lorsque le virement passe à cleared, la banque physique a déjà débité le compte principal.
+      // Le solde réel déclaré (manualBalance) est actualisé par l'utilisateur à 1650 €.
+      // Comme l'opération est cleared, le reste à payer est 0 €, le solde prévisionnel reste 1650 €.
+      localStorage.setItem('manualBalance', '1650');
+      localStorage.setItem('manualBalance_test', '1650');
+      mockAccounts = [
+        { id: 'acc-courant-principal', name: 'Courant Principal', type: 'checking', isClosed: false },
+        { id: 'acc-courant-secondaire', name: 'Courant Secondaire', type: 'checking', isClosed: false }
+      ];
+      mockDashboardSettings = {
+        manualBalance: '1650',
+        card1: '0',
+        card2: '0',
+        primaryAccountId: 'acc-courant-principal'
+      };
+
+      mockTransactions = [
+        {
+          id: 'tx-main-to-sec-cleared',
+          date: `${currentMonth}-10`,
+          type: 'transfer',
+          amount: 350,
+          status: 'cleared',
+          accountId: 'acc-courant-principal',
+          destinationAccountId: 'acc-courant-secondaire'
+        }
+      ];
+
+      const { container } = render(<Dashboard />);
+      expect(container.textContent).toContain('Solde prévisionnel en banque1650.00 €');
+    });
+
+    it('augmente bien le solde prévisionnel du compte principal lors d\'un virement entrant en attente depuis un compte secondaire', () => {
+      localStorage.setItem('manualBalance', '2000');
+      localStorage.setItem('manualBalance_test', '2000');
+      mockAccounts = [
+        { id: 'acc-courant-principal', name: 'Courant Principal', type: 'checking', isClosed: false },
+        { id: 'acc-courant-secondaire', name: 'Courant Secondaire', type: 'checking', isClosed: false }
+      ];
+      mockDashboardSettings = {
+        manualBalance: '2000',
+        card1: '0',
+        card2: '0',
+        primaryAccountId: 'acc-courant-principal'
+      };
+
+      // Virement entrant de 150 € du compte secondaire vers le compte principal (statut pending)
+      mockTransactions = [
+        {
+          id: 'tx-sec-to-main-pending',
+          date: `${currentMonth}-11`,
+          type: 'transfer',
+          amount: 150,
+          status: 'pending',
+          accountId: 'acc-courant-secondaire',
+          destinationAccountId: 'acc-courant-principal'
+        }
+      ];
+
+      const { container } = render(<Dashboard />);
+      // Le solde prévisionnel du compte principal doit augmenter des 150 € : 2000 + 150 = 2150.00 €
+      expect(container.textContent).toContain('Solde prévisionnel en banque2150.00 €');
+    });
+
+    it('au passage à cleared d\'un virement entrant secondaire vers principal : sans double crédit après actualisation', () => {
+      // 1. Avant actualisation du relevé de banque :
+      // Le solde bancaire réel saisi est toujours à 2000 €.
+      // L'opération est cleared (validée en banque).
+      // Le prévisionnel reflète le solde réel déclaré (2000 €).
+      // Dès que l'utilisateur consulte son appli bancaire et met à jour son solde bancaire réel à 2150 €,
+      // le solde prévisionnel devient 2150 € sans aucun double crédit (+150 € n'est pas rajouté une 2e fois).
+      localStorage.setItem('manualBalance', '2150');
+      localStorage.setItem('manualBalance_test', '2150');
+      mockAccounts = [
+        { id: 'acc-courant-principal', name: 'Courant Principal', type: 'checking', isClosed: false },
+        { id: 'acc-courant-secondaire', name: 'Courant Secondaire', type: 'checking', isClosed: false }
+      ];
+      mockDashboardSettings = {
+        manualBalance: '2150',
+        card1: '0',
+        card2: '0',
+        primaryAccountId: 'acc-courant-principal'
+      };
+
+      mockTransactions = [
+        {
+          id: 'tx-sec-to-main-cleared',
+          date: `${currentMonth}-11`,
+          type: 'transfer',
+          amount: 150,
+          status: 'cleared',
+          accountId: 'acc-courant-secondaire',
+          destinationAccountId: 'acc-courant-principal'
+        }
+      ];
+
+      const { container } = render(<Dashboard />);
+      // Strictement 2150.00 € (aucun ajout d'un 2e 150 € qui donnerait 2300 €)
+      expect(container.textContent).toContain('Solde prévisionnel en banque2150.00 €');
+      expect(container.textContent).not.toContain('2300.00 €');
+    });
+
+    it('ignore un virement annulé (disabled) dans le calcul du solde prévisionnel', () => {
+      localStorage.setItem('manualBalance', '1000');
+      localStorage.setItem('manualBalance_test', '1000');
+      mockAccounts = [
+        { id: 'acc-courant', name: 'Courant', type: 'checking' },
+        { id: 'acc-livret', name: 'Livret A', type: 'savings' }
+      ];
+
+      mockTransactions = [
+        {
+          id: 'tx-disabled-1',
+          date: `${currentMonth}-15`,
+          type: 'transfer',
+          amount: 400,
+          status: 'disabled',
+          accountId: 'acc-courant',
+          destinationAccountId: 'acc-livret'
+        }
+      ];
+
+      const { container } = render(<Dashboard />);
+      // Reste à 1000.00 € car l'opération est annulée
+      expect(container.textContent).toContain('Solde prévisionnel en banque1000.00 €');
+    });
   });
 
   describe('Protection contre les appels prématurés à saveDashboardSettings', () => {

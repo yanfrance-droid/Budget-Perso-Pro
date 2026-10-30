@@ -7,6 +7,7 @@ export interface DashboardSettings {
   manualBalance: string;
   card1: string;
   card2: string;
+  primaryAccountId?: string;
 }
 
 export interface ServerDataContextType {

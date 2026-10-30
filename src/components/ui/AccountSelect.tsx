@@ -4,6 +4,7 @@ import type { Account } from '../../db/database';
 import { generateId } from '../../db/database';
 import { useServerDataOptional } from '../../contexts/ServerDataContext';
 import { Button, Modal } from './Components';
+import { formatAccountOptionLabel } from '../../services/accountPresentation';
 
 export interface AccountSelectProps {
   value: string;
@@ -145,7 +146,7 @@ export const AccountSelect: React.FC<AccountSelectProps> = ({
           <option value="">{placeholder}</option>
           {filteredAccounts.map(acc => (
             <option key={acc.id} value={acc.id}>
-              {acc.name} ({formatAccountTypeLabel(acc.type)}){acc.isClosed ? ' [Clôturé]' : ''}
+              {formatAccountOptionLabel(acc, serverData?.dashboardSettings?.primaryAccountId, allAccounts)}
             </option>
           ))}
         </select>

@@ -28,6 +28,7 @@ import {
 } from '../services/loanCapitalHistoryService';
 import { calculateRealBalance } from '../engine/calculations';
 import { apiClient } from '../services/apiClient';
+import { resolvePrimaryAccountId } from '../services/accountPresentation';
 
 // Libellés dynamiques des mois en français
 const formatMonthLabel = (m: string) => {
@@ -301,6 +302,10 @@ export default function Dashboard() {
 
   const activeTransactions = transactions.filter(t => t.status !== 'disabled');
 
+  // Résolution explicite et déterministe du compte courant principal actif
+  const primaryAccountId = useMemo(() => {
+    return resolvePrimaryAccountId(accounts, serverData?.dashboardSettings?.primaryAccountId);
+  }, [accounts, serverData?.dashboardSettings?.primaryAccountId]);
 
   const processTx = (
     txs: typeof transactions,
@@ -327,14 +332,19 @@ export default function Dashboard() {
         }
 
         if (isResteAPayer) {
-          // Pour le reste à payer du compte bancaire :
-          // Seuls les versements vers l'épargne (sortie du compte courant) constituent une charge à payer
-          if (isDestSavings && !isSrcSavings) {
+          // Pour le reste à payer du compte bancaire principal :
+          // Toute sortie d'argent non pointée débitant le compte principal doit être déduite du solde prévisionnel,
+          // que la destination soit un compte d'épargne OU un compte courant secondaire.
+          const isDebitingPrimary = primaryAccountId 
+            ? t.accountId === primaryAccountId 
+            : (!isSrcSavings && isDestSavings);
+
+          if (isDebitingPrimary) {
             target.transfer += amt;
           }
         } else {
           // Pour les charges d'épargne affichées dans le budget/tableau du mois :
-          // Seuls les versements d'épargne représentent des charges (effort d'épargne)
+          // Seuls les versements vers l'épargne (sortie de liquidités vers épargne) représentent un effort d'épargne
           if (isDestSavings && !isSrcSavings) {
             target.transfer += amt;
           }
@@ -365,8 +375,12 @@ export default function Dashboard() {
       const destAcc = t.destinationAccountId ? accountMap.get(t.destinationAccountId) : undefined;
       const isSrcSavings = srcAcc ? srcAcc.type === 'savings' : false;
       const isDestSavings = destAcc ? destAcc.type === 'savings' : true;
-      // Seuls les versements vers l'épargne non pointés sont des charges impayées
-      return isDestSavings && !isSrcSavings;
+      const isDebitingPrimary = primaryAccountId 
+        ? t.accountId === primaryAccountId 
+        : (!isSrcSavings && isDestSavings);
+
+      // Toute sortie non pointée débitant le compte principal est un impayé antérieur
+      return isDebitingPrimary;
     }
     return true;
   });
@@ -376,14 +390,24 @@ export default function Dashboard() {
   const currentResteAPayer = { fixed: 0, variable: 0, loan: 0, daily: 0, health: 0, transfer: 0 };
   processTx(currentNonClearedTx, currentResteAPayer, true);
 
-  // Retraits d'épargne prévus / en attente du mois courant (ressources à venir créditant le compte courant)
-  const pendingSavingsWithdrawalsCurrent = currentNonClearedTx.filter(t => {
+  // Virements internes entrants prévus / en attente du mois courant créditant spécifiquement le compte courant principal
+  // (depuis un compte d'épargne OU depuis un compte courant secondaire)
+  const pendingIncomingTransfersCurrent = currentNonClearedTx.filter(t => {
     if (t.type !== 'transfer') return false;
     const srcAcc = t.accountId ? accountMap.get(t.accountId) : undefined;
     const destAcc = t.destinationAccountId ? accountMap.get(t.destinationAccountId) : undefined;
     const isSrcSavings = srcAcc ? srcAcc.type === 'savings' : false;
     const isDestSavings = destAcc ? destAcc.type === 'savings' : false;
-    return isSrcSavings && !isDestSavings;
+
+    // Doit être un virement créditant spécifiquement le compte courant principal
+    const isCreditingPrimary = primaryAccountId
+      ? t.destinationAccountId === primaryAccountId
+      : (!isDestSavings && isSrcSavings);
+
+    // Ne doit pas être un virement de soi-même vers soi-même
+    const isSelfTransfer = t.accountId && t.destinationAccountId && t.accountId === t.destinationAccountId;
+
+    return isCreditingPrimary && !isSelfTransfer;
   }).reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
 
   let currentMonthLoanRemaining = 0;
@@ -413,10 +437,10 @@ export default function Dashboard() {
 
   const cardTotal = parsedCard1 + parsedCard2;
 
-  // Solde prévisionnel en banque = solde réel déclaré + retraits d'épargne prévus − cartes différées − reste à payer actuel
+  // Solde prévisionnel en banque = solde réel déclaré + virements internes entrants prévus − cartes différées − reste à payer actuel
   // Note : les remboursements de santé encaissés ('cleared') sont déjà présents sur le compte bancaire réel,
   // ils ne doivent donc pas être additionnés une seconde fois pour éviter tout double comptage.
-  const soldePrevisionnel = parsedManualBalance + pendingSavingsWithdrawalsCurrent - cardTotal - totalResteAPayerCurrentMonth;
+  const soldePrevisionnel = parsedManualBalance + pendingIncomingTransfersCurrent - cardTotal - totalResteAPayerCurrentMonth;
 
   // -------------------------------------------------------------
   // 2. Charges et budget du mois sélectionné (selectedMonth)
@@ -1541,7 +1565,7 @@ export default function Dashboard() {
             <PiggyBank size={32} color="#94a3b8" style={{ margin: '0 auto 0.75rem auto' }} />
             <p style={{ fontWeight: 600, margin: 0, color: '#334155' }}>Aucun compte d’épargne actif</p>
             <p style={{ fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>
-              Ajoutez vos comptes d'épargne dans l'onglet Épargne pour visualiser l'historique de votre patrimoine.
+              Ajoutez vos comptes d'épargne dans l'onglet Épargne & transferts pour visualiser l'historique de votre patrimoine.
             </p>
           </div>
         )}

@@ -295,6 +295,107 @@ describe('Savings component - Category management', () => {
     expect(internalSection.textContent).toContain('Transferts internes (1)');
     expect(internalSection.textContent).toContain('25,00 €');
   });
+
+  it('correctly organizes the 4 transfer categories and excludes checking-to-checking transfers from savings totals', () => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    mockAccounts = [
+      { id: 'acc-courant-principal', name: 'Compte Courant Principal', type: 'checking', initialBalance: 2000 },
+      { id: 'acc-courant-secondaire', name: 'Compte Courant Secondaire', type: 'checking', initialBalance: 500 },
+      { id: 'acc-livretA', name: 'Livret A', type: 'savings', initialBalance: 1000 },
+      { id: 'acc-ldds', name: 'LDDS', type: 'savings', initialBalance: 800 }
+    ];
+
+    mockSavings = [
+      // 1. Checking -> Savings (Versement épargne)
+      {
+        id: 'tx-dep',
+        date: `${currentMonth}-05`,
+        type: 'transfer',
+        amount: 200,
+        status: 'cleared',
+        accountId: 'acc-courant-principal',
+        destinationAccountId: 'acc-livretA'
+      },
+      // 2. Savings -> Checking (Retrait épargne)
+      {
+        id: 'tx-with',
+        date: `${currentMonth}-08`,
+        type: 'transfer',
+        amount: 50,
+        status: 'cleared',
+        accountId: 'acc-livretA',
+        destinationAccountId: 'acc-courant-principal'
+      },
+      // 3. Checking -> Checking (Virement entre comptes courants)
+      {
+        id: 'tx-chk-1',
+        date: `${currentMonth}-10`,
+        type: 'transfer',
+        amount: 150,
+        status: 'cleared',
+        accountId: 'acc-courant-principal',
+        destinationAccountId: 'acc-courant-secondaire'
+      },
+      // 4. Checking -> Checking retour
+      {
+        id: 'tx-chk-2',
+        date: `${currentMonth}-12`,
+        type: 'transfer',
+        amount: 40,
+        status: 'planned',
+        accountId: 'acc-courant-secondaire',
+        destinationAccountId: 'acc-courant-principal'
+      },
+      // 5. Savings -> Savings (Virement entre livrets)
+      {
+        id: 'tx-sav-sav',
+        date: `${currentMonth}-15`,
+        type: 'transfer',
+        amount: 100,
+        status: 'cleared',
+        accountId: 'acc-livretA',
+        destinationAccountId: 'acc-ldds'
+      }
+    ];
+
+    render(<Savings />);
+
+    // 1. Cartes de synthèse :
+    // - Versements : uniquement tx-dep (200 €). tx-chk-1 (150 €) et tx-chk-2 (40 €) ne doivent PAS être inclus !
+    const versementsCard = screen.getByText('Versements du mois').closest('.card')!;
+    expect(versementsCard.textContent).toContain('200,00 €');
+    expect(versementsCard.textContent).not.toContain('350,00 €');
+
+    // - Retraits : uniquement tx-with (50 €).
+    const retraitsCard = screen.getByText('Retraits du mois').closest('.card')!;
+    expect(retraitsCard.textContent).toContain('50,00 €');
+
+    // 2. Vérification des 4 sections distinctes dans le DOM
+    // Section 1 : Virements vers l'épargne
+    const s1Heading = screen.getByRole('heading', { level: 2, name: /Virements vers l'épargne/i });
+    const s1Card = s1Heading.closest('.card')!;
+    expect(s1Card.textContent).toContain('Compte courant → compte d\'épargne (1)');
+    expect(s1Card.textContent).toContain('+200,00 €');
+
+    // Section 2 : Virements depuis l'épargne
+    const s2Heading = screen.getByRole('heading', { level: 2, name: /Virements depuis l'épargne/i });
+    const s2Card = s2Heading.closest('.card')!;
+    expect(s2Card.textContent).toContain('Compte d\'épargne → compte courant (1)');
+    expect(s2Card.textContent).toContain('-50,00 €');
+
+    // Section 3 : Virements entre comptes courants
+    const s3Heading = screen.getByRole('heading', { level: 2, name: /Virements entre comptes courants/i });
+    const s3Card = s3Heading.closest('.card')!;
+    expect(s3Card.textContent).toContain('Compte courant ⇄ compte courant (2)');
+    expect(s3Card.textContent).toContain('150,00 €');
+    expect(s3Card.textContent).toContain('40,00 €');
+
+    // Section 4 : Virements entre comptes d'épargne
+    const s4Heading = screen.getByRole('heading', { level: 2, name: /Virements entre comptes d'épargne/i });
+    const s4Card = s4Heading.closest('.card')!;
+    expect(s4Card.textContent).toContain('Transferts internes (1)');
+    expect(s4Card.textContent).toContain('100,00 €');
+  });
 });
 
 describe('Savings component - Clôture et suppression de comptes d\'épargne', () => {
@@ -456,7 +557,7 @@ describe('Savings component - Clôture et suppression de comptes d\'épargne', (
 
     // 3. Dans le formulaire d'ajout, le compte clôturé n'est pas proposé comme compte destinataire
     fireEvent.click(screen.getByRole('button', { name: /Ajouter une opération d'épargne/i }));
-    const destSelect = screen.getAllByRole('combobox').find(s => s.textContent?.includes('Sélectionner le compte épargne destinataire...'))!;
+    const destSelect = screen.getAllByRole('combobox').find(s => s.textContent?.includes('Sélectionner le compte destinataire...'))!;
     expect(destSelect.textContent).toContain('Livret A');
     expect(destSelect.textContent).not.toContain('LEP');
   });
@@ -925,15 +1026,15 @@ describe('Savings component - Clôture et suppression de comptes d\'épargne', (
     const sourceSelect = screen.getByLabelText(/Compte source \(débité\)/i) as HTMLSelectElement;
     let sourceOptions = Array.from(sourceSelect.options).map(o => o.text);
 
-    expect(sourceOptions).toContain('Compte Courant Principal (Compte courant secondaire)');
+    expect(sourceOptions).toContain('Compte Courant Principal (Compte courant principal)');
     expect(sourceOptions).toContain('Mon Livret A (Livret A)');
     expect(sourceOptions).toContain('Bourse PEA (PEA — Plan d’épargne en actions)');
     expect(sourceOptions).toContain('Crypto Safe (Coffre Crypto Décentralisé)');
     // Le compte clôturé ne doit PAS être sélectionnable pour un nouveau virement
     expect(sourceOptions).not.toContain('Ancien Compte (Livret A) (clôturé)');
 
-    // Vérifier les options du Compte épargne destinataire (crédité)
-    const destSelect = screen.getByLabelText(/Compte épargne destinataire \(crédité\)/i) as HTMLSelectElement;
+    // Vérifier les options du Compte destinataire (crédité)
+    const destSelect = screen.getByLabelText(/Compte destinataire \(crédité\)/i) as HTMLSelectElement;
     let destOptions = Array.from(destSelect.options).map(o => o.text);
 
     expect(destOptions).toContain('Mon Livret A (Livret A)');
@@ -948,12 +1049,12 @@ describe('Savings component - Clôture et suppression de comptes d\'épargne', (
     // Vérifier que les sélecteurs sont toujours présents et fonctionnels avec les mêmes comptes
     const sourceSelectRecurring = screen.getByLabelText(/Compte source \(débité\)/i) as HTMLSelectElement;
     sourceOptions = Array.from(sourceSelectRecurring.options).map(o => o.text);
-    expect(sourceOptions).toContain('Compte Courant Principal (Compte courant secondaire)');
+    expect(sourceOptions).toContain('Compte Courant Principal (Compte courant principal)');
     expect(sourceOptions).toContain('Mon Livret A (Livret A)');
     expect(sourceOptions).toContain('Bourse PEA (PEA — Plan d’épargne en actions)');
     expect(sourceOptions).toContain('Crypto Safe (Coffre Crypto Décentralisé)');
 
-    const destSelectRecurring = screen.getByLabelText(/Compte épargne destinataire \(crédité\)/i) as HTMLSelectElement;
+    const destSelectRecurring = screen.getByLabelText(/Compte destinataire \(crédité\)/i) as HTMLSelectElement;
     destOptions = Array.from(destSelectRecurring.options).map(o => o.text);
     expect(destOptions).toContain('Mon Livret A (Livret A)');
     expect(destOptions).toContain('Bourse PEA (PEA — Plan d’épargne en actions)');
@@ -961,7 +1062,7 @@ describe('Savings component - Clôture et suppression de comptes d\'épargne', (
 
     // Vérifier le changement de sélection source : exclut la nouvelle source de la liste destinataire
     fireEvent.change(sourceSelectRecurring, { target: { value: 'acc-livretA' } });
-    const updatedDestOptions = Array.from((screen.getByLabelText(/Compte épargne destinataire \(crédité\)/i) as HTMLSelectElement).options).map(o => o.text);
+    const updatedDestOptions = Array.from((screen.getByLabelText(/Compte destinataire \(crédité\)/i) as HTMLSelectElement).options).map(o => o.text);
     expect(updatedDestOptions).not.toContain('Mon Livret A (Livret A)');
     expect(updatedDestOptions).toContain('Bourse PEA (PEA — Plan d’épargne en actions)');
   });
@@ -1051,7 +1152,7 @@ describe('Savings component - Clôture et suppression de comptes d\'épargne', (
     sourceSelect.appendChild(ghostOption);
     fireEvent.change(sourceSelect, { target: { value: 'acc-ghost' } });
 
-    const destSelect = screen.getByLabelText(/Compte épargne destinataire \(crédité\)/i);
+    const destSelect = screen.getByLabelText(/Compte destinataire \(crédité\)/i);
     fireEvent.change(destSelect, { target: { value: 'acc-livretA' } });
 
     fireEvent.click(screen.getByRole('button', { name: /^Enregistrer$/i }));
@@ -1083,7 +1184,7 @@ describe('Savings component - Clôture et suppression de comptes d\'épargne', (
     const sourceSelect = screen.getByLabelText(/Compte source \(débité\)/i);
     fireEvent.change(sourceSelect, { target: { value: 'acc-courant' } });
 
-    const destSelect = screen.getByLabelText(/Compte épargne destinataire \(crédité\)/i);
+    const destSelect = screen.getByLabelText(/Compte destinataire \(crédité\)/i);
     const closedOpt = document.createElement('option');
     closedOpt.value = 'acc-closed';
     closedOpt.text = 'Livret Clos';
@@ -1118,7 +1219,7 @@ describe('Savings component - Clôture et suppression de comptes d\'épargne', (
     const sourceSelect = screen.getByLabelText(/Compte source \(débité\)/i);
     fireEvent.change(sourceSelect, { target: { value: 'acc-livretA' } });
 
-    const destSelect = screen.getByLabelText(/Compte épargne destinataire \(crédité\)/i);
+    const destSelect = screen.getByLabelText(/Compte destinataire \(crédité\)/i);
     const sameOpt = document.createElement('option');
     sameOpt.value = 'acc-livretA';
     sameOpt.text = 'Livret A';
@@ -1157,7 +1258,7 @@ describe('Savings component - Clôture et suppression de comptes d\'épargne', (
     sourceSelect.appendChild(closedSourceOpt);
     fireEvent.change(sourceSelect, { target: { value: 'acc-courant-closed' } });
 
-    const destSelect = screen.getByLabelText(/Compte épargne destinataire \(crédité\)/i);
+    const destSelect = screen.getByLabelText(/Compte destinataire \(crédité\)/i);
     fireEvent.change(destSelect, { target: { value: 'acc-livretA' } });
 
     fireEvent.click(screen.getByRole('button', { name: /^Enregistrer$/i }));

@@ -664,5 +664,18 @@ describe('Server & API Integration - SQLite Centralized Backend', () => {
       const dbCheck = db.prepare('SELECT COUNT(*) as c FROM planned_expenses').get() as { c: number };
       expect(dbCheck.c).toBe(0);
     });
+
+    it('rejette la route de redémarrage si non authentifié, et l\'exécute proprement lorsque authentifié', async () => {
+      // 1. Sans token
+      apiClient.setToken(null);
+      const unauthRes = await fetch(`${baseUrl}/api/maintenance/restart`, { method: 'POST' });
+      expect(unauthRes.status).toBe(401);
+
+      // 2. Avec token (déjà setup via le beforeEach de la suite)
+      apiClient.setToken(token);
+      const restartRes = await apiClient.maintenance.restartServer();
+      expect(restartRes.success).toBe(true);
+      expect(restartRes.message).toContain('Signal de redémarrage reçu');
+    });
   });
 });

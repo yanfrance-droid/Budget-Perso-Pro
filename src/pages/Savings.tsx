@@ -39,32 +39,17 @@ export const SAVINGS_SUBTYPES: SavingsSubTypeOption[] = [
 
 export const PREDEFINED_SUBTYPE_VALUES = SAVINGS_SUBTYPES.map(s => s.value).filter(v => v !== 'other');
 
-export function getAccountTypeLabel(account: Account): string {
-  if (account.subType) {
-    const predefined = SAVINGS_SUBTYPES.find(st => st.value === account.subType);
-    if (predefined) {
-      return predefined.label;
-    }
-    // Type personnalisé
-    return account.subType;
-  }
+import { 
+  getAccountTypeLabel as getCentralizedAccountTypeLabel,
+  formatAccountOptionLabel as formatCentralizedAccountOptionLabel
+} from '../services/accountPresentation';
 
-  // Si pas de subType explicite, détection intelligente identique aux paramètres
-  const lowerName = account.name.toLowerCase();
-  if (lowerName.includes('livret a')) return 'Livret A';
-  if (lowerName.includes('lep')) return 'LEP — Livret d’épargne populaire';
-  if (lowerName.includes('ldds') || lowerName.includes('ldd')) return 'LDDS — Livret de développement durable et solidaire';
-  if (lowerName.includes('pel')) return 'PEL — Plan d’épargne logement';
-  if (lowerName.includes('cel')) return 'CEL — Compte épargne logement';
-  if (lowerName.includes('assurance-vie') || lowerName.includes('assurance vie')) return 'Assurance-vie';
-  if (lowerName.includes('pea')) return 'PEA — Plan d’épargne en actions';
-  if (account.type === 'checking') return 'Compte courant secondaire';
-  return 'Autre / Personnalisé';
+export function getAccountTypeLabel(account: Account, configuredPrimaryId?: string | null, allAccounts?: Account[]): string {
+  return getCentralizedAccountTypeLabel(account, configuredPrimaryId, allAccounts);
 }
 
-export function formatAccountOptionLabel(account: Account): string {
-  const typeLabel = getAccountTypeLabel(account);
-  return `${account.name} (${typeLabel})${account.isClosed ? ' (clôturé)' : ''}`;
+export function formatAccountOptionLabel(account: Account, configuredPrimaryId?: string | null, allAccounts?: Account[]): string {
+  return formatCentralizedAccountOptionLabel(account, configuredPrimaryId, allAccounts);
 }
 
 import { useServerDataOptional } from '../contexts/ServerDataContext';
@@ -262,8 +247,10 @@ export default function Savings() {
 
       const updatePayload: Partial<Account> = {
         name: drawerForm.name.trim(),
+        type: selectedAccountForDrawer.type || 'savings',
         subType: effectiveSubType,
-        initialBalance: parsedBalance
+        initialBalance: parsedBalance,
+        referenceDate: selectedAccountForDrawer.referenceDate || new Date().toISOString().split('T')[0]
       };
 
       if (parsedRate !== undefined) {
@@ -603,37 +590,53 @@ export default function Savings() {
       const srcAcc = s.accountId ? accountMap.get(s.accountId) : undefined;
       const destAcc = s.destinationAccountId ? accountMap.get(s.destinationAccountId) : undefined;
 
-      const isSrcSavings = srcAcc ? srcAcc.type === 'savings' : false;
-      const isDestSavings = destAcc ? destAcc.type === 'savings' : true;
+      const isSrcSavings = srcAcc ? (srcAcc.type === 'savings' || srcAcc.type === 'other') : false;
+      const isDestSavings = destAcc ? (destAcc.type === 'savings' || destAcc.type === 'other') : false;
+      const isSrcChecking = srcAcc ? srcAcc.type === 'checking' : false;
+      const isDestChecking = destAcc ? destAcc.type === 'checking' : false;
 
-      // Transfert entre 2 comptes d'épargne : flux interne neutre pour l'effort d'épargne net
+      // 1. Transfert entre deux comptes d'épargne : flux interne neutre pour l'effort d'épargne net
       if (isSrcSavings && isDestSavings) {
         return;
       }
 
+      // 2. Transfert entre deux comptes courants : trésorerie interne, neutre pour les versements/retraits d'épargne
+      if (isSrcChecking && isDestChecking) {
+        return;
+      }
+
+      // 3. Versement vers l'épargne (compte courant vers compte épargne)
       if (isDestSavings && !isSrcSavings) {
-        // Versement vers l'épargne
         monthDeposits += amt;
         if (s.status === 'cleared') {
           monthClearedDeposits += amt;
         } else {
           monthPendingDeposits += amt;
         }
-      } else if (isSrcSavings && !isDestSavings) {
-        // Retrait depuis l'épargne
+      } 
+      // 4. Retrait depuis l'épargne (compte épargne vers compte courant)
+      else if (isSrcSavings && !isDestSavings) {
         monthWithdrawals += amt;
         if (s.status === 'cleared') {
           monthClearedWithdrawals += amt;
         } else {
           monthPendingWithdrawals += amt;
         }
-      } else {
-        // Par défaut (si non déterminé), considéré comme versement d'épargne
+      } 
+      // 5. Repli (si un compte est indéterminé / supprimé mais que l'autre est épargne)
+      else if (isDestSavings) {
         monthDeposits += amt;
         if (s.status === 'cleared') {
           monthClearedDeposits += amt;
         } else {
           monthPendingDeposits += amt;
+        }
+      } else if (isSrcSavings) {
+        monthWithdrawals += amt;
+        if (s.status === 'cleared') {
+          monthClearedWithdrawals += amt;
+        } else {
+          monthPendingWithdrawals += amt;
         }
       }
     });
@@ -651,32 +654,53 @@ export default function Savings() {
     };
   }, [monthSavings, accounts]);
 
-  const { depositsSavings, withdrawalsSavings, internalSavings } = useMemo(() => {
+  const { depositsSavings, withdrawalsSavings, checkingTransfers, internalSavings } = useMemo(() => {
     const accountMap = new Map((accounts || []).map(a => [a.id, a]));
     const deposits: Transaction[] = [];
     const withdrawals: Transaction[] = [];
+    const checking: Transaction[] = [];
     const internal: Transaction[] = [];
 
     displayedSavings.forEach(saving => {
       const srcAcc = saving.accountId ? accountMap.get(saving.accountId) : undefined;
       const destAcc = saving.destinationAccountId ? accountMap.get(saving.destinationAccountId) : undefined;
 
-      const isSrcSavings = srcAcc ? srcAcc.type === 'savings' : false;
-      const isDestSavings = destAcc ? destAcc.type === 'savings' : true;
+      const isSrcSavings = srcAcc ? (srcAcc.type === 'savings' || srcAcc.type === 'other') : false;
+      const isDestSavings = destAcc ? (destAcc.type === 'savings' || destAcc.type === 'other') : false;
+      const isSrcChecking = srcAcc ? srcAcc.type === 'checking' : false;
+      const isDestChecking = destAcc ? destAcc.type === 'checking' : false;
 
+      // 1. Virements entre comptes d'épargne
       if (isSrcSavings && isDestSavings) {
         internal.push(saving);
-      } else if (isSrcSavings && !isDestSavings) {
+      } 
+      // 2. Virements entre comptes courants (principal ⇄ secondaire ou secondaire ⇄ secondaire)
+      else if (isSrcChecking && isDestChecking) {
+        checking.push(saving);
+      } 
+      // 3. Virements depuis l'épargne vers un compte courant
+      else if (isSrcSavings && !isDestSavings) {
+        withdrawals.push(saving);
+      } 
+      // 4. Virements vers l'épargne depuis un compte courant
+      else if (isDestSavings && !isSrcSavings) {
+        deposits.push(saving);
+      } 
+      // 5. Cas de repli si l'un des comptes est supprimé ou introuvable
+      else if (isDestSavings) {
+        deposits.push(saving);
+      } else if (isSrcSavings) {
         withdrawals.push(saving);
       } else {
-        // isDestSavings && !isSrcSavings, ou par défaut versement vers l'épargne
-        deposits.push(saving);
+        // Si les deux comptes sont non-épargne ou inconnus, classé dans transferts entre comptes courants
+        checking.push(saving);
       }
     });
 
     return {
       depositsSavings: deposits,
       withdrawalsSavings: withdrawals,
+      checkingTransfers: checking,
       internalSavings: internal
     };
   }, [displayedSavings, accounts]);
@@ -1201,7 +1225,7 @@ export default function Savings() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <h1 style={{ margin: 0 }}>Épargne</h1>
+        <h1 style={{ margin: 0 }}>Épargne & transferts</h1>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <Button variant="outline" onClick={() => setIsAddAccountModalOpen(true)} icon={<Plus size={16} />}>
             Nouveau compte d'épargne
@@ -1310,7 +1334,7 @@ export default function Savings() {
           >
             {savingsAccountsList.map(acc => {
               const isSelected = selectedAccountForDrawer?.id === acc.id;
-              const accountType = getAccountTypeLabel(acc);
+              const accountType = getAccountTypeLabel(acc, serverData?.dashboardSettings?.primaryAccountId, accounts);
               return (
                 <div 
                   key={acc.id}
@@ -1428,7 +1452,7 @@ export default function Savings() {
               }}
             >
               {closedSavingsAccountsList.map(acc => {
-                const accountType = getAccountTypeLabel(acc);
+                const accountType = getAccountTypeLabel(acc, serverData?.dashboardSettings?.primaryAccountId, accounts);
                 return (
                   <div 
                     key={acc.id}
@@ -1665,7 +1689,46 @@ export default function Savings() {
         </div>
       </div>
 
-      {/* Section C : Virements entre comptes d'épargne (si existants) */}
+      {/* Section C : Virements entre comptes courants (si existants) */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h2 style={{ fontSize: '1.15rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            Virements entre comptes courants
+          </h2>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>
+            Compte courant ⇄ compte courant ({checkingTransfers.length})
+          </span>
+        </div>
+
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Catégorie</th>
+                <th>Objectif / Notes</th>
+                <th>Flux de comptes</th>
+                <th>Montant</th>
+                <th>Statut</th>
+                <th>Récurrence</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {checkingTransfers.map(saving => renderSavingsRow(saving, '', 'var(--primary-color)'))}
+              {checkingTransfers.length === 0 && (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-light)' }}>
+                    Aucun virement entre comptes courants pour ce mois.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Section D : Virements entre comptes d'épargne (si existants) */}
       {internalSavings.length > 0 && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -1824,7 +1887,7 @@ export default function Savings() {
                 <option value="">Sélectionner le compte source...</option>
                 {accounts?.filter(a => !a.isClosed || (editingId && a.id === formData.accountId)).map(a => (
                   <option key={a.id} value={a.id}>
-                    {formatAccountOptionLabel(a)}
+                    {formatAccountOptionLabel(a, serverData?.dashboardSettings?.primaryAccountId, accounts)}
                   </option>
                 ))}
               </select>
@@ -1848,7 +1911,7 @@ export default function Savings() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
               <label className="form-label" htmlFor="operation-destination-account-id" style={{ margin: 0, fontWeight: 600 }}>
-                Compte épargne destinataire (crédité)
+                Compte destinataire (crédité)
               </label>
               <span style={{ 
                 fontSize: '0.72rem', 
@@ -1866,6 +1929,7 @@ export default function Savings() {
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <select 
                   id="operation-destination-account-id"
+                  aria-label="Compte destinataire (crédité)"
                   className="form-control" 
                   required 
                   style={{
@@ -1876,10 +1940,10 @@ export default function Savings() {
                   value={formData.destinationAccountId || ''} 
                   onChange={e => setFormData({...formData, destinationAccountId: e.target.value})}
                 >
-                  <option value="">Sélectionner le compte épargne destinataire...</option>
+                  <option value="">Sélectionner le compte destinataire...</option>
                   {eligibleDestAccounts.map(a => (
                     <option key={a.id} value={a.id}>
-                      {formatAccountOptionLabel(a)}
+                      {formatAccountOptionLabel(a, serverData?.dashboardSettings?.primaryAccountId, accounts)}
                     </option>
                   ))}
                 </select>

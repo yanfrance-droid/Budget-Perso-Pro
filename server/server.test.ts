@@ -121,6 +121,31 @@ describe('Suite de tests d\'intégration du Backend Serveur (SQLite natif)', () 
       expect(all.length).toBe(1);
       expect(all[0].isArchived).toBe(true);
     });
+
+    it('permet la mise à jour partielle d\'un compte sans exiger type ou referenceDate', () => {
+      const acc = saveAccount(db, {
+        name: 'Livret A',
+        type: 'savings',
+        subType: 'livret_a',
+        initialBalance: 1500,
+        referenceDate: '2026-01-01',
+        interestRate: 3.0
+      });
+
+      // Mise à jour partielle (ex: modification du nom et du solde uniquement)
+      const updated = saveAccount(db, {
+        id: acc.id,
+        name: 'Livret A Modifié',
+        initialBalance: 2000
+      } as any);
+
+      expect(updated.name).toBe('Livret A Modifié');
+      expect(updated.initialBalance).toBe(2000);
+      expect(updated.type).toBe('savings');
+      expect(updated.subType).toBe('livret_a');
+      expect(updated.referenceDate).toBe('2026-01-01');
+      expect(updated.interestRate).toBe(3.0);
+    });
   });
 
   describe('3. Règle métier des crédits et déduction du capital', () => {

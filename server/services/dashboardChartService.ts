@@ -119,9 +119,18 @@ export function renderDashboardExpensesDonutSvg(data: DashboardExpenseSlice[], w
  * Génère l'image PNG haute résolution du graphique Donut du Dashboard
  */
 export async function generateDashboardExpenseDonutPng(data: DashboardExpenseSlice[]): Promise<Buffer> {
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    executablePath,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote'
+    ]
   });
 
   try {

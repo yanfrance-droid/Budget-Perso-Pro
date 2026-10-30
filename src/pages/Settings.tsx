@@ -7,7 +7,7 @@ import {
   AlertTriangle, CheckCircle, ShieldCheck, Server, RefreshCw, LogOut, 
   Wallet, Building, AlertCircle, Database, Wrench, HardDrive, RotateCcw,
   KeyRound, Lock, Terminal, FileText, Moon, Sun, Eye, EyeOff, Palette,
-  TrendingDown, Cpu, Network, Activity, Clock, HelpCircle, BookOpen, ExternalLink, Heart
+  TrendingDown, Cpu, Network, Activity, Clock, HelpCircle, BookOpen, ExternalLink, Heart, Power, Star
 } from 'lucide-react';
 import LoanCapitalHistoryManager from '../components/settings/LoanCapitalHistoryManager';
 import { calculateRealBalance } from '../engine/calculations';
@@ -15,6 +15,7 @@ import { useServerDataOptional } from '../contexts/ServerDataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../services/apiClient';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
+import { resolvePrimaryAccountId, getAccountTypeLabel } from '../services/accountPresentation';
 
 const CATEGORY_TYPES: { id: TransactionType; label: string }[] = [
   { id: 'income', label: 'Revenus' },
@@ -23,17 +24,8 @@ const CATEGORY_TYPES: { id: TransactionType; label: string }[] = [
   { id: 'daily', label: 'Dépenses courantes' },
   { id: 'health_expense', label: 'Santé' },
   { id: 'loan_payment', label: 'Crédits' },
-  { id: 'transfer', label: 'Épargne' }
+  { id: 'transfer', label: 'Épargne & transferts' }
 ];
-
-function getAccountTypeLabel(type: AccountType): string {
-  switch (type) {
-    case 'checking': return 'Compte courant';
-    case 'savings': return 'Compte d\'épargne';
-    case 'cash': return 'Espèces / Manuel';
-    default: return type;
-  }
-}
 
 export default function Settings() {
   const serverData = useServerDataOptional();
@@ -207,6 +199,11 @@ export default function Settings() {
   const [resetConfirmationInput, setResetConfirmationInput] = useState('');
   const [reseedDefaults, setReseedDefaults] = useState(true);
   const [isResetting, setIsResetting] = useState(false);
+
+  // États Redémarrage sécurisé du serveur
+  const [isRestartModalOpen, setIsRestartModalOpen] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const [restartStatusMessage, setRestartStatusMessage] = useState<string | null>(null);
 
   const fetchMaintenanceStatus = async () => {
     if (!serverData || !isAuthenticated) return;
@@ -437,6 +434,54 @@ export default function Settings() {
     }
   };
 
+  const handleRestartServer = async () => {
+    setIsRestarting(true);
+    setRestartStatusMessage('Envoi du signal de redémarrage sécurisé au serveur...');
+    try {
+      await apiClient.maintenance.restartServer();
+      setRestartStatusMessage('Fermeture propre de la base SQLite et redémarrage du conteneur en cours. Reconnexion automatique...');
+
+      // Polling de reconnexion pendant 30 secondes max
+      const startTime = Date.now();
+      const maxWaitMs = 30000;
+      let isBackOnline = false;
+
+      // Attendre 2 secondes avant le premier test de ping
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      while (Date.now() - startTime < maxWaitMs) {
+        try {
+          const res = await fetch('/api/health');
+          if (res.ok) {
+            isBackOnline = true;
+            break;
+          }
+        } catch {
+          // Serveur encore en cours de boot
+        }
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+
+      if (isBackOnline) {
+        setRestartStatusMessage('Serveur redémarré avec succès ! Rechargement des métriques...');
+        await serverData?.refreshAll();
+        await fetchMaintenanceStatus();
+        setTimeout(() => {
+          setIsRestartModalOpen(false);
+          setIsRestarting(false);
+          setRestartStatusMessage(null);
+          setMaintenanceMessage({ type: 'success', text: 'Le serveur Budget Perso Pro a été redémarré proprement.' });
+        }, 1200);
+      } else {
+        setRestartStatusMessage('Le serveur met plus de temps que prévu à redémarrer. Veuillez patienter quelques secondes puis actualiser la page.');
+        setIsRestarting(false);
+      }
+    } catch (err: any) {
+      setRestartStatusMessage(`Erreur lors de la demande de redémarrage : ${err.message || 'Erreur inconnue'}`);
+      setIsRestarting(false);
+    }
+  };
+
   // ----------------------------------------------------------------------
   // Handlers Comptes Bancaires
   // ----------------------------------------------------------------------
@@ -475,7 +520,8 @@ export default function Settings() {
           id: editingAccount.id,
           name: trimmedName,
           type: accountType,
-          initialBalance: parsedBalance
+          initialBalance: parsedBalance,
+          referenceDate: editingAccount.referenceDate || new Date().toISOString().split('T')[0]
         };
         await serverData?.saveAccount(payload);
       } else {
@@ -505,6 +551,10 @@ export default function Settings() {
     if (window.confirm(message)) {
       try {
         await serverData?.saveAccount({ id: acc.id, isClosed: !acc.isClosed });
+        // Si le compte clôturé était le compte principal, le désassigner
+        if (!acc.isClosed && serverData?.dashboardSettings?.primaryAccountId === acc.id) {
+          await serverData?.saveDashboardSettings({ primaryAccountId: '' });
+        }
       } catch (err: any) {
         console.error('Erreur changement statut compte:', err);
         alert(err.message || 'Impossible de mettre à jour le statut du compte.');
@@ -524,10 +574,34 @@ export default function Settings() {
     if (window.confirm(`Voulez-vous vraiment supprimer définitivement le compte "${acc.name}" ?\nCette action est irréversible.`)) {
       try {
         await serverData?.deleteAccount(acc.id);
+        // Si le compte supprimé était le compte principal, le désassigner
+        if (serverData?.dashboardSettings?.primaryAccountId === acc.id) {
+          await serverData?.saveDashboardSettings({ primaryAccountId: '' });
+        }
       } catch (err: any) {
         console.error('Erreur suppression compte:', err);
         alert(err.message || 'Impossible de supprimer ce compte.');
       }
+    }
+  };
+
+  const handleSetPrimaryAccount = async (acc: Account) => {
+    if (acc.isClosed) {
+      alert("Un compte clôturé ne peut pas être désigné comme compte courant principal.");
+      return;
+    }
+    if (acc.type !== 'checking') {
+      alert("Seul un compte courant peut être désigné comme compte principal.");
+      return;
+    }
+
+    try {
+      if (serverData) {
+        await serverData.saveDashboardSettings({ primaryAccountId: acc.id });
+      }
+    } catch (err: any) {
+      console.error('Erreur définition compte principal:', err);
+      alert(err.message || 'Impossible de définir le compte principal.');
     }
   };
 
@@ -797,73 +871,142 @@ export default function Settings() {
                   <th>Nom du compte</th>
                   <th>Type</th>
                   <th style={{ textAlign: 'right' }}>Solde initial</th>
-                  <th style={{ textAlign: 'right' }}>Solde réel calculé</th>
+                  <th style={{ textAlign: 'right' }}>Solde bancaire réel</th>
                   <th>Statut</th>
-                  <th style={{ width: '150px' }}>Actions</th>
+                  <th style={{ width: '180px' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {accounts.map(acc => {
-                  const realBal = calculateRealBalance(acc, allTransactions);
-                  const isClosed = Boolean(acc.isClosed);
-
-                  return (
-                    <tr key={acc.id} style={{ opacity: isClosed ? 0.6 : 1 }}>
-                      <td style={{ fontWeight: 600 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <Wallet size={16} color="var(--primary-color)" />
-                          <span>{acc.name}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #666)' }}>
-                          {getAccountTypeLabel(acc.type)}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                        {(acc.initialBalance ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                      </td>
-                      <td style={{ 
-                        textAlign: 'right', 
-                        fontVariantNumeric: 'tabular-nums', 
-                        fontWeight: 600,
-                        color: realBal >= 0 ? 'var(--text-color)' : 'var(--danger-color)'
-                      }}>
-                        {realBal.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                      </td>
-                      <td>
-                        <span className={`badge ${isClosed ? 'badge-planned' : 'badge-cleared'}`}>
-                          {isClosed ? 'Clôturé' : 'Actif'}
-                        </span>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <Button 
-                            variant="icon" 
-                            title="Modifier les informations" 
-                            onClick={() => handleOpenAccountModal(acc)}
-                          >
-                            <Edit2 size={16} />
-                          </Button>
-                          <Button 
-                            variant="icon" 
-                            title={isClosed ? 'Réactiver le compte' : 'Clôturer le compte'} 
-                            onClick={() => handleToggleCloseAccount(acc)}
-                          >
-                            {isClosed ? <ArchiveRestore size={16} color="var(--success-color)" /> : <Archive size={16} color="var(--warning-color)" />}
-                          </Button>
-                          <Button 
-                            variant="icon" 
-                            title="Supprimer définitivement" 
-                            onClick={() => handleDeleteAccount(acc)}
-                          >
-                            <Trash2 size={16} color="var(--danger-color)" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+                {(() => {
+                  // Détermination déterministe et sûre du compte principal explicite :
+                  // 1. Si primaryAccountId est défini et pointe vers un compte checking actif existant -> c'est lui.
+                  // 2. Sinon, si aucun primaryAccountId valide n'est configuré (installation existante / transition),
+                  //    on sélectionne de façon stable le premier compte checking actif non clôturé.
+                  // 3. Un compte clôturé, inexistant ou non-checking n'est JAMAIS considéré comme principal.
+                  const resolvedPrimaryAccountId = resolvePrimaryAccountId(
+                    accounts,
+                    serverData?.dashboardSettings?.primaryAccountId
                   );
-                })}
+
+                  return accounts.map(acc => {
+                    const calculatedBal = calculateRealBalance(acc, allTransactions);
+                    const isClosed = Boolean(acc.isClosed);
+                    const isPrimary = acc.id === resolvedPrimaryAccountId;
+
+                    // Seul le compte courant principal désigné affiche le solde déclaré du Tableau de bord (manualBalance)
+                    let displayBalance = calculatedBal;
+                    let isDashboardManual = false;
+
+                    if (isPrimary) {
+                      const rawManual = serverData?.dashboardSettings?.manualBalance ?? 
+                        (typeof window !== 'undefined' && window.localStorage ? localStorage.getItem('manualBalance') : null);
+                      if (rawManual !== null && rawManual !== undefined && rawManual !== '') {
+                        const parsedManual = parseFloat(String(rawManual).replace(',', '.'));
+                        if (!isNaN(parsedManual)) {
+                          displayBalance = parsedManual;
+                          isDashboardManual = true;
+                        }
+                      }
+                    }
+
+                    return (
+                      <tr key={acc.id} style={{ opacity: isClosed ? 0.6 : 1 }}>
+                        <td style={{ fontWeight: 600 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <Wallet size={16} color="var(--primary-color)" />
+                            <span>{acc.name}</span>
+                            {isPrimary && (
+                              <span 
+                                className="badge" 
+                                style={{ 
+                                  backgroundColor: '#eff6ff', 
+                                  color: '#2563eb', 
+                                  border: '1px solid #bfdbfe',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem'
+                                }}
+                                title="Compte courant principal associé au solde bancaire réel du Tableau de bord"
+                              >
+                                <Star size={11} fill="#2563eb" color="#2563eb" />
+                                Principal
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #666)' }}>
+                            {getAccountTypeLabel(acc, serverData?.dashboardSettings?.primaryAccountId, accounts)}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {(acc.initialBalance ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                        </td>
+                        <td style={{ 
+                          textAlign: 'right', 
+                          fontVariantNumeric: 'tabular-nums', 
+                          fontWeight: 600,
+                          color: displayBalance >= 0 ? 'var(--text-color)' : 'var(--danger-color)'
+                        }}>
+                          <div>
+                            {displayBalance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                          </div>
+                          {isDashboardManual && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary, #888)', fontWeight: 'normal' }} title={`Solde pointé calculé : ${calculatedBal.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`}>
+                              (Tableau de bord)
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span className={`badge ${isClosed ? 'badge-planned' : 'badge-cleared'}`}>
+                            {isClosed ? 'Clôturé' : 'Actif'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                            {acc.type === 'checking' && !isClosed && (
+                              <Button
+                                variant="icon"
+                                title={isPrimary ? 'Compte courant principal actif' : 'Définir comme compte courant principal'}
+                                onClick={() => handleSetPrimaryAccount(acc)}
+                                style={{
+                                  color: isPrimary ? '#f59e0b' : 'var(--text-secondary, #94a3b8)',
+                                  backgroundColor: isPrimary ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
+                                }}
+                                aria-label={isPrimary ? `Compte principal : ${acc.name}` : `Définir ${acc.name} comme compte principal`}
+                              >
+                                <Star size={16} fill={isPrimary ? '#f59e0b' : 'none'} />
+                              </Button>
+                            )}
+                            <Button 
+                              variant="icon" 
+                              title="Modifier les informations" 
+                              onClick={() => handleOpenAccountModal(acc)}
+                            >
+                              <Edit2 size={16} />
+                            </Button>
+                            <Button 
+                              variant="icon" 
+                              title={isClosed ? 'Réactiver le compte' : 'Clôturer le compte'} 
+                              onClick={() => handleToggleCloseAccount(acc)}
+                            >
+                              {isClosed ? <ArchiveRestore size={16} color="var(--success-color)" /> : <Archive size={16} color="var(--warning-color)" />}
+                            </Button>
+                            <Button 
+                              variant="icon" 
+                              title="Supprimer définitivement" 
+                              onClick={() => handleDeleteAccount(acc)}
+                            >
+                              <Trash2 size={16} color="var(--danger-color)" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
                 {accounts.length === 0 && (
                   <tr>
                     <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
@@ -1571,14 +1714,19 @@ export default function Settings() {
                   <div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #666)', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                       <Network size={14} color="var(--primary-color)" />
-                      <span>Adresse IP & Port</span>
+                      <span>Adresse d'accès & Port</span>
                     </div>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 700, fontFamily: 'monospace', color: 'var(--primary-color)' }}>
-                      {maintenanceStatus?.systemMetrics?.serverIp || '127.0.0.1'}
+                    <div style={{ fontSize: '1.15rem', fontWeight: 700, fontFamily: 'monospace', color: 'var(--primary-color)', wordBreak: 'break-all' }}>
+                      {typeof window !== 'undefined' && window.location ? window.location.hostname : '127.0.0.1'}
                     </div>
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary, #888)', marginTop: '0.4rem' }}>
-                    Port de service : <strong>:3001</strong> (HTTP)
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary, #888)', marginTop: '0.4rem', lineHeight: '1.3' }}>
+                    Port actif : <strong>{typeof window !== 'undefined' && window.location && window.location.port ? window.location.port : '3001'}</strong> (HTTP)
+                    {maintenanceStatus?.systemMetrics?.serverIp && maintenanceStatus.systemMetrics.serverIp !== '127.0.0.1' && (
+                      <span style={{ display: 'block', fontSize: '0.68rem', opacity: 0.85, marginTop: '0.15rem' }}>
+                        Passerelle interne Docker : {maintenanceStatus.systemMetrics.serverIp}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1801,6 +1949,15 @@ export default function Settings() {
                   disabled={isCheckingOrphans}
                 >
                   {isCheckingOrphans ? 'Diagnostic...' : 'Vérifier la cohérence & orphelins'}
+                </Button>
+                <Button
+                  variant="danger"
+                  icon={<Power size={16} />}
+                  onClick={() => setIsRestartModalOpen(true)}
+                  disabled={isRestarting}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  {isRestarting ? 'Redémarrage...' : 'Redémarrer le serveur'}
                 </Button>
               </div>
 
@@ -2033,9 +2190,9 @@ export default function Settings() {
                 </div>
 
                 <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <h4 style={{ margin: '0 0 0.4rem 0', fontSize: '0.98rem' }}>🐷 Épargne & Trésorerie</h4>
+                  <h4 style={{ margin: '0 0 0.4rem 0', fontSize: '0.98rem' }}>🐷 Épargne & Transferts</h4>
                   <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary, #666)', lineHeight: 1.4 }}>
-                    Distinguez les versements réels vers l'épargne (enrichissement) des retraits (mobilisation de trésorerie interne) sans fausser vos bilans.
+                    Gérez vos comptes d'épargne ainsi que tous les virements internes (entre livrets, vers l'épargne ou entre comptes courants). Distinguez les versements réels vers l'épargne (enrichissement) des retraits (mobilisation de trésorerie interne) sans fausser vos bilans.
                   </p>
                 </div>
               </div>
@@ -2438,6 +2595,69 @@ export default function Settings() {
               disabled={isRestoringSnapshot}
             >
               {isRestoringSnapshot ? 'Restauration en cours...' : 'Confirmer et restaurer'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Confirmation de Redémarrage du Serveur */}
+      <Modal
+        isOpen={isRestartModalOpen}
+        onClose={() => !isRestarting && setIsRestartModalOpen(false)}
+        title="Redémarrer le serveur Budget Perso Pro"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingTop: '0.5rem' }}>
+          <div style={{
+            padding: '0.85rem',
+            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            borderLeft: '4px solid #ef4444',
+            borderRadius: '4px',
+            fontSize: '0.88rem',
+            color: 'var(--text-main)',
+            lineHeight: 1.5
+          }}>
+            <div style={{ fontWeight: 600, color: '#dc2626', marginBottom: '0.25rem' }}>
+              ⚠️ Confirmation du redémarrage du service
+            </div>
+            Le serveur va effectuer un point de contrôle complet de la base de données (WAL Checkpoint), fermer proprement la connexion SQLite, puis redémarrer le processus conteneurisé.
+            <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary, #666)' }}>
+              🔒 <strong>Sécurité Proxmox/Docker :</strong> Seul le conteneur <code>budget-perso-pro</code> sera redémarré. Vos autres applications (Nextcloud, Jellyfin, MariaDB...) ne seront en aucun cas impactées.
+            </div>
+          </div>
+
+          {restartStatusMessage && (
+            <div style={{
+              padding: '0.75rem',
+              borderRadius: '6px',
+              backgroundColor: isRestarting ? 'rgba(59, 130, 246, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+              border: `1px solid ${isRestarting ? '#3b82f6' : '#22c55e'}`,
+              color: isRestarting ? '#1d4ed8' : '#15803d',
+              fontSize: '0.85rem',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              {isRestarting ? <RefreshCw className="spin" size={16} /> : <CheckCircle size={16} />}
+              <span>{restartStatusMessage}</span>
+            </div>
+          )}
+
+          <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+            <Button
+              variant="outline"
+              onClick={() => setIsRestartModalOpen(false)}
+              disabled={isRestarting}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="danger"
+              icon={<Power size={16} />}
+              onClick={handleRestartServer}
+              disabled={isRestarting}
+            >
+              {isRestarting ? 'Redémarrage en cours...' : 'Confirmer le redémarrage'}
             </Button>
           </div>
         </div>

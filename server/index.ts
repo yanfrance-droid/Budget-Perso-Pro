@@ -22,6 +22,48 @@ writeTechnicalLog('INFO', `Démarrage du serveur sur le port ${PORT} (SQLite: ${
 const db = initDatabase(DB_PATH);
 const server = createServer(db, STATIC_DIR);
 
+let isShuttingDown = false;
+export async function gracefulShutdown(exitCode = 0, trigger = 'UNKNOWN') {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[Arrêt] Fermeture ordonnée initiée (signal/trigger: ${trigger})...`);
+  writeTechnicalLog('WARN', `Fermeture ordonnée du serveur (trigger: ${trigger}, code: ${exitCode})`);
+
+  try {
+    // 1. Fermeture des nouvelles connexions HTTP
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        console.log('[Arrêt] Serveur HTTP arrêté.');
+        resolve();
+      });
+    });
+  } catch (err: any) {
+    console.warn('[Arrêt] Avertissement arrêt serveur HTTP:', err.message);
+  }
+
+  try {
+    // 2. Vidage et checkpoint WAL de SQLite
+    console.log('[Arrêt] Exécution PRAGMA wal_checkpoint(TRUNCATE)...');
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  } catch (err: any) {
+    console.warn('[Arrêt] Avertissement checkpoint WAL SQLite:', err.message);
+  }
+
+  try {
+    // 3. Fermeture de la base SQLite
+    db.close();
+    console.log('[Arrêt] Base SQLite fermée proprement.');
+  } catch (err: any) {
+    console.warn('[Arrêt] Avertissement fermeture SQLite:', err.message);
+  }
+
+  console.log(`[Arrêt] Terminé avec succès. Code de sortie : ${exitCode}`);
+  process.exit(exitCode);
+}
+
+process.on('SIGTERM', () => gracefulShutdown(0, 'SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown(0, 'SIGINT'));
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Serveur Budget Perso Pro actif sur http://0.0.0.0:${PORT}`);
   console.log('Prêt pour les connexions PC, iPhone et VPN Proxmox.');

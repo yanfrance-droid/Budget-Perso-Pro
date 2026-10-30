@@ -560,6 +560,52 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
         }
       }
 
+      // Redémarrage sécurisé et contrôlé du processus serveur
+      if (pathname === '/api/maintenance/restart' && req.method === 'POST') {
+        if (isRestoringDatabase) {
+          res.setHeader('Retry-After', '3');
+          return sendJson(503, { error: 'Une opération de maintenance critique est déjà en cours.' });
+        }
+
+        // Verrouiller les nouvelles opérations
+        isRestoringDatabase = true;
+        writeTechnicalLog('WARN', 'Demande de redémarrage sécurisé initiée via l\'interface d\'administration.');
+
+        try {
+          // Attendre la fin des requêtes en cours
+          await drainActiveDbRequests(3000);
+
+          // Répondre avec succès au client HTTP
+          sendJson(200, {
+            success: true,
+            message: 'Signal de redémarrage reçu. Le serveur effectue un checkpoint SQLite et redémarre...'
+          });
+
+          // Attacher l'événement 'finish' pour s'assurer que la réponse a été totalement écrite sur la socket réseau
+          res.on('finish', () => {
+            // Laisser une marge de 250ms sur l'I/O réseau puis déclencher la fermeture ordonnée
+            setTimeout(() => {
+              try {
+                // Checkpoint WAL TRUNCATE pour garantir qu'aucune transaction ne reste dans le journal
+                db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+                db.close();
+              } catch (e: any) {
+                console.warn('[Restart] Avertissement fermeture SQLite avant sortie:', e.message);
+              }
+              // En environnement de test ou process parent géré
+              if (process.env.NODE_ENV !== 'test') {
+                process.exit(0);
+              }
+            }, 250);
+          });
+          return;
+        } catch (err: any) {
+          isRestoringDatabase = false;
+          writeTechnicalLog('ERROR', `Échec de l'initialisation du redémarrage : ${err.message}`);
+          return sendJson(500, { error: err.message });
+        }
+      }
+
       // 11. Logs techniques du serveur
       if (pathname === '/api/maintenance/logs' && req.method === 'GET') {
         try {

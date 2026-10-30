@@ -184,4 +184,142 @@ describe('Settings page - Protection des requêtes de maintenance', () => {
     });
     expect(downloadExcelSpy).toHaveBeenCalledWith({ startDate: '2026-06-01', endDate: '2026-12-31' });
   });
+
+  describe('Gestion explicite du compte courant principal et des comptes secondaires', () => {
+    it('attribue le solde bancaire réel du tableau de bord au seul compte principal, et conserve le solde calculé pour le compte secondaire', async () => {
+      mockIsAuthenticated = true;
+      const mockSaveDashboardSettings = vi.fn().mockResolvedValue(undefined);
+
+      mockServerData = {
+        categories: [],
+        accounts: [
+          { id: 'acc-main', name: 'Compte Boursorama', type: 'checking', initialBalance: 1000, isClosed: false },
+          { id: 'acc-sec', name: 'Compte Revolut Secondaire', type: 'checking', initialBalance: 200, isClosed: false },
+          { id: 'acc-livret', name: 'Livret A', type: 'savings', initialBalance: 5000, isClosed: false }
+        ],
+        incomePayers: [],
+        transactions: [
+          // Transaction de 50€ pointée sur le compte secondaire -> solde calculé 200 - 50 = 150€
+          { id: 'tx-1', accountId: 'acc-sec', amount: 50, type: 'daily', status: 'cleared', date: '2026-10-15' }
+        ],
+        loans: [],
+        recurrenceTemplates: [],
+        dashboardSettings: {
+          manualBalance: '3450.50',
+          card1: '0',
+          card2: '0',
+          primaryAccountId: 'acc-main'
+        },
+        saveDashboardSettings: mockSaveDashboardSettings,
+        saveAccount: vi.fn(),
+        deleteAccount: vi.fn(),
+        refreshAll: vi.fn()
+      };
+
+      render(<Settings />);
+
+      // Le compte Boursorama (principal) doit afficher le solde du Tableau de bord (3 450,50 €)
+      const mainRow = screen.getByText('Compte Boursorama').closest('tr')!;
+      expect(mainRow.textContent).toContain('3\u202f450,50 €');
+      expect(mainRow.textContent).toContain('(Tableau de bord)');
+      expect(mainRow.textContent).toContain('Principal');
+
+      // Le compte Revolut (secondaire) doit afficher son propre solde calculé (150,00 €) et PAS le solde du Dashboard
+      const secRow = screen.getByText('Compte Revolut Secondaire').closest('tr')!;
+      expect(secRow.textContent).toContain('150,00 €');
+      expect(secRow.textContent).not.toContain('3\u202f450,50 €');
+      expect(secRow.textContent).not.toContain('(Tableau de bord)');
+      expect(secRow.textContent).not.toContain('Principal');
+
+      // Le livret A (épargne) doit afficher son solde initial / calculé (5 000,00 €)
+      const livretCells = screen.getAllByText('Livret A');
+      const livretRow = livretCells[0].closest('tr')!;
+      expect(livretRow.textContent).toContain('5\u202f000,00 €');
+      expect(livretRow.textContent).not.toContain('(Tableau de bord)');
+    });
+
+    it('permet de changer de compte principal en cliquant sur l\'étoile et appelle saveDashboardSettings', async () => {
+      mockIsAuthenticated = true;
+      const mockSaveDashboardSettings = vi.fn().mockResolvedValue(undefined);
+
+      mockServerData = {
+        categories: [],
+        accounts: [
+          { id: 'acc-main', name: 'Compte Boursorama', type: 'checking', initialBalance: 1000, isClosed: false },
+          { id: 'acc-sec', name: 'Compte Revolut Secondaire', type: 'checking', initialBalance: 200, isClosed: false }
+        ],
+        incomePayers: [],
+        transactions: [],
+        loans: [],
+        recurrenceTemplates: [],
+        dashboardSettings: {
+          manualBalance: '3000',
+          card1: '0',
+          card2: '0',
+          primaryAccountId: 'acc-main'
+        },
+        saveDashboardSettings: mockSaveDashboardSettings,
+        saveAccount: vi.fn(),
+        deleteAccount: vi.fn(),
+        refreshAll: vi.fn()
+      };
+
+      render(<Settings />);
+
+      // Trouver le bouton pour définir le compte secondaire en tant que compte principal
+      const setPrimaryBtn = screen.getByRole('button', { name: /Définir Compte Revolut Secondaire comme compte principal/i });
+      await act(async () => {
+        fireEvent.click(setPrimaryBtn);
+      });
+
+      expect(mockSaveDashboardSettings).toHaveBeenCalledWith({ primaryAccountId: 'acc-sec' });
+    });
+
+    it('ignore un primaryAccountId invalide ou clôturé et se rabat proprement sur le premier compte actif sans corrompre les autres', () => {
+      mockIsAuthenticated = true;
+      mockServerData = {
+        categories: [],
+        accounts: [
+          // Le compte principal enregistré a été clôturé
+          { id: 'acc-old-main', name: 'Ancien Compte Clos', type: 'checking', initialBalance: 0, isClosed: true },
+          // Le compte actif restant
+          { id: 'acc-active', name: 'Compte Actif', type: 'checking', initialBalance: 500, isClosed: false },
+          { id: 'acc-other', name: 'Compte Secondaire Actif', type: 'checking', initialBalance: 200, isClosed: false }
+        ],
+        incomePayers: [],
+        transactions: [],
+        loans: [],
+        recurrenceTemplates: [],
+        dashboardSettings: {
+          manualBalance: '4200',
+          card1: '0',
+          card2: '0',
+          primaryAccountId: 'acc-old-main' // pointe vers un compte clôturé
+        },
+        saveDashboardSettings: vi.fn(),
+        saveAccount: vi.fn(),
+        deleteAccount: vi.fn(),
+        refreshAll: vi.fn()
+      };
+
+      render(<Settings />);
+
+      // L'ancien compte clos ne doit PAS être principal
+      const oldRow = screen.getByText('Ancien Compte Clos').closest('tr')!;
+      expect(oldRow.textContent).not.toContain('Principal');
+      expect(oldRow.textContent).not.toContain('(Tableau de bord)');
+
+      // Le compte actif de repli devient principal
+      const activeRow = screen.getByText('Compte Actif').closest('tr')!;
+      expect(activeRow.textContent).toContain('4\u202f200,00 €');
+      expect(activeRow.textContent).toContain('(Tableau de bord)');
+      expect(activeRow.textContent).toContain('Principal');
+
+      // Le compte secondaire actif garde son solde propre (200,00 €)
+      const otherRow = screen.getByText('Compte Secondaire Actif').closest('tr')!;
+      expect(otherRow.textContent).toContain('200,00 €');
+      expect(otherRow.textContent).not.toContain('4\u202f200,00 €');
+      expect(otherRow.textContent).not.toContain('(Tableau de bord)');
+    });
+  });
 });
