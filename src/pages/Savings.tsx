@@ -590,8 +590,8 @@ export default function Savings() {
       const srcAcc = s.accountId ? accountMap.get(s.accountId) : undefined;
       const destAcc = s.destinationAccountId ? accountMap.get(s.destinationAccountId) : undefined;
 
-      const isSrcSavings = srcAcc ? (srcAcc.type === 'savings' || srcAcc.type === 'other') : false;
-      const isDestSavings = destAcc ? (destAcc.type === 'savings' || destAcc.type === 'other') : false;
+      const isSrcSavings = srcAcc ? (srcAcc.type === 'savings' || srcAcc.subType === 'other') : false;
+      const isDestSavings = destAcc ? (destAcc.type === 'savings' || destAcc.subType === 'other') : false;
       const isSrcChecking = srcAcc ? srcAcc.type === 'checking' : false;
       const isDestChecking = destAcc ? destAcc.type === 'checking' : false;
 
@@ -665,8 +665,8 @@ export default function Savings() {
       const srcAcc = saving.accountId ? accountMap.get(saving.accountId) : undefined;
       const destAcc = saving.destinationAccountId ? accountMap.get(saving.destinationAccountId) : undefined;
 
-      const isSrcSavings = srcAcc ? (srcAcc.type === 'savings' || srcAcc.type === 'other') : false;
-      const isDestSavings = destAcc ? (destAcc.type === 'savings' || destAcc.type === 'other') : false;
+      const isSrcSavings = srcAcc ? (srcAcc.type === 'savings' || srcAcc.subType === 'other') : false;
+      const isDestSavings = destAcc ? (destAcc.type === 'savings' || destAcc.subType === 'other') : false;
       const isSrcChecking = srcAcc ? srcAcc.type === 'checking' : false;
       const isDestChecking = destAcc ? destAcc.type === 'checking' : false;
 
