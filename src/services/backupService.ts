@@ -8,6 +8,7 @@ export interface BackupTables {
   recurrenceTemplates?: RecurrenceTemplate[];
   incomePayers?: IncomePayer[];
   plannedExpenses?: PlannedExpense[];
+  loanPaymentHistory?: any[];
 }
 
 export interface BackupLocalStorage {
@@ -192,7 +193,8 @@ export function validateBackupData(parsed: unknown): ValidationResult {
       loans: tables.loans as Loan[],
       recurrenceTemplates: (tables.recurrenceTemplates as RecurrenceTemplate[]) || [],
       incomePayers: (tables.incomePayers as IncomePayer[]) || [],
-      plannedExpenses: (tables.plannedExpenses as PlannedExpense[]) || []
+      plannedExpenses: (tables.plannedExpenses as PlannedExpense[]) || [],
+      loanPaymentHistory: Array.isArray(tables.loanPaymentHistory) ? tables.loanPaymentHistory : []
     },
     localStorage: {
       manualBalance: String(local.manualBalance ?? '0'),

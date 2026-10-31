@@ -259,3 +259,101 @@ export function calculateAmortizedCapital(
   return Math.round(capitalPart * 100) / 100;
 }
 
+export interface LoanPayoffEstimateClient {
+  possible: boolean;
+  reason?: string;
+  monthsRemaining?: number;
+  estimatedEndMonth?: string;
+  lastPaymentAmount?: number;
+  totalInterest?: number;
+  totalInsurance?: number;
+  totalCost?: number;
+}
+
+/**
+ * Calcul actuariel indicatif et transparent de la date d'amortissement complet d'un crédit.
+ * Simulation mois par mois au centime d'euro le plus proche, gérant assurance, intérêts et dernier paiement ajusté.
+ */
+export function estimateLoanPayoffClient(params: {
+  remainingCapital: number;
+  monthlyPayment: number;
+  interestRate?: number;
+  insurancePart?: number;
+  startMonth?: string; // YYYY-MM
+}): LoanPayoffEstimateClient {
+  const capital = Number(params.remainingCapital) || 0;
+  const payment = Number(params.monthlyPayment) || 0;
+  const rate = Number(params.interestRate) || 0;
+  const insurance = Number(params.insurancePart) || 0;
+  const startMonth = params.startMonth || new Date().toISOString().slice(0, 7);
+
+  if (capital <= 0) {
+    return {
+      possible: true,
+      monthsRemaining: 0,
+      estimatedEndMonth: startMonth,
+      lastPaymentAmount: 0,
+      totalInterest: 0,
+      totalInsurance: 0,
+      totalCost: 0
+    };
+  }
+
+  const netPayment = payment - insurance;
+  if (netPayment <= 0) {
+    return { possible: false, reason: "La mensualité est inférieure ou égale à la prime d'assurance." };
+  }
+
+  const monthlyRate = rate / 100 / 12;
+  const firstMonthInterest = Math.round(capital * monthlyRate * 100) / 100;
+  if (netPayment <= firstMonthInterest) {
+    return { possible: false, reason: "La mensualité ne couvre pas les intérêts mensuels dus." };
+  }
+
+  let currentCap = capital;
+  let months = 0;
+  let totalInterest = 0;
+  let totalInsurance = 0;
+  let lastPayment = payment;
+  const maxMonths = 600; // Sécurité : 50 ans
+
+  const [startY, startM] = startMonth.split('-').map(Number);
+
+  while (currentCap > 0 && months < maxMonths) {
+    months++;
+    totalInsurance += insurance;
+    const interest = Math.round(currentCap * monthlyRate * 100) / 100;
+    totalInterest += interest;
+
+    const totalDue = currentCap + interest + insurance;
+    if (payment >= totalDue) {
+      lastPayment = Math.round(totalDue * 100) / 100;
+      currentCap = 0;
+      break;
+    } else {
+      const amortized = Math.round((payment - interest - insurance) * 100) / 100;
+      currentCap = Math.max(0, Math.round((currentCap - amortized) * 100) / 100);
+      lastPayment = payment;
+    }
+  }
+
+  if (months >= maxMonths) {
+    return { possible: false, reason: "La durée estimée dépasse 50 ans." };
+  }
+
+  const endTotalMonths = (startY * 12 + (startM - 1)) + (months - 1);
+  const endY = Math.floor(endTotalMonths / 12);
+  const endM = (endTotalMonths % 12) + 1;
+  const estimatedEndMonth = `${endY}-${String(endM).padStart(2, '0')}`;
+
+  return {
+    possible: true,
+    monthsRemaining: months,
+    estimatedEndMonth,
+    lastPaymentAmount: Math.round(lastPayment * 100) / 100,
+    totalInterest: Math.round(totalInterest * 100) / 100,
+    totalInsurance: Math.round(totalInsurance * 100) / 100,
+    totalCost: Math.round((capital + totalInterest + totalInsurance) * 100) / 100
+  };
+}
+

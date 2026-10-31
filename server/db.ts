@@ -75,6 +75,78 @@ function runMigrations(db: DatabaseSync) {
   } catch (e) {
     console.error("Migration planned_expenses error:", e);
   }
+
+  try {
+    const loanCols = db.prepare("PRAGMA table_info(loans)").all() as any[];
+    if (!loanCols.some(c => c.name === 'isArchived')) {
+      db.exec("ALTER TABLE loans ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0;");
+    }
+  } catch (e) {
+    console.error("Migration loans isArchived error:", e);
+  }
+
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS loan_payment_history (
+        id TEXT PRIMARY KEY,
+        loanId TEXT NOT NULL,
+        effectiveMonth TEXT NOT NULL,
+        monthlyPayment REAL NOT NULL,
+        previousPayment REAL,
+        notes TEXT,
+        createdAt TEXT NOT NULL,
+        FOREIGN KEY (loanId) REFERENCES loans(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_loan_payment_history_loan_month ON loan_payment_history(loanId, effectiveMonth);
+    `);
+  } catch (e) {
+    console.error("Migration loan_payment_history error:", e);
+  }
+
+  try {
+    const loansWithoutHistory = db.prepare(`
+      SELECT l.id, l.monthlyPayment, l.startDate
+      FROM loans l
+      WHERE NOT EXISTS (
+        SELECT 1 FROM loan_payment_history h WHERE h.loanId = l.id
+      )
+    `).all() as any[];
+
+    for (const l of loansWithoutHistory) {
+      // Recherche de la première transaction enregistrée pour ce crédit en base
+      const earliestTx = db.prepare(`
+        SELECT MIN(date) as minDate FROM transactions WHERE linkedId = ? AND type = 'loan_payment'
+      `).get(l.id) as { minDate?: string };
+
+      let baselineMonth: string;
+      let note = 'Mensualité contractuelle de référence';
+
+      if (earliestTx?.minDate && /^\d{4}-\d{2}/.test(earliestTx.minDate)) {
+        const txMonth = earliestTx.minDate.slice(0, 7);
+        if (l.startDate && /^\d{4}-\d{2}/.test(l.startDate) && l.startDate.slice(0, 7) < txMonth) {
+          baselineMonth = l.startDate.slice(0, 7);
+          note = `Mensualité contractuelle initiale (début du contrat : ${baselineMonth})`;
+        } else {
+          baselineMonth = txMonth;
+          note = `Mensualité contractuelle initiale (première échéance enregistrée : ${baselineMonth})`;
+        }
+      } else if (l.startDate && /^\d{4}-\d{2}/.test(l.startDate)) {
+        baselineMonth = l.startDate.slice(0, 7);
+        note = `Mensualité contractuelle initiale (début du contrat : ${baselineMonth})`;
+      } else {
+        baselineMonth = '1970-01';
+        note = 'Mensualité contractuelle initiale (date d’origine contractuelle non spécifiée)';
+      }
+
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO loan_payment_history (id, loanId, effectiveMonth, monthlyPayment, previousPayment, notes, createdAt)
+        VALUES (?, ?, ?, ?, NULL, ?, ?)
+      `).run(crypto.randomUUID(), l.id, baselineMonth, Number(l.monthlyPayment) || 0, note, now);
+    }
+  } catch (e) {
+    console.error("Migration seed loan_payment_history error:", e);
+  }
 }
 
 function seedDefaultAccount(db: DatabaseSync) {
@@ -190,6 +262,19 @@ function createSchema(db: DatabaseSync) {
       isPaused INTEGER NOT NULL DEFAULT 0,
       loanType TEXT DEFAULT 'consumer'
     );
+
+    -- 7b. Table Historique des modifications de mensualités de prêts
+    CREATE TABLE IF NOT EXISTS loan_payment_history (
+      id TEXT PRIMARY KEY,
+      loanId TEXT NOT NULL,
+      effectiveMonth TEXT NOT NULL,
+      monthlyPayment REAL NOT NULL,
+      previousPayment REAL,
+      notes TEXT,
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (loanId) REFERENCES loans(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_loan_payment_history_loan_month ON loan_payment_history(loanId, effectiveMonth);
 
     -- 8. Table Modèles de Récurrence
     CREATE TABLE IF NOT EXISTS recurrence_templates (

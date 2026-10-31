@@ -130,6 +130,16 @@ export default function Incomes() {
       totalLoanPlanned += plannedForLoan;
     });
 
+    // Prise en compte des paiements effectifs de crédits archivés ce mois-ci
+    const activeLoanIds = new Set(loans.map(l => l.id));
+    selectedMonthPayments.forEach(p => {
+      if (p.linkedId && !activeLoanIds.has(p.linkedId)) {
+        if (p.status === 'cleared' || p.status === 'pending') {
+          totalLoanPlanned += Number(p.amount) || 0;
+        }
+      }
+    });
+
     return fixed + variable + totalLoanPlanned + transfer;
   }, [allTransactions, loans, selectedMonth]);
 

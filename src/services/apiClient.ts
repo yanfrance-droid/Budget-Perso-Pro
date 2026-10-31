@@ -184,6 +184,33 @@ export const apiClient = {
     getAll: () => request<any[]>('/api/loans'),
     save: (loan: any) => request<any>('/api/loans', { method: 'POST', body: JSON.stringify(loan) }),
     delete: (id: string) => request<{ success: boolean }>(`/api/loans/${id}`, { method: 'DELETE' }),
+    archive: (id: string, isArchived = true, disableFuturePlanned = false) =>
+      request<{ loan: any; disabledCount: number }>(`/api/loans/${id}/archive`, {
+        method: 'POST',
+        body: JSON.stringify({ isArchived, disableFuturePlanned })
+      }),
+    unarchive: (id: string) =>
+      request<{ loan: any; disabledCount: number }>(`/api/loans/${id}/unarchive`, {
+        method: 'POST',
+        body: JSON.stringify({ isArchived: false })
+      }),
+    reactivateFuture: (id: string) =>
+      request<{ success: boolean; reactivatedCount: number }>(`/api/loans/${id}/reactivate-future`, {
+        method: 'POST'
+      }),
+    paymentHistory: {
+      get: (loanId: string) => request<any[]>(`/api/loans/${loanId}/payment-history`),
+      add: (loanId: string, data: { effectiveMonth: string; monthlyPayment: number; notes?: string }) =>
+        request<any>(`/api/loans/${loanId}/payment-history`, {
+          method: 'POST',
+          body: JSON.stringify(data)
+        }),
+      delete: (historyId: string, allowPastCorrection = false) =>
+        request<{ success: boolean }>(`/api/loans/payment-history/${historyId}`, {
+          method: 'DELETE',
+          body: JSON.stringify({ allowPastCorrection })
+        })
+    },
     updatePaymentStatus: (paymentId: string, status: string) =>
       request<{ payment: any; loan: any }>(`/api/loans/payments/${paymentId}/status`, {
         method: 'POST',

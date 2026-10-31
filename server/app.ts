@@ -16,7 +16,19 @@ import { getAllAccounts, saveAccount, deleteAccount } from './services/accountSe
 import { getAllCategories, saveCategory, deleteCategory } from './services/categoryService.ts';
 import { getAllIncomePayers, saveIncomePayer, deleteIncomePayer } from './services/incomePayerService.ts';
 import { getTransactions, saveTransaction, deleteTransaction, updateTransactionStatus } from './services/transactionService.ts';
-import { getAllLoans, saveLoan, updateLoanPaymentStatus, deleteLoan } from './services/loanService.ts';
+import { 
+  getAllLoans, 
+  saveLoan, 
+  updateLoanPaymentStatus, 
+  deleteLoan,
+  archiveLoan,
+  reactivateLoanFuturePlanned,
+  getLoanPaymentHistory,
+  addLoanPaymentHistory,
+  deleteLoanPaymentHistory,
+  estimateLoanPayoff,
+  getLoanById
+} from './services/loanService.ts';
 import { 
   getAllLoanCapitalHistory, 
   saveLoanCapitalRecord, 
@@ -145,7 +157,17 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
 
     // Routes publiques
     if (pathname === '/api/health') {
-      return sendJson(200, { status: 'ok', hasUsers: hasAnyUser(db) });
+      let appVersion = '1.0.0';
+      try {
+        const pkgPath = path.resolve(process.cwd(), 'package.json');
+        if (fs.existsSync(pkgPath)) {
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+          if (pkg.version) appVersion = pkg.version;
+        }
+      } catch {
+        // Fallback standard
+      }
+      return sendJson(200, { status: 'ok', version: appVersion, hasUsers: hasAnyUser(db) });
     }
 
     if (pathname === '/api/auth/setup' && req.method === 'POST') {
@@ -315,7 +337,68 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
           return sendJson(200, saveLoan(db, body));
         }
       }
-      if (pathname.startsWith('/api/loans/') && req.method === 'DELETE') {
+      if (pathname.match(/^\/api\/loans\/[^/]+\/(archive|unarchive)$/) && req.method === 'POST') {
+        const parts = pathname.split('/');
+        const loanId = parts[3];
+        const isUnarchiveAction = parts[4] === 'unarchive';
+        const body = await readBody().catch(() => ({}));
+        const isArchived = isUnarchiveAction ? false : (body?.isArchived !== undefined ? Boolean(body.isArchived) : true);
+        const disableFuturePlanned = Boolean(body?.disableFuturePlanned);
+        const result = archiveLoan(db, loanId, isArchived, disableFuturePlanned);
+        return sendJson(200, result);
+      }
+      if (pathname.match(/^\/api\/loans\/[^/]+\/reactivate-future$/) && req.method === 'POST') {
+        const parts = pathname.split('/');
+        const loanId = parts[3];
+        const reactivatedCount = reactivateLoanFuturePlanned(db, loanId);
+        return sendJson(200, { success: true, reactivatedCount });
+      }
+      if (pathname.match(/^\/api\/loans\/[^/]+\/payment-history$/)) {
+        const parts = pathname.split('/');
+        const loanId = parts[3];
+        if (req.method === 'GET') {
+          return sendJson(200, getLoanPaymentHistory(db, loanId));
+        }
+        if (req.method === 'POST') {
+          try {
+            const body = await readBody();
+            const saved = addLoanPaymentHistory(db, { ...body, loanId });
+            return sendJson(201, saved);
+          } catch (err: any) {
+            return sendJson(400, { error: err.message });
+          }
+        }
+      }
+      if (pathname.match(/^\/api\/loans\/payment-history\/[^/]+$/) && req.method === 'DELETE') {
+        const parts = pathname.split('/');
+        const historyId = parts[4];
+        try {
+          const body = await readBody().catch(() => ({}));
+          deleteLoanPaymentHistory(db, historyId, Boolean(body?.allowPastCorrection));
+          return sendJson(200, { success: true });
+        } catch (err: any) {
+          return sendJson(400, { error: err.message });
+        }
+      }
+      if (pathname.match(/^\/api\/loans\/[^/]+\/payoff-estimate$/) && req.method === 'GET') {
+        const parts = pathname.split('/');
+        const loanId = parts[3];
+        const loan = getLoanById(db, loanId);
+        if (!loan) {
+          return sendJson(404, { error: 'Crédit introuvable.' });
+        }
+        const monthlyPaymentParam = parsedUrl.searchParams.get('monthlyPayment');
+        const startMonthParam = parsedUrl.searchParams.get('startMonth');
+        const estimate = estimateLoanPayoff({
+          remainingCapital: loan.remainingCapital,
+          monthlyPayment: monthlyPaymentParam ? Number(monthlyPaymentParam) : loan.monthlyPayment,
+          interestRate: loan.interestRate,
+          insurancePart: loan.insurancePart,
+          startMonth: startMonthParam || undefined
+        });
+        return sendJson(200, estimate);
+      }
+      if (pathname.match(/^\/api\/loans\/[^/]+$/) && req.method === 'DELETE') {
         const id = pathname.split('/').pop()!;
         deleteLoan(db, id);
         return sendJson(200, { success: true });

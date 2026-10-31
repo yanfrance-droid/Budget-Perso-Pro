@@ -493,6 +493,20 @@ export default function Dashboard() {
     totalLoanRemainingPrevu += Math.max(0, plannedForLoan - handledForLoan);
   });
 
+  // Prise en compte des paiements effectifs de crédits archivés ce mois-ci
+  const activeLoanIds = new Set(loans.map(l => l.id));
+  selectedMonthPayments.forEach(p => {
+    if (p.linkedId && !activeLoanIds.has(p.linkedId)) {
+      if (p.status === 'cleared' || p.status === 'pending') {
+        const amt = Number(p.amount) || 0;
+        totalLoanPlanned += amt;
+        if (p.status === 'pending') {
+          totalLoanRemaining += amt;
+        }
+      }
+    }
+  });
+
   chargesMois.loan = totalLoanPlanned;
   resteAPayer.loan = totalLoanRemaining;
   resteAPayerPrevu.loan = totalLoanRemainingPrevu;

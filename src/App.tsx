@@ -229,6 +229,9 @@ function AppContent() {
                 </button>
               </div>
             )}
+            <div style={{ textAlign: 'center', padding: '0.4rem 0 0.6rem 0', fontSize: '0.72rem', opacity: 0.65, color: 'var(--text-light, #ffffff)', userSelect: 'none' }}>
+              PersonalBudgetPro v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'}
+            </div>
           </div>
         </aside>
         

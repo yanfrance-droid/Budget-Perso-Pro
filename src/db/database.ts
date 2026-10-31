@@ -98,6 +98,16 @@ export interface Loan {
   loanType?: 'consumer' | 'mortgage';
 }
 
+export interface LoanPaymentHistory {
+  id: string;
+  loanId: string;
+  effectiveMonth: string; // YYYY-MM
+  monthlyPayment: number;
+  previousPayment?: number | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
 export interface DashboardStorageKeys {
   manualBalance: string;
   card1: string;

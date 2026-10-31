@@ -30,6 +30,7 @@ export interface BackupDataPayload {
     incomePayers?: any[];
     plannedExpenses?: any[];
     loanCapitalHistory?: any[];
+    loanPaymentHistory?: any[];
   };
   localStorage?: {
     manualBalance?: string;
@@ -282,7 +283,8 @@ export function importBackupData(
     recurrenceTemplates = [],
     incomePayers = [],
     plannedExpenses = [],
-    loanCapitalHistory
+    loanCapitalHistory,
+    loanPaymentHistory = []
   } = payload.tables;
 
   // Détermination explicite de la gestion de l'historique des capitaux de prêts :
@@ -308,6 +310,11 @@ export function importBackupData(
     // 3a. Suppression des données existantes (du bas vers le haut pour respecter les FK)
     db.exec('DELETE FROM transactions;');
     db.exec('DELETE FROM recurrence_templates;');
+    try {
+      db.exec('DELETE FROM loan_payment_history;');
+    } catch {
+      // Si la table n'existe pas encore
+    }
     db.exec('DELETE FROM loans;');
     db.exec('DELETE FROM accounts;');
     db.exec('DELETE FROM categories;');
@@ -345,6 +352,39 @@ export function importBackupData(
     // 3. Crédits et Prêts
     for (const loan of loans) {
       saveLoan(db, loan);
+    }
+
+    // 3b. Historique des mensualités de crédits
+    if (Array.isArray(loanPaymentHistory) && loanPaymentHistory.length > 0) {
+      // Nettoyer les paliers temporaires réinitialisés par saveLoan ci-dessus pour restaurer fidèlement l'historique exporté
+      try {
+        db.exec('DELETE FROM loan_payment_history;');
+      } catch {
+        // Ignorer si la table n'existe pas encore
+      }
+      for (const h of loanPaymentHistory) {
+        try {
+          db.prepare(`
+            INSERT INTO loan_payment_history (id, loanId, effectiveMonth, monthlyPayment, previousPayment, notes, createdAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              effectiveMonth = excluded.effectiveMonth,
+              monthlyPayment = excluded.monthlyPayment,
+              previousPayment = excluded.previousPayment,
+              notes = excluded.notes
+          `).run(
+            h.id || crypto.randomUUID(),
+            h.loanId,
+            h.effectiveMonth,
+            Number(h.monthlyPayment),
+            h.previousPayment !== undefined && h.previousPayment !== null ? Number(h.previousPayment) : null,
+            h.notes || null,
+            h.createdAt || new Date().toISOString()
+          );
+        } catch {
+          // Si table absente
+        }
+      }
     }
 
     // 4. Modèles de récurrence
@@ -430,6 +470,13 @@ export function exportBackupData(db: DatabaseSync): BackupDataPayload {
   const plannedExpenses = getAllPlannedExpenses(db);
   const loanCapitalHistory = getAllLoanCapitalHistory(db);
 
+  let loanPaymentHistory: any[] = [];
+  try {
+    loanPaymentHistory = db.prepare('SELECT * FROM loan_payment_history ORDER BY loanId, effectiveMonth ASC').all();
+  } catch {
+    // Si la table n'existe pas encore
+  }
+
   const settingsStmt = db.prepare('SELECT key, value FROM app_settings');
   const settingsRows = settingsStmt.all() as { key: string; value: string }[];
   const settingsMap = Object.fromEntries(settingsRows.map(r => [r.key, r.value]));
@@ -446,7 +493,8 @@ export function exportBackupData(db: DatabaseSync): BackupDataPayload {
       recurrenceTemplates,
       incomePayers,
       plannedExpenses,
-      loanCapitalHistory
+      loanCapitalHistory,
+      loanPaymentHistory
     },
     localStorage: {
       manualBalance: settingsMap.manualBalance || '0',

@@ -36,6 +36,8 @@ export interface ServerDataContextType {
   updateTransactionStatus: (id: string, status: Transaction['status']) => Promise<Transaction>;
   saveLoan: (loan: Partial<Loan>) => Promise<Loan>;
   deleteLoan: (id: string) => Promise<void>;
+  archiveLoan: (id: string, isArchived: boolean, disableFuturePlanned?: boolean) => Promise<{ loan: Loan; disabledCount: number }>;
+  reactivateLoanFuturePlanned: (id: string) => Promise<number>;
   updateLoanPaymentStatus: (paymentId: string, status: Transaction['status']) => Promise<{ payment: Transaction; loan: Loan }>;
   saveRecurrenceTemplate: (template: Partial<RecurrenceTemplate>) => Promise<RecurrenceTemplate>;
   deleteRecurrenceTemplate: (id: string) => Promise<void>;
@@ -269,6 +271,43 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setLoans(prev => prev.filter(l => l.id !== id));
   };
 
+  const archiveLoan = async (id: string, isArchived: boolean, disableFuturePlanned = false): Promise<{ loan: Loan; disabledCount: number }> => {
+    const res = isArchived 
+      ? await apiClient.loans.archive(id, true, disableFuturePlanned)
+      : await apiClient.loans.unarchive(id);
+    setLoans(prev => {
+      const idx = prev.findIndex(l => l.id === res.loan.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = res.loan;
+        return copy;
+      }
+      return [...prev, res.loan];
+    });
+    if (res.disabledCount > 0) {
+      try {
+        const freshTxs = await apiClient.transactions.getAll();
+        setTransactions(freshTxs);
+      } catch {
+        // Ignorer si échec réseau
+      }
+    }
+    return res;
+  };
+
+  const reactivateLoanFuturePlanned = async (id: string): Promise<number> => {
+    const res = await apiClient.loans.reactivateFuture(id);
+    if (res.reactivatedCount > 0) {
+      try {
+        const freshTxs = await apiClient.transactions.getAll();
+        setTransactions(freshTxs);
+      } catch {
+        // Ignorer si échec réseau
+      }
+    }
+    return res.reactivatedCount;
+  };
+
   const updateLoanPaymentStatus = async (paymentId: string, status: Transaction['status']): Promise<{ payment: Transaction; loan: Loan }> => {
     const result = await apiClient.loans.updatePaymentStatus(paymentId, status);
     setTransactions(prev => prev.map(t => t.id === paymentId ? result.payment : t));
@@ -338,6 +377,8 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         updateTransactionStatus,
         saveLoan,
         deleteLoan,
+        archiveLoan,
+        reactivateLoanFuturePlanned,
         updateLoanPaymentStatus,
         saveRecurrenceTemplate,
         deleteRecurrenceTemplate,

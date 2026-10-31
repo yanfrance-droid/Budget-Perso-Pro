@@ -24,6 +24,16 @@ export interface LoanData {
   loanType?: 'consumer' | 'mortgage';
 }
 
+export interface LoanPaymentHistoryData {
+  id?: string;
+  loanId: string;
+  effectiveMonth: string; // YYYY-MM
+  monthlyPayment: number;
+  previousPayment?: number | null;
+  notes?: string | null;
+  createdAt?: string;
+}
+
 export function getAllLoans(db: DatabaseSync): LoanData[] {
   const stmt = db.prepare('SELECT * FROM loans ORDER BY isArchived ASC, name ASC');
   const rows = stmt.all() as any[];
@@ -79,6 +89,7 @@ export function saveLoan(db: DatabaseSync, data: LoanData): LoanData {
   }
 
   const id = toSave.id || crypto.randomUUID();
+  const existing = getLoanById(db, id);
   const initialAmount = Number(toSave.initialAmount);
   const remainingCapital = toSave.remainingCapital !== undefined ? Number(toSave.remainingCapital) : initialAmount;
   const monthlyPayment = Number(toSave.monthlyPayment);
@@ -135,6 +146,22 @@ export function saveLoan(db: DatabaseSync, data: LoanData): LoanData {
     isPaused,
     toSave.loanType || 'consumer'
   );
+
+  // Pour un nouveau prêt, initialiser immédiatement le palier initial d'historique de mensualité
+  if (!existing) {
+    const now = new Date().toISOString();
+    const baselineMonth = toSave.startDate && /^\d{4}-\d{2}/.test(toSave.startDate)
+      ? toSave.startDate.slice(0, 7)
+      : now.slice(0, 7);
+    try {
+      db.prepare(`
+        INSERT INTO loan_payment_history (id, loanId, effectiveMonth, monthlyPayment, previousPayment, notes, createdAt)
+        VALUES (?, ?, ?, ?, NULL, ?, ?)
+      `).run(crypto.randomUUID(), id, baselineMonth, monthlyPayment, 'Mensualité contractuelle initiale', now);
+    } catch {
+      // Ignorer si la table n'est pas encore créée dans un contexte de test isolé
+    }
+  }
 
   return getLoanById(db, id)!;
 }
@@ -341,4 +368,260 @@ export function updateLoanPaymentStatus(
 export function deleteLoan(db: DatabaseSync, id: string): void {
   const stmt = db.prepare('DELETE FROM loans WHERE id = ?');
   stmt.run(id);
+}
+
+export function getLoanPaymentHistory(db: DatabaseSync, loanId: string): LoanPaymentHistoryData[] {
+  const stmt = db.prepare('SELECT * FROM loan_payment_history WHERE loanId = ? ORDER BY effectiveMonth DESC, createdAt DESC');
+  const rows = stmt.all(loanId) as any[];
+  return rows.map(r => ({
+    ...r,
+    monthlyPayment: Number(r.monthlyPayment),
+    previousPayment: r.previousPayment !== null && r.previousPayment !== undefined ? Number(r.previousPayment) : null
+  }));
+}
+
+export function getEffectiveMonthlyPayment(db: DatabaseSync, loanId: string, targetMonth: string): number {
+  try {
+    const stmt = db.prepare(`
+      SELECT monthlyPayment FROM loan_payment_history
+      WHERE loanId = ? AND effectiveMonth <= ?
+      ORDER BY effectiveMonth DESC, createdAt DESC
+      LIMIT 1
+    `);
+    const row = stmt.get(loanId, targetMonth) as any;
+    if (row) {
+      return Number(row.monthlyPayment);
+    }
+
+    const oldestStmt = db.prepare(`
+      SELECT monthlyPayment FROM loan_payment_history
+      WHERE loanId = ?
+      ORDER BY effectiveMonth ASC, createdAt ASC
+      LIMIT 1
+    `);
+    const oldestRow = oldestStmt.get(loanId) as any;
+    if (oldestRow) {
+      return Number(oldestRow.monthlyPayment);
+    }
+  } catch {
+    // Si la table n'existe pas encore dans un test isolé
+  }
+
+  const loan = getLoanById(db, loanId);
+  return loan ? Number(loan.monthlyPayment) : 0;
+}
+
+export function addLoanPaymentHistory(
+  db: DatabaseSync,
+  data: { loanId: string; effectiveMonth: string; monthlyPayment: number; notes?: string }
+): LoanPaymentHistoryData {
+  return withTransaction(db, () => {
+    const loan = getLoanById(db, data.loanId);
+    if (!loan) {
+      throw new Error(`Crédit ${data.loanId} introuvable.`);
+    }
+
+    if (!data.effectiveMonth || !/^\d{4}-\d{2}$/.test(data.effectiveMonth)) {
+      throw new Error('Le mois d\'effet doit être au format YYYY-MM.');
+    }
+
+    const amount = Number(data.monthlyPayment);
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error('Le montant de la nouvelle mensualité doit être supérieur à 0.');
+    }
+
+    const previousPayment = getEffectiveMonthlyPayment(db, data.loanId, data.effectiveMonth);
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const stmt = db.prepare(`
+      INSERT INTO loan_payment_history (id, loanId, effectiveMonth, monthlyPayment, previousPayment, notes, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(id, data.loanId, data.effectiveMonth, amount, previousPayment, data.notes || null, now);
+
+    const currentMonth = now.slice(0, 7);
+    if (data.effectiveMonth <= currentMonth) {
+      const updateLoanStmt = db.prepare('UPDATE loans SET monthlyPayment = ? WHERE id = ?');
+      updateLoanStmt.run(amount, data.loanId);
+    }
+
+    return {
+      id,
+      loanId: data.loanId,
+      effectiveMonth: data.effectiveMonth,
+      monthlyPayment: amount,
+      previousPayment,
+      notes: data.notes || null,
+      createdAt: now
+    };
+  });
+}
+
+export function deleteLoanPaymentHistory(db: DatabaseSync, historyId: string, allowPastCorrection = false): void {
+  withTransaction(db, () => {
+    const stmt = db.prepare('SELECT * FROM loan_payment_history WHERE id = ?');
+    const row = stmt.get(historyId) as any;
+    if (!row) {
+      throw new Error('Palier d\'historique introuvable.');
+    }
+
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const isFuture = row.effectiveMonth > currentMonth;
+
+    if (!isFuture && !allowPastCorrection) {
+      throw new Error('La suppression d’un palier en vigueur ou passé requiert une procédure explicite de correction.');
+    }
+
+    const countRow = db.prepare('SELECT COUNT(*) as count FROM loan_payment_history WHERE loanId = ?').get(row.loanId) as { count: number };
+    if (countRow.count <= 1) {
+      throw new Error('Impossible de supprimer le palier contractuel initial de référence.');
+    }
+
+    db.prepare('DELETE FROM loan_payment_history WHERE id = ?').run(historyId);
+
+    const newCurrent = getEffectiveMonthlyPayment(db, row.loanId, currentMonth);
+    db.prepare('UPDATE loans SET monthlyPayment = ? WHERE id = ?').run(newCurrent, row.loanId);
+  });
+}
+
+export function archiveLoan(
+  db: DatabaseSync,
+  loanId: string,
+  isArchived: boolean,
+  disableFuturePlanned = false
+): { loan: LoanData; disabledCount: number } {
+  return withTransaction(db, () => {
+    const loan = getLoanById(db, loanId);
+    if (!loan) {
+      throw new Error(`Crédit ${loanId} introuvable.`);
+    }
+
+    const updateStmt = db.prepare('UPDATE loans SET isArchived = ? WHERE id = ?');
+    updateStmt.run(isArchived ? 1 : 0, loanId);
+
+    let disabledCount = 0;
+    if (isArchived && disableFuturePlanned) {
+      const today = new Date().toISOString().split('T')[0];
+      const disableStmt = db.prepare(`
+        UPDATE transactions
+        SET status = 'disabled', isCustomized = 1
+        WHERE linkedId = ? AND type = 'loan_payment' AND status = 'planned' AND date >= ?
+      `);
+      const res = disableStmt.run(loanId, today);
+      disabledCount = Number(res.changes) || 0;
+    }
+
+    return {
+      loan: getLoanById(db, loanId)!,
+      disabledCount
+    };
+  });
+}
+
+export function reactivateLoanFuturePlanned(db: DatabaseSync, loanId: string): number {
+  return withTransaction(db, () => {
+    const today = new Date().toISOString().split('T')[0];
+    const stmt = db.prepare(`
+      UPDATE transactions
+      SET status = 'planned'
+      WHERE linkedId = ? AND type = 'loan_payment' AND status = 'disabled' AND date >= ?
+    `);
+    const res = stmt.run(loanId, today);
+    return Number(res.changes) || 0;
+  });
+}
+
+export interface LoanPayoffEstimate {
+  possible: boolean;
+  reason?: string;
+  monthsRemaining?: number;
+  estimatedEndMonth?: string;
+  lastPaymentAmount?: number;
+  totalInterest?: number;
+  totalInsurance?: number;
+  totalCost?: number;
+}
+
+export function estimateLoanPayoff(params: {
+  remainingCapital: number;
+  monthlyPayment: number;
+  interestRate?: number;
+  insurancePart?: number;
+  startMonth?: string; // YYYY-MM
+}): LoanPayoffEstimate {
+  const capital = Number(params.remainingCapital) || 0;
+  const payment = Number(params.monthlyPayment) || 0;
+  const rate = Number(params.interestRate) || 0;
+  const insurance = Number(params.insurancePart) || 0;
+  const startMonth = params.startMonth || new Date().toISOString().slice(0, 7);
+
+  if (capital <= 0) {
+    return {
+      possible: true,
+      monthsRemaining: 0,
+      estimatedEndMonth: startMonth,
+      lastPaymentAmount: 0,
+      totalInterest: 0,
+      totalInsurance: 0,
+      totalCost: 0
+    };
+  }
+
+  const netPayment = payment - insurance;
+  if (netPayment <= 0) {
+    return { possible: false, reason: "La mensualité est inférieure ou égale à la prime d'assurance." };
+  }
+
+  const monthlyRate = rate / 100 / 12;
+  const firstMonthInterest = Math.round(capital * monthlyRate * 100) / 100;
+  if (netPayment <= firstMonthInterest) {
+    return { possible: false, reason: "La mensualité ne couvre pas les intérêts mensuels dus." };
+  }
+
+  let currentCap = capital;
+  let months = 0;
+  let totalInterest = 0;
+  let totalInsurance = 0;
+  let lastPayment = payment;
+  const maxMonths = 600; // Sécurité : 50 ans
+
+  const [startY, startM] = startMonth.split('-').map(Number);
+
+  while (currentCap > 0 && months < maxMonths) {
+    months++;
+    totalInsurance += insurance;
+    const interest = Math.round(currentCap * monthlyRate * 100) / 100;
+    totalInterest += interest;
+
+    const totalDue = currentCap + interest + insurance;
+    if (payment >= totalDue) {
+      lastPayment = Math.round(totalDue * 100) / 100;
+      currentCap = 0;
+      break;
+    } else {
+      const amortized = Math.round((payment - interest - insurance) * 100) / 100;
+      currentCap = Math.max(0, Math.round((currentCap - amortized) * 100) / 100);
+      lastPayment = payment;
+    }
+  }
+
+  if (months >= maxMonths) {
+    return { possible: false, reason: "La durée estimée dépasse 50 ans." };
+  }
+
+  const endTotalMonths = (startY * 12 + (startM - 1)) + (months - 1);
+  const endY = Math.floor(endTotalMonths / 12);
+  const endM = (endTotalMonths % 12) + 1;
+  const estimatedEndMonth = `${endY}-${String(endM).padStart(2, '0')}`;
+
+  return {
+    possible: true,
+    monthsRemaining: months,
+    estimatedEndMonth,
+    lastPaymentAmount: Math.round(lastPayment * 100) / 100,
+    totalInterest: Math.round(totalInterest * 100) / 100,
+    totalInsurance: Math.round(totalInsurance * 100) / 100,
+    totalCost: Math.round((capital + totalInterest + totalInsurance) * 100) / 100
+  };
 }

@@ -363,6 +363,71 @@ describe('Server & API Integration - SQLite Centralized Backend', () => {
       const loansReverted = await apiClient.loans.getAll();
       expect(loansReverted[0].remainingCapital).toBe(10000);
     });
+
+    it('gère l\'archivage, le désarchivage (via /unarchive et /archive) et la réactivation des échéances futures via les routes HTTP réelles', async () => {
+      const acc = await apiClient.accounts.save({
+        name: 'Compte Prêt Archivage',
+        type: 'checking',
+        initialBalance: 3000,
+        referenceDate: '2026-10-01'
+      });
+
+      const loan = await apiClient.loans.save({
+        name: 'Prêt Test Archivage HTTP',
+        lender: 'Banque Route',
+        initialAmount: 6000,
+        remainingCapital: 6000,
+        monthlyPayment: 200,
+        startDate: '2026-01-01',
+        durationMonths: 30,
+        accountId: acc.id
+      });
+      expect(loan.isArchived).toBe(false);
+
+      // Création d'une échéance future planned
+      const futureTx = await apiClient.transactions.save({
+        label: 'Mensualité future',
+        amount: 200,
+        type: 'loan_payment',
+        status: 'planned',
+        date: '2099-05-15',
+        accountId: acc.id,
+        loanId: loan.id
+      });
+
+      // 1. Archivage via POST /api/loans/:id/archive avec désactivation des échéances futures
+      const archiveRes = await apiClient.loans.archive(loan.id, true, true);
+      expect(archiveRes.loan.isArchived).toBe(true);
+      expect(archiveRes.disabledCount).toBe(1);
+
+      // Vérifier que la transaction est passée à disabled
+      const txsAfterArchive = await apiClient.transactions.getAll();
+      const disabledTx = txsAfterArchive.find(t => t.id === futureTx.id);
+      expect(disabledTx?.status).toBe('disabled');
+
+      // 2. Désarchivage via POST /api/loans/:id/unarchive
+      const unarchiveRes = await apiClient.loans.unarchive(loan.id);
+      expect(unarchiveRes.loan.isArchived).toBe(false);
+
+      // L'échéance reste disabled sans réactivation automatique
+      const txsAfterUnarchive = await apiClient.transactions.getAll();
+      expect(txsAfterUnarchive.find(t => t.id === futureTx.id)?.status).toBe('disabled');
+
+      // 3. Réactivation explicite via POST /api/loans/:id/reactivate-future
+      const reactivateRes = await apiClient.loans.reactivateFuture(loan.id);
+      expect(reactivateRes.reactivatedCount).toBe(1);
+
+      const txsAfterReactivate = await apiClient.transactions.getAll();
+      expect(txsAfterReactivate.find(t => t.id === futureTx.id)?.status).toBe('planned');
+
+      // 4. Test de désarchivage alternatif via POST /api/loans/:id/archive avec { isArchived: false }
+      await apiClient.loans.archive(loan.id, true, false);
+      const loansArchivedAgain = await apiClient.loans.getAll();
+      expect(loansArchivedAgain.find(l => l.id === loan.id)?.isArchived).toBe(true);
+
+      const unarchiveViaArchiveRoute = await apiClient.loans.archive(loan.id, false, false);
+      expect(unarchiveViaArchiveRoute.loan.isArchived).toBe(false);
+    });
   });
 
   describe('4. Récurrences sans doublons', () => {

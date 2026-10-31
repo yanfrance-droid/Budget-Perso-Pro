@@ -1615,6 +1615,10 @@ export default function Settings() {
                 <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{serverData?.loans.length ?? loans.length}</div>
               </div>
               <div>
+                <div style={{ color: 'var(--text-secondary, #888)', fontSize: '0.8rem' }}>Version installée</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'}</div>
+              </div>
+              <div>
                 <div style={{ color: 'var(--text-secondary, #888)', fontSize: '0.8rem' }}>Dernière synchro</div>
                 <div style={{ fontSize: '0.9rem', fontWeight: 500, marginTop: '0.2rem' }}>
                   {serverData?.lastSyncTime ? new Date(serverData.lastSyncTime).toLocaleTimeString('fr-FR') : 'À l\'instant'}
@@ -2116,9 +2120,12 @@ export default function Settings() {
                   </p>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #666)' }}>
-                  Auteur : <strong>Yann Donne</strong>
+                  Version : <strong>v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'}</strong>
+                </span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #666)' }}>
+                  • Auteur : <strong>Yann Donne</strong>
                 </span>
               </div>
             </div>
