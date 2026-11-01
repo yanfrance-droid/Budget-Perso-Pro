@@ -189,24 +189,24 @@ function AppContent() {
             </div>
           </div>
           <nav className="sidebar-nav">
-            <NavLink to="/" end><LayoutDashboard size={18} style={{marginRight: '8px'}} /> Tableau de bord</NavLink>
-            <NavLink to="/revenus"><Wallet size={18} style={{marginRight: '8px'}} /> Revenus</NavLink>
-            <NavLink to="/charges-fixes"><FileText size={18} style={{marginRight: '8px'}} /> Charges fixes</NavLink>
-            <NavLink to="/charges-variables"><FileText size={18} style={{marginRight: '8px'}} /> Charges variables</NavLink>
-            <NavLink to="/credits"><Building size={18} style={{marginRight: '8px'}} /> Crédits</NavLink>
-            <NavLink to="/sante"><HeartPulse size={18} style={{marginRight: '8px'}} /> Santé</NavLink>
-            <NavLink to="/depenses-courantes"><CreditCard size={18} style={{marginRight: '8px'}} /> Dépenses</NavLink>
-            <NavLink to="/depenses-futures"><CalendarClock size={18} style={{marginRight: '8px'}} /> Dépenses futures</NavLink>
-            <NavLink to="/analyse-depenses"><BarChart3 size={18} style={{marginRight: '8px'}} /> Analyse des dépenses</NavLink>
-            <NavLink to="/mes-projets"><ShoppingBag size={18} style={{marginRight: '8px'}} /> Mes projets</NavLink>
-            <NavLink to="/epargne"><PiggyBank size={18} style={{marginRight: '8px'}} /> Épargne & transferts</NavLink>
+            <NavLink to="/" end onClick={() => setIsMobileMenuOpen(false)}><LayoutDashboard size={18} style={{marginRight: '8px'}} /> Tableau de bord</NavLink>
+            <NavLink to="/revenus" onClick={() => setIsMobileMenuOpen(false)}><Wallet size={18} style={{marginRight: '8px'}} /> Revenus</NavLink>
+            <NavLink to="/charges-fixes" onClick={() => setIsMobileMenuOpen(false)}><FileText size={18} style={{marginRight: '8px'}} /> Charges fixes</NavLink>
+            <NavLink to="/charges-variables" onClick={() => setIsMobileMenuOpen(false)}><FileText size={18} style={{marginRight: '8px'}} /> Charges variables</NavLink>
+            <NavLink to="/credits" onClick={() => setIsMobileMenuOpen(false)}><Building size={18} style={{marginRight: '8px'}} /> Crédits</NavLink>
+            <NavLink to="/sante" onClick={() => setIsMobileMenuOpen(false)}><HeartPulse size={18} style={{marginRight: '8px'}} /> Santé</NavLink>
+            <NavLink to="/depenses-courantes" onClick={() => setIsMobileMenuOpen(false)}><CreditCard size={18} style={{marginRight: '8px'}} /> Dépenses</NavLink>
+            <NavLink to="/depenses-futures" onClick={() => setIsMobileMenuOpen(false)}><CalendarClock size={18} style={{marginRight: '8px'}} /> Dépenses futures</NavLink>
+            <NavLink to="/analyse-depenses" onClick={() => setIsMobileMenuOpen(false)}><BarChart3 size={18} style={{marginRight: '8px'}} /> Analyse des dépenses</NavLink>
+            <NavLink to="/mes-projets" onClick={() => setIsMobileMenuOpen(false)}><ShoppingBag size={18} style={{marginRight: '8px'}} /> Mes projets</NavLink>
+            <NavLink to="/epargne" onClick={() => setIsMobileMenuOpen(false)}><PiggyBank size={18} style={{marginRight: '8px'}} /> Épargne & transferts</NavLink>
           </nav>
 
           <div className="sidebar-bottom">
-            <NavLink to="/parametres?tab=help" title="Manuel utilisateur et documentation technique">
+            <NavLink to="/parametres?tab=help" onClick={() => setIsMobileMenuOpen(false)} title="Manuel utilisateur et documentation technique">
               <HelpCircle size={18} style={{marginRight: '8px'}} /> Aide & Documentation
             </NavLink>
-            <NavLink to="/parametres"><Settings size={18} style={{marginRight: '8px'}} /> Paramètres</NavLink>
+            <NavLink to="/parametres" onClick={() => setIsMobileMenuOpen(false)}><Settings size={18} style={{marginRight: '8px'}} /> Paramètres</NavLink>
             {isAuthenticated && (
               <div style={{ padding: '0.5rem 1rem 0.75rem 1rem' }}>
                 <button

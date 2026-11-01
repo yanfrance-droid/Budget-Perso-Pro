@@ -25,10 +25,10 @@ vi.mock('../contexts/ServerDataContext', () => ({
 describe('FutureExpenses - Logique de sélection (isFutureExpense)', () => {
   const today = '2026-11-01';
 
-  it('inclut une dépense journalière avec date future et statut planned ou pending', () => {
+  it('inclut une dépense journalière d\'un mois futur et statut planned ou pending', () => {
     const txPlanned: Transaction = {
       id: 'tx-1',
-      date: '2026-11-15',
+      date: '2026-12-15',
       label: 'Assurance',
       amount: 150,
       status: 'planned',
@@ -37,7 +37,7 @@ describe('FutureExpenses - Logique de sélection (isFutureExpense)', () => {
     };
     const txPending: Transaction = {
       id: 'tx-2',
-      date: '2026-12-01',
+      date: '2027-01-01',
       label: 'Contrôle technique',
       amount: 80,
       status: 'pending',
@@ -49,18 +49,18 @@ describe('FutureExpenses - Logique de sélection (isFutureExpense)', () => {
     expect(isFutureExpense(txPending, today)).toBe(true);
   });
 
-  it('inclut une dépense du jour même avec statut planned ou pending', () => {
-    const txToday: Transaction = {
-      id: 'tx-today',
-      date: '2026-11-01',
-      label: 'Facture du jour',
+  it('exclut une dépense du mois en cours même avec statut planned ou pending', () => {
+    const txThisMonth: Transaction = {
+      id: 'tx-this-month',
+      date: '2026-11-15',
+      label: 'Facture de ce mois',
       amount: 50,
       status: 'planned',
       accountId: 'acc-1',
       type: 'daily'
     };
 
-    expect(isFutureExpense(txToday, today)).toBe(true);
+    expect(isFutureExpense(txThisMonth, today)).toBe(false);
   });
 
   it('exclut les dépenses ayant le statut cleared ou disabled même si leur date est future', () => {

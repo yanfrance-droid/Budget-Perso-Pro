@@ -33,13 +33,15 @@ export function isFutureExpense(t: Transaction, todayStr: string): boolean {
   if (t.templateId || t.recurrenceDay) return false;
   if (t.status === 'cleared' || t.status === 'disabled') return false;
 
-  // Date future ou date du jour
-  if (t.date >= todayStr) return true;
+  const currentMonthKey = todayStr.slice(0, 7);
 
-  // Date passée : éligible uniquement si elle a été enregistrée à l'origine avec une date future
-  if (t.expectedDate && t.expectedDate.trim() !== '') return true;
+  // 1. Mois strictement futurs (ex: > 2026-11)
+  if (t.date.slice(0, 7) > currentMonthKey) return true;
 
-  // Dépense ordinaire saisie dans le passé : exclue
+  // 2. Mois passés (antérieurs au mois en cours) : éligibles UNIQUEMENT si planifiées à l'origine dans le futur (en retard)
+  if (t.date.slice(0, 7) < currentMonthKey && t.expectedDate && t.expectedDate.trim() !== '') return true;
+
+  // 3. Mois en cours (ex: 2026-11) ou dépenses passées ordinaires : formellement exclues des dépenses futures
   return false;
 }
 
@@ -228,10 +230,11 @@ export default function FutureExpenses() {
   }, [upcomingExpenses]);
 
   // Calculs KPI
-  const { totalGeneral, totalOverdue, totalCurrentMonth, totalOperations } = useMemo(() => {
+  const nextMonthKey = useMemo(() => addMonthsToKey(currentMonthKey, 1), [currentMonthKey]);
+  const { totalGeneral, totalOverdue, totalNextMonth, totalOperations } = useMemo(() => {
     let general = 0;
     let overdueSum = 0;
-    let currentMonthSum = 0;
+    let nextMonthSum = 0;
 
     overdueExpenses.forEach(t => {
       const amt = Number(t.amount) || 0;
@@ -242,18 +245,18 @@ export default function FutureExpenses() {
     upcomingExpenses.forEach(t => {
       const amt = Number(t.amount) || 0;
       general += amt;
-      if (t.date.startsWith(currentMonthKey)) {
-        currentMonthSum += amt;
+      if (t.date.startsWith(nextMonthKey)) {
+        nextMonthSum += amt;
       }
     });
 
     return {
       totalGeneral: general,
       totalOverdue: overdueSum,
-      totalCurrentMonth: currentMonthSum,
+      totalNextMonth: nextMonthSum,
       totalOperations: overdueExpenses.length + upcomingExpenses.length
     };
-  }, [overdueExpenses, upcomingExpenses, currentMonthKey]);
+  }, [overdueExpenses, upcomingExpenses, nextMonthKey]);
 
   // Actions
   const handleOpenAdd = () => {
@@ -434,8 +437,8 @@ export default function FutureExpenses() {
           </div>
         </div>
         <Card 
-          title="Échéances du mois en cours" 
-          value={`-${totalCurrentMonth.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`} 
+          title="Échéances du mois prochain" 
+          value={`-${totalNextMonth.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`} 
         />
         <Card 
           title="Total des opérations" 

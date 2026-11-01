@@ -391,16 +391,38 @@ export default function VariableExpenses() {
             }
           }
         } 
-        // Cas 3 : Modification classique de l'occurrence du mois sélectionné
+        // Cas 3 : Modification classique de l'occurrence du mois sélectionné :
+        // Proposer le choix entre modifier ce mois uniquement ou tous les mois futurs
         else {
+          const updateFutureMonths = window.confirm(
+            "Souhaitez-vous appliquer ces modifications (montant, libellé, etc.) également pour TOUS LES MOIS FUTURS ?\n\n" +
+            "• Cliquez sur OK pour mettre à jour ce mois et tous les mois suivants.\n" +
+            "• Cliquez sur Annuler pour modifier UNIQUEMENT ce mois-ci."
+          );
+
           if (serverData) {
+            if (updateFutureMonths) {
+              const tpl = serverData.recurrenceTemplates.find(t => t.id === formData.templateId);
+              if (tpl) {
+                await serverData.saveRecurrenceTemplate({
+                  ...tpl,
+                  amount: finalAmount,
+                  label: formData.label || tpl.label,
+                  accountId: formData.accountId || tpl.accountId,
+                  categoryId: formData.categoryId || tpl.categoryId,
+                  notes: formData.notes !== undefined ? formData.notes : tpl.notes,
+                  recurrenceDay: safeDay
+                });
+              }
+            }
+
             await serverData.saveTransaction({
               ...formData,
               id: editingId,
               date: realDate,
               amount: finalAmount,
               recurrenceDay: safeDay,
-              isCustomized: true
+              isCustomized: !updateFutureMonths
             });
           }
         }

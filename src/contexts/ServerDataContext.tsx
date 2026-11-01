@@ -87,16 +87,19 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       ]);
 
       if (isMounted.current) {
-        setAccounts(accs);
-        setCategories(cats);
-        setIncomePayers(payers);
-        setTransactions(txs);
-        setLoans(lns);
-        setRecurrenceTemplates(tmpls);
-        setDashboardSettings({
-          manualBalance: settings.manualBalance || '0',
-          card1: settings.card1 || '0',
-          card2: settings.card2 || '0'
+        setAccounts(prev => JSON.stringify(prev) === JSON.stringify(accs) ? prev : accs);
+        setCategories(prev => JSON.stringify(prev) === JSON.stringify(cats) ? prev : cats);
+        setIncomePayers(prev => JSON.stringify(prev) === JSON.stringify(payers) ? prev : payers);
+        setTransactions(prev => JSON.stringify(prev) === JSON.stringify(txs) ? prev : txs);
+        setLoans(prev => JSON.stringify(prev) === JSON.stringify(lns) ? prev : lns);
+        setRecurrenceTemplates(prev => JSON.stringify(prev) === JSON.stringify(tmpls) ? prev : tmpls);
+        setDashboardSettings(prev => {
+          const next = {
+            manualBalance: settings.manualBalance || '0',
+            card1: settings.card1 || '0',
+            card2: settings.card2 || '0'
+          };
+          return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
         });
         setLastSyncTime(new Date());
         setError(null);

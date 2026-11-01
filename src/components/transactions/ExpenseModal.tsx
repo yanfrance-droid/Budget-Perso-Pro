@@ -119,14 +119,16 @@ export default function ExpenseModal({
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     })();
 
+    const currentMonthKey = todayStr.slice(0, 7);
+
     // Détermination de l'éligibilité au statut de dépense future :
     // - Mode création/édition depuis « Dépenses futures » (isFutureMode)
     // - Dépense ayant déjà un marqueur expectedDate (conserve son statut de dépense future/en retard)
-    // - Dépense dont la date est supérieure ou égale à aujourd'hui
+    // - Dépense dont la date appartient à un mois strictement futur
     const isFutureEligible = Boolean(
       isFutureMode || 
       (editingTransaction?.expectedDate && editingTransaction.expectedDate.trim() !== '') ||
-      (formData.date && formData.date >= todayStr)
+      (formData.date && formData.date.slice(0, 7) > currentMonthKey)
     );
 
     // Actualisation de expectedDate : suit la nouvelle date saisie si la dépense est éligible
