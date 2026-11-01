@@ -4,6 +4,7 @@ import type { Transaction } from '../db/database';
 import { Card, Button, Modal, StatusBadgeSelect, AccountSelect } from '../components/ui/Components';
 import { Plus, Edit2, Trash2, DollarSign, CheckCircle2, AlertCircle, Filter, RotateCcw } from 'lucide-react';
 import { calculateMonthlyHealthSummary } from '../engine/calculations';
+import { getCurrentMonth } from '../utils/dateUtils';
 
 const HEALTH_EXPENSE_STATUS_OPTIONS = [
   { value: 'cleared', label: 'Débité' },
@@ -45,7 +46,7 @@ export default function Health() {
   const [expenseForm, setExpenseForm] = useState<Partial<Transaction>>({});
   const [reimbursementForm, setReimbursementForm] = useState<Partial<Transaction>>({});
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = getCurrentMonth();
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');

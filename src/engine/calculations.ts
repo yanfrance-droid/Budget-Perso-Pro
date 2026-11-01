@@ -259,6 +259,7 @@ export function calculateAmortizedCapital(
   return Math.round(capitalPart * 100) / 100;
 }
 
+import { getCurrentMonth } from '../utils/dateUtils';
 export interface LoanPayoffEstimateClient {
   possible: boolean;
   reason?: string;
@@ -285,7 +286,7 @@ export function estimateLoanPayoffClient(params: {
   const payment = Number(params.monthlyPayment) || 0;
   const rate = Number(params.interestRate) || 0;
   const insurance = Number(params.insurancePart) || 0;
-  const startMonth = params.startMonth || new Date().toISOString().slice(0, 7);
+  const startMonth = params.startMonth || getCurrentMonth();
 
   if (capital <= 0) {
     return {

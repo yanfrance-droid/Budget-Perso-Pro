@@ -68,7 +68,7 @@ export default function PlannedExpenses() {
       const data = await apiClient.plannedExpenses.getAll();
       setItems(data || []);
     } catch (err: any) {
-      setError(err.message || 'Impossible de charger les dépenses prévisionnelles.');
+      setError(err.message || 'Impossible de charger vos projets.');
     } finally {
       setIsLoading(false);
     }
@@ -102,7 +102,7 @@ export default function PlannedExpenses() {
     });
   }, [items, selectedUrgencyFilter]);
 
-  // Total général des montants estimés pour les dépenses actives
+  // Total général des montants estimés pour les projets actifs
   const totalEstimatedAmount = useMemo(() => {
     return items.reduce((sum, item) => sum + (Number(item.estimatedAmount) || 0), 0);
   }, [items]);
@@ -149,7 +149,7 @@ export default function PlannedExpenses() {
 
     const trimmedLabel = formData.label.trim();
     if (!trimmedLabel) {
-      setFormError('L\'intitulé de la dépense prévisionnelle est obligatoire.');
+      setFormError('L\'intitulé du projet est obligatoire.');
       return;
     }
 
@@ -184,7 +184,7 @@ export default function PlannedExpenses() {
 
   // Suppression manuelle avec confirmation
   const handleDelete = async (item: PlannedExpense) => {
-    const ok = window.confirm(`Êtes-vous sûr de vouloir supprimer la dépense prévisionnelle « ${item.label} » ?`);
+    const ok = window.confirm(`Êtes-vous sûr de vouloir supprimer le projet « ${item.label} » ?`);
     if (!ok) return;
 
     try {
@@ -198,8 +198,8 @@ export default function PlannedExpenses() {
   // Marquer comme réalisée : retire immédiatement l'élément de la liste sans créer de transaction
   const handleMarkAsRealized = async (item: PlannedExpense) => {
     const ok = window.confirm(
-      `Confirmez-vous que la dépense « ${item.label} » a été réalisée ?\n\n` +
-      `Elle sera retirée de vos dépenses prévisionnelles. Aucune transaction bancaire ne sera créée automatiquement.`
+      `Confirmez-vous que le projet « ${item.label} » a été réalisé ?\n\n` +
+      `Il sera retiré de vos projets. Aucune transaction bancaire ne sera créée automatiquement.`
     );
     if (!ok) return;
 
@@ -220,13 +220,13 @@ export default function PlannedExpenses() {
       {/* En-tête et Titre */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)' }}>Dépenses prévisionnelles</h1>
+          <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)' }}>Mes projets</h1>
           <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            Pense-bête et liste d'achats envisagés pour anticiper vos projets personnels sans impacter votre trésorerie active.
+            Pense-bête et liste de projets d'achats ou d'investissements pour anticiper vos dépenses sans impacter votre trésorerie active.
           </p>
         </div>
         <Button variant="primary" icon={<Plus size={18} />} onClick={handleOpenCreateModal}>
-          Nouvelle dépense envisagée
+          Nouveau projet
         </Button>
       </div>
 
@@ -234,7 +234,7 @@ export default function PlannedExpenses() {
       <div className="cards-grid">
         <Card title="Total prévisionnel" value={formatCurrency(totalEstimatedAmount)}>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-            {items.length} dépense{items.length > 1 ? 's' : ''} active{items.length > 1 ? 's' : ''}
+            {items.length} projet{items.length > 1 ? 's' : ''} actif{items.length > 1 ? 's' : ''}
           </div>
         </Card>
         <Card title="Urgentes" value={String(urgentCount)}>
@@ -308,7 +308,7 @@ export default function PlannedExpenses() {
       {/* Contenu principal */}
       {isLoading ? (
         <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-          Chargement de vos dépenses prévisionnelles...
+          Chargement de vos projets...
         </div>
       ) : error ? (
         <div style={{
@@ -331,41 +331,34 @@ export default function PlannedExpenses() {
         }}>
           <Clock size={40} style={{ opacity: 0.35, marginBottom: '0.75rem' }} />
           <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1.1rem' }}>
-            {items.length === 0 ? 'Aucune dépense prévisionnelle enregistrée' : 'Aucune dépense correspondant à ce filtre'}
+            {items.length === 0 ? 'Aucun projet enregistré' : 'Aucun projet correspondant à ce filtre'}
           </h3>
           <p style={{ margin: '0 0 1.25rem 0', fontSize: '0.875rem', maxWidth: '500px', marginLeft: 'auto', marginRight: 'auto' }}>
             {items.length === 0
               ? 'Ajoutez ici vos projets d\'achats, rénovations ou envies pour garder un œil sur leur montant estimé et leur degré d\'urgence.'
-              : 'Modifiez votre filtre d\'urgence ci-dessus pour afficher l\'ensemble de vos dépenses prévisionnelles.'}
+              : 'Modifiez votre filtre d\'urgence ci-dessus pour afficher l\'ensemble de vos projets.'}
           </p>
           {items.length === 0 && (
             <Button variant="primary" icon={<Plus size={16} />} onClick={handleOpenCreateModal}>
-              Ajouter une première dépense
+              Ajouter un premier projet
             </Button>
           )}
         </div>
       ) : (
-        <div style={{
-          background: 'var(--card-bg)',
-          borderRadius: 'var(--radius)',
-          border: '1px solid var(--border-color)',
-          overflow: 'hidden',
-          boxShadow: 'var(--shadow)'
-        }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-              <thead>
-                <tr style={{ background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid var(--border-color)' }}>
-                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600, color: 'var(--text-muted)' }}>Urgence</th>
-                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600, color: 'var(--text-muted)' }}>Intitulé</th>
-                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600, color: 'var(--text-muted)', textAlign: 'right' }}>Montant estimé</th>
-                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600, color: 'var(--text-muted)' }}>Catégorie</th>
-                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600, color: 'var(--text-muted)' }}>Date envisagée</th>
-                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600, color: 'var(--text-muted)' }}>Note</th>
-                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center', width: '160px' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Urgence</th>
+                <th>Intitulé</th>
+                <th style={{ textAlign: 'right' }}>Montant estimé</th>
+                <th>Catégorie</th>
+                <th>Date souhaitée</th>
+                <th>Note</th>
+                <th style={{ textAlign: 'center', width: '160px' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
                 {filteredItems.map(item => {
                   const urgencyInfo = URGENCY_CONFIG[item.urgency] || URGENCY_CONFIG.medium;
                   const categoryName = item.categoryId ? categoryMap.get(item.categoryId) || 'Catégorie inconnue' : null;
@@ -457,7 +450,7 @@ export default function PlannedExpenses() {
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(item)}
-                            title="Modifier cette dépense prévisionnelle"
+                            title="Modifier ce projet"
                             style={{
                               background: 'transparent',
                               border: '1px solid var(--border-color)',
@@ -472,7 +465,7 @@ export default function PlannedExpenses() {
                           <button
                             type="button"
                             onClick={() => handleDelete(item)}
-                            title="Supprimer cette dépense prévisionnelle"
+                            title="Supprimer ce projet"
                             style={{
                               background: 'transparent',
                               border: '1px solid #fecaca',
@@ -491,7 +484,6 @@ export default function PlannedExpenses() {
                 })}
               </tbody>
             </table>
-          </div>
         </div>
       )}
 
@@ -499,7 +491,7 @@ export default function PlannedExpenses() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingItem ? 'Modifier la dépense prévisionnelle' : 'Ajouter une dépense prévisionnelle'}
+        title={editingItem ? 'Modifier le projet' : 'Ajouter un projet'}
       >
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {formError && (
@@ -588,7 +580,7 @@ export default function PlannedExpenses() {
             </div>
           </div>
 
-          {/* Catégorie & Date envisagée */}
+          {/* Catégorie & Date souhaitée */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.85rem' }}>
@@ -618,7 +610,7 @@ export default function PlannedExpenses() {
 
             <div>
               <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.85rem' }}>
-                Date envisagée (optionnelle)
+                Date souhaitée (optionnelle)
               </label>
               <input
                 type="date"
@@ -665,7 +657,7 @@ export default function PlannedExpenses() {
               Annuler
             </Button>
             <Button variant="primary" type="submit">
-              {editingItem ? 'Enregistrer les modifications' : 'Ajouter la dépense'}
+              {editingItem ? 'Enregistrer les modifications' : 'Ajouter le projet'}
             </Button>
           </div>
         </form>

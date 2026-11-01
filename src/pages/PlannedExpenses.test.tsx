@@ -44,9 +44,9 @@ describe('PlannedExpenses Page Component', () => {
 
     render(<PlannedExpenses />);
 
-    expect(await screen.findByText('Dépenses prévisionnelles')).toBeDefined();
-    expect(screen.getByText(/Pense-bête et liste d'achats envisagés/i)).toBeDefined();
-    expect(screen.getByText('Aucune dépense prévisionnelle enregistrée')).toBeDefined();
+    expect(await screen.findByText('Mes projets')).toBeDefined();
+    expect(screen.getByText(/Pense-bête et liste de projets/i)).toBeDefined();
+    expect(screen.getByText('Aucun projet enregistré')).toBeDefined();
   });
 
   it('calcule correctement le total général et les compteurs d\'urgence pour les dépenses actives', async () => {
@@ -61,7 +61,7 @@ describe('PlannedExpenses Page Component', () => {
 
     // Total 250 + 750 + 100 = 1 100,00 €
     expect(await screen.findByText(/1\s?100,00\s?€/)).toBeDefined();
-    expect(screen.getByText('3 dépenses actives')).toBeDefined();
+    expect(screen.getByText('3 projets actifs')).toBeDefined();
     expect(screen.getByText('Urgentes')).toBeDefined();
     expect(screen.getByText('Moyennement urgentes')).toBeDefined();
     expect(screen.getByText('Pas urgentes')).toBeDefined();
@@ -81,14 +81,14 @@ describe('PlannedExpenses Page Component', () => {
     } as any);
 
     render(<PlannedExpenses />);
-    await screen.findByText('Dépenses prévisionnelles');
+    await screen.findByText('Mes projets');
 
     // Cliquer sur le bouton d'ajout
-    const addBtn = screen.getByRole('button', { name: /Nouvelle dépense envisagée/i });
+    const addBtn = screen.getByRole('button', { name: /Nouveau projet/i });
     fireEvent.click(addBtn);
 
     // Vérifier la présence du modal
-    expect(screen.getByText('Ajouter une dépense prévisionnelle')).toBeDefined();
+    expect(screen.getByText('Ajouter un projet')).toBeDefined();
 
     // Remplir le formulaire
     fireEvent.change(screen.getByPlaceholderText(/Ex: Remplacement chauffe-eau/i), {
@@ -99,7 +99,7 @@ describe('PlannedExpenses Page Component', () => {
     });
 
     // Valider
-    const submitBtn = screen.getByRole('button', { name: 'Ajouter la dépense' });
+    const submitBtn = screen.getByRole('button', { name: 'Ajouter le projet' });
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
@@ -163,7 +163,7 @@ describe('PlannedExpenses Page Component', () => {
     render(<PlannedExpenses />);
     expect(await screen.findByText('Projet abandonné')).toBeDefined();
 
-    const deleteBtn = screen.getByTitle(/Supprimer cette dépense prévisionnelle/i);
+    const deleteBtn = screen.getByTitle(/Supprimer ce projet/i);
     fireEvent.click(deleteBtn);
 
     await waitFor(() => {
@@ -199,7 +199,7 @@ describe('PlannedExpenses Page Component', () => {
       expect(screen.queryByText('Robot aspirateur')).toBeNull();
     });
 
-    expect(screen.getByText('Aucune dépense prévisionnelle enregistrée')).toBeDefined();
+    expect(screen.getByText('Aucun projet enregistré')).toBeDefined();
     expect(screen.getByText(/0,00\s?€/)).toBeDefined();
   });
 });

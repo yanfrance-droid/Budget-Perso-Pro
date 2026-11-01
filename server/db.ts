@@ -147,6 +147,90 @@ function runMigrations(db: DatabaseSync) {
   } catch (e) {
     console.error("Migration seed loan_payment_history error:", e);
   }
+
+  try {
+    initPreExistingFutureExpenses(db);
+  } catch (e) {
+    console.error("Migration initPreExistingFutureExpenses error:", e);
+  }
+}
+
+/**
+ * Migration unique & idempotente :
+ * Initialise le champ expectedDate pour les dépenses journalières ponctuelles futures
+ * préexistantes dans la base SQLite avant l'implémentation de la rubrique « Dépenses futures ».
+ *
+ * Règles strictes :
+ * - type = 'daily'
+ * - templateId IS NULL ou vide
+ * - recurrenceDay IS NULL ou 0
+ * - status IN ('planned', 'pending')
+ * - expectedDate IS NULL ou vide
+ * - date >= date du jour locale (ex: '2026-10-31')
+ *
+ * Les dépenses passées (date < todayStr) sont formellement exclues.
+ * L'exécution est tracée de manière persistante dans la table app_settings.
+ */
+export function initPreExistingFutureExpenses(
+  db: DatabaseSync, 
+  referenceDate?: string
+): { updatedCount: number; executed: boolean } {
+  const MIGRATION_KEY = 'migration_init_future_expenses_expected_date';
+
+  // 1. Vérification de l'indicateur persistant dans app_settings
+  try {
+    const alreadyRun = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(MIGRATION_KEY) as { value: string } | undefined;
+    if (alreadyRun) {
+      return { updatedCount: 0, executed: false };
+    }
+  } catch {
+    return { updatedCount: 0, executed: false };
+  }
+
+  // 2. Détermination de la date de référence en temps local (évite tout décalage UTC)
+  const todayStr = referenceDate || (() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  })();
+
+  // 3. Exécution transactionnelle
+  const spName = `sp_migrate_future_${crypto.randomUUID().replace(/-/g, '_')}`;
+  db.exec(`SAVEPOINT ${spName};`);
+  try {
+    const stmt = db.prepare(`
+      UPDATE transactions
+      SET expectedDate = date
+      WHERE type = 'daily'
+        AND (templateId IS NULL OR templateId = '')
+        AND (recurrenceDay IS NULL OR recurrenceDay = 0)
+        AND status IN ('planned', 'pending')
+        AND (expectedDate IS NULL OR expectedDate = '')
+        AND date >= ?
+    `);
+    const result = stmt.run(todayStr) as { changes?: number };
+    const updatedCount = Number(result?.changes || 0);
+
+    // 4. Enregistrement persistant de la migration
+    const nowIso = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO app_settings (key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(MIGRATION_KEY, JSON.stringify({
+      executedAt: nowIso,
+      referenceDate: todayStr,
+      updatedCount
+    }));
+
+    db.exec(`RELEASE ${spName};`);
+    return { updatedCount, executed: true };
+  } catch (err) {
+    db.exec(`ROLLBACK TO ${spName}; RELEASE ${spName};`);
+    throw err;
+  }
 }
 
 function seedDefaultAccount(db: DatabaseSync) {

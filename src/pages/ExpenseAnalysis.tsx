@@ -34,6 +34,7 @@ import {
 } from 'recharts';
 
 import { PAYMENT_METHODS } from './CurrentExpenses';
+import { getCurrentMonth } from '../utils/dateUtils';
 
 const EXPENSE_ANALYSIS_STATUS_OPTIONS = [
   { value: 'all', label: 'Tous les statuts' },
@@ -173,7 +174,7 @@ export default function ExpenseAnalysis() {
   const accounts = serverData ? serverData.accounts : [];
 
   // 2. États de filtrage
-  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const currentMonthStr = getCurrentMonth();
   const [periodMode, setPeriodMode] = useState<'month' | 'custom'>('month');
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
   const [startDate, setStartDate] = useState<string>(`${currentMonthStr}-01`);

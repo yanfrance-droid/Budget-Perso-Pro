@@ -12,6 +12,7 @@ const INCOME_STATUS_OPTIONS = [
 ];
 
 import { useServerDataOptional } from '../contexts/ServerDataContext';
+import { getCurrentMonth, getCurrentDate } from '../utils/dateUtils';
 
 export default function Incomes() {
   const serverData = useServerDataOptional();
@@ -28,7 +29,7 @@ export default function Incomes() {
   const incomePayers = serverData?.incomePayers || [];
 
   const [formData, setFormData] = useState<Partial<Transaction>>({});
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(() => getCurrentMonth());
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
 
@@ -161,7 +162,7 @@ export default function Incomes() {
       setIsRecurring(false);
       setRecurrenceDay(new Date().getDate());
       setFormData({
-        date: new Date().toISOString().split('T')[0],
+        date: getCurrentDate(),
         amount: 0,
         status: 'cleared',
         label: '',
@@ -234,7 +235,7 @@ export default function Incomes() {
               categoryId: formData.categoryId,
               label: formData.label || '',
               notes: formData.notes || '',
-              startDate: selectedMonth || (formData.date ? formData.date.slice(0, 7) : new Date().toISOString().slice(0, 7)),
+              startDate: selectedMonth || (formData.date ? formData.date.slice(0, 7) : getCurrentMonth()),
               isActive: true,
               payerId: formData.payerId
             });
@@ -313,7 +314,7 @@ export default function Incomes() {
       if (isRecurring) {
         const daysInMonth = new Date(selYear, selMonth, 0).getDate();
         const safeDay = Math.min(Math.max(1, recurrenceDay || 1), daysInMonth);
-        const occMonth = selectedMonth || new Date().toISOString().slice(0, 7);
+        const occMonth = selectedMonth || getCurrentMonth();
         const realDate = `${selYear}-${String(selMonth).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
         const targetStatus = formData.status || 'planned';
         if (serverData) {
@@ -354,7 +355,7 @@ export default function Incomes() {
           ...formData,
           id: generateId(),
           amount: finalAmount,
-          date: formData.date || new Date().toISOString().split('T')[0],
+          date: formData.date || getCurrentDate(),
           type: 'income'
         } as Transaction;
 

@@ -13,8 +13,11 @@ import {
   Building2,
   TrendingUp,
   HeartPulse,
-  PiggyBank
+  PiggyBank,
+  CalendarClock
 } from 'lucide-react';
+import { isFutureExpense, getLocalTodayString, formatDateDisplay } from './FutureExpenses';
+import { getCurrentMonth } from '../utils/dateUtils';
 import { 
   ComposedChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell 
@@ -79,8 +82,7 @@ export default function Dashboard() {
     serverData?.dashboardSettings?.card2 || localStorage.getItem(storageKeys.card2) || "0"
   );
 
-  const dCurrent = new Date();
-  const currentMonth = `${dCurrent.getFullYear()}-${String(dCurrent.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonth = getCurrentMonth();
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
   const isEditingSettingsRef = useRef(false);
@@ -638,6 +640,32 @@ export default function Dashboard() {
     0
   );
 
+  // -------------------------------------------------------------
+  // Dépenses futures prioritaires (Widget Tableau de bord - Max 5)
+  // Règle identique à FutureExpenses.tsx :
+  // 1. Dépenses en retard (de la plus ancienne à la plus récente)
+  // 2. Dépenses à venir (de la plus proche à la plus éloignée)
+  // -------------------------------------------------------------
+  const todayStr = useMemo(() => getLocalTodayString(), []);
+  const priorityFutureExpenses = useMemo(() => {
+    const eligible = transactions.filter(t => isFutureExpense(t, todayStr));
+    const overdue: typeof transactions = [];
+    const upcoming: typeof transactions = [];
+
+    eligible.forEach(t => {
+      if (t.date < todayStr) {
+        overdue.push(t);
+      } else {
+        upcoming.push(t);
+      }
+    });
+
+    overdue.sort((a, b) => a.date.localeCompare(b.date));
+    upcoming.sort((a, b) => a.date.localeCompare(b.date));
+
+    return [...overdue, ...upcoming].slice(0, 5);
+  }, [transactions, todayStr]);
+
   const currentMonthLabel = formatMonthLabel(currentMonth);
   const selectedMonthLabel = formatMonthLabel(selectedMonth);
 
@@ -1133,6 +1161,118 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Widget Dépenses futures */}
+      <div 
+        className="future-expenses-box"
+        data-testid="future-expenses-dashboard-widget"
+        style={{ 
+          marginTop: '1.5rem',
+          background: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          borderLeft: '4px solid #2563eb',
+          borderRadius: 'var(--radius)',
+          padding: '1.25rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.85rem',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+            <CalendarClock size={20} color="#2563eb" />
+            <span>Dépenses futures</span>
+          </h3>
+          <a 
+            href="/depenses-futures"
+            style={{ 
+              fontSize: '0.8125rem', 
+              fontWeight: 700, 
+              color: '#1d4ed8', 
+              background: '#dbeafe', 
+              border: '1px solid #93c5fd', 
+              padding: '0.25rem 0.65rem', 
+              borderRadius: '9999px',
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }}
+          >
+            Voir toutes les dépenses futures &rarr;
+          </a>
+        </div>
+        <p style={{ fontSize: '0.8rem', color: '#1e40af', margin: 0 }}>
+          Dépenses ponctuelles programmées et échéances à venir.
+        </p>
+
+        {priorityFutureExpenses.length > 0 ? (
+          <div className="dashboard-table-container" style={{ background: '#ffffff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+            <table className="dashboard-table" style={{ fontSize: '0.8rem' }}>
+              <thead>
+                <tr style={{ background: '#dbeafe' }}>
+                  <th style={{ color: '#1e40af', fontWeight: 700 }}>Date</th>
+                  <th style={{ color: '#1e40af', fontWeight: 700 }}>Libellé</th>
+                  <th className="text-right" style={{ color: '#1e40af', fontWeight: 700 }}>Montant</th>
+                  <th style={{ textAlign: 'center', color: '#1e40af', fontWeight: 700 }}>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {priorityFutureExpenses.map(exp => {
+                  const isOverdue = exp.date < todayStr;
+                  return (
+                    <tr key={exp.id}>
+                      <td style={{ fontWeight: isOverdue ? 700 : 500, color: isOverdue ? '#b91c1c' : '#64748b', whiteSpace: 'nowrap' }}>
+                        {formatDateDisplay(exp.date)}
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 600, color: '#1e293b' }}>{exp.label || 'Dépense'}</span>
+                      </td>
+                      <td className="text-right" style={{ fontWeight: 700, color: 'var(--danger-color, #ef4444)', whiteSpace: 'nowrap' }}>
+                        -{formatCurrency(Number(exp.amount) || 0)}
+                        <span style={{ display: 'none' }} aria-hidden="true">{Number(exp.amount || 0).toFixed(2)}</span>
+                      </td>
+                      <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {isOverdue ? (
+                          <span style={{
+                            backgroundColor: '#fee2e2',
+                            color: '#b91c1c',
+                            border: '1px solid #f87171',
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: '9999px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                          }}>
+                            ⚠️ Date dépassée
+                          </span>
+                        ) : (
+                          <span className={`badge ${exp.status === 'pending' ? 'badge-pending' : 'badge-planned'}`}>
+                            {exp.status === 'pending' ? 'En attente' : 'Prévu'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '1.5rem 1rem', color: '#334155' }}>
+            <CalendarClock size={28} color="#2563eb" style={{ margin: '0 auto 0.5rem auto', opacity: 0.8 }} />
+            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.875rem', color: '#1e40af' }}>
+              Aucune dépense future programmée
+            </p>
+            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.775rem', color: '#64748b' }}>
+              Vos prochaines dépenses ponctuelles planifiées apparaîtront ici.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* D. Graphiques (Évolution sur 12 mois & Répartition par catégorie) */}
       <div className="dashboard-charts-grid">

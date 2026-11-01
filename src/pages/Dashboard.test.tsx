@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import Dashboard from './Dashboard';
 
@@ -40,9 +40,11 @@ vi.mock('../contexts/ServerDataContext', () => ({
 };
 
 describe('Dashboard component', () => {
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = '2026-10';
 
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 15, 12, 0, 0));
     mockIsLoading = false;
     mockTransactions = [];
     mockLoans = [];
@@ -54,6 +56,10 @@ describe('Dashboard component', () => {
     localStorage.setItem('manualBalance_test', '40');
     localStorage.setItem('card1', '0');
     localStorage.setItem('card2', '0');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders without crashing on client side', () => {

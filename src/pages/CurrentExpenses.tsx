@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { generateId } from '../db/database';
 import type { Transaction } from '../db/database';
-import { Card, Button, Modal, StatusBadgeSelect, AccountSelect } from '../components/ui/Components';
+import { Card, Button, StatusBadgeSelect } from '../components/ui/Components';
 import { Plus, Edit2, Trash2, Filter, AlertTriangle, CheckCircle, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import ExpenseModal, { PAYMENT_METHODS, type PaymentMethod } from '../components/transactions/ExpenseModal';
+export { PAYMENT_METHODS };
+export type { PaymentMethod };
 
 const CURRENT_EXPENSE_STATUS_OPTIONS = [
   { value: 'cleared', label: 'Débité' },
@@ -11,20 +13,8 @@ const CURRENT_EXPENSE_STATUS_OPTIONS = [
   { value: 'disabled', label: 'Désactivé' }
 ];
 
-export const PAYMENT_METHODS = [
-  'Carte bancaire',
-  'Virement',
-  'Prélèvement automatique',
-  'Espèces',
-  'Chèque',
-  'PayPal',
-  'Paiement mobile',
-  'Autre'
-] as const;
-
-export type PaymentMethod = typeof PAYMENT_METHODS[number];
-
 import { useServerDataOptional } from '../contexts/ServerDataContext';
+import { getCurrentMonth } from '../utils/dateUtils';
 
 export default function CurrentExpenses() {
   const serverData = useServerDataOptional();
@@ -32,12 +22,12 @@ export default function CurrentExpenses() {
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const expenses = serverData ? serverData.transactions.filter(t => t.type === 'daily') : [];
-  const categories = serverData ? serverData.categories.filter(c => c.type === 'daily') : [];
+  const categories = useMemo(() => {
+    return serverData ? serverData.categories.filter(c => c.type === 'daily') : [];
+  }, [serverData?.categories]);
   const accounts = serverData ? serverData.accounts : [];
 
-  const [formData, setFormData] = useState<Partial<Transaction>>({});
-
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(() => getCurrentMonth());
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
@@ -155,79 +145,33 @@ export default function CurrentExpenses() {
   };
 
 
+  const editingExpense = useMemo(() => {
+    if (!editingId || !expenses) return null;
+    return expenses.find(e => e.id === editingId) || null;
+  }, [expenses, editingId]);
+
   const handleOpen = (expense?: Transaction) => {
-    if (expense) {
-      setEditingId(expense.id);
-      setFormData({
-        ...expense,
-        paymentMethod: expense.paymentMethod || '',
-        checkNumber: expense.checkNumber || ''
-      });
-    } else {
-      setEditingId(null);
-      setFormData({
-        date: new Date().toISOString().split('T')[0],
-        amount: 0,
-        status: 'cleared',
-        label: '',
-        notes: '',
-        paymentMethod: '',
-        checkNumber: '',
-        categoryId: categories?.[0]?.id || '',
-        accountId: accounts?.[0]?.id || '',
-        type: 'daily'
-      });
-    }
+    setEditingId(expense ? expense.id : null);
     setIsModalOpen(true);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.accountId || !formData.categoryId || formData.amount === undefined || isNaN(formData.amount)) {
-      alert("Veuillez remplir tous les champs obligatoires.");
-      return;
-    }
-    
-    // Si le moyen de paiement n'est pas Chèque, le numéro de chèque ne doit pas être conservé
-    const cleanPaymentMethod = formData.paymentMethod ? String(formData.paymentMethod).trim() : undefined;
-    const cleanCheckNumber = cleanPaymentMethod === 'Chèque' && formData.checkNumber 
-      ? String(formData.checkNumber).trim() 
-      : undefined;
+  const handleClose = () => {
+    setIsModalOpen(false);
+    setEditingId(null);
+  };
 
-    const transactionToSave: Transaction = {
-      ...formData,
-      amount: Number(formData.amount),
-      id: editingId || generateId(),
-      type: 'daily',
-      paymentMethod: cleanPaymentMethod || undefined,
-      checkNumber: cleanCheckNumber || undefined
-    } as Transaction;
-
-    // Supprimer les clés si undefined pour garder un objet propre
-    if (!transactionToSave.paymentMethod) delete transactionToSave.paymentMethod;
-    if (!transactionToSave.checkNumber) delete transactionToSave.checkNumber;
-
+  const handleSave = async (transactionToSave: Transaction) => {
     if (serverData) {
       await serverData.saveTransaction(transactionToSave);
     }
     setIsModalOpen(false);
+    setEditingId(null);
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Supprimer cette dépense ?')) {
       if (serverData) {
         await serverData.deleteTransaction(id);
-      }
-    }
-  };
-
-  const handleAddCategory = async () => {
-    const name = window.prompt('Nom de la nouvelle catégorie :');
-    if (name) {
-      const newCat = { id: generateId(), name, type: 'daily' as const, isArchived: false };
-      if (serverData) {
-        const saved = await serverData.saveCategory(newCat);
-        setFormData({ ...formData, categoryId: saved.id });
       }
     }
   };
@@ -467,92 +411,14 @@ export default function CurrentExpenses() {
         </table>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? 'Modifier la dépense' : 'Ajouter une dépense'}>
-        <form onSubmit={handleSave}>
-          <div className="form-group">
-            <label className="form-label">Date</label>
-            <input type="date" className="form-control" required value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Libellé</label>
-            <input type="text" className="form-control" required placeholder="Ex: Courses, Restaurant..." value={formData.label || ''} onChange={e => setFormData({...formData, label: e.target.value})} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Montant (€)</label>
-            <input type="number" step="0.01" className="form-control" required value={formData.amount === undefined ? '' : formData.amount} onChange={e => setFormData({...formData, amount: parseFloat(e.target.value)})} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Catégorie</label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <select className="form-control" required value={formData.categoryId || ''} onChange={e => setFormData({...formData, categoryId: e.target.value})}>
-                <option value="">Sélectionner...</option>
-                {categories?.filter(c => !c.isArchived || c.id === formData.categoryId).map(c => <option key={c.id} value={c.id}>{c.name}{c.isArchived ? ' (Archivée)' : ''}</option>)}
-              </select>
-              <Button variant="outline" onClick={handleAddCategory} type="button" icon={<Plus size={16} />}></Button>
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Compte</label>
-            <AccountSelect
-              value={formData.accountId || ''}
-              onChange={id => setFormData({ ...formData, accountId: id })}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Moyen de paiement</label>
-            <select 
-              data-testid="payment-method-select"
-              className="form-control" 
-              value={formData.paymentMethod || ''} 
-              onChange={e => {
-                const nextMethod = e.target.value;
-                setFormData(prev => ({
-                  ...prev,
-                  paymentMethod: nextMethod,
-                  // Si l'utilisateur quitte 'Chèque', effacer immédiatement le numéro de chèque
-                  checkNumber: nextMethod === 'Chèque' ? prev.checkNumber : ''
-                }));
-              }}
-            >
-              <option value="">Non spécifié</option>
-              {PAYMENT_METHODS.map(method => (
-                <option key={method} value={method}>{method}</option>
-              ))}
-            </select>
-          </div>
-          {formData.paymentMethod === 'Chèque' && (
-            <div className="form-group" data-testid="check-number-group">
-              <label className="form-label">Numéro de chèque</label>
-              <input 
-                data-testid="check-number-input"
-                type="text" 
-                className="form-control" 
-                placeholder="Ex: 001245" 
-                value={formData.checkNumber || ''} 
-                onChange={e => setFormData({ ...formData, checkNumber: e.target.value })} 
-              />
-            </div>
-          )}
-          <div className="form-group">
-            <label className="form-label">Statut</label>
-            <select className="form-control" required value={formData.status || 'cleared'} onChange={e => setFormData({...formData, status: e.target.value as any})}>
-              <option value="cleared">Débité</option>
-              <option value="pending">En attente</option>
-              <option value="planned">Prévu</option>
-              <option value="disabled">Désactivé</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Note</label>
-            <input type="text" className="form-control" value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} />
-          </div>
-          <div className="modal-footer">
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>Annuler</Button>
-            <Button type="submit" variant="primary">Enregistrer</Button>
-          </div>
-        </form>
-      </Modal>
+      <ExpenseModal
+        isOpen={isModalOpen}
+        onClose={handleClose}
+        onSave={handleSave}
+        editingTransaction={editingExpense}
+        categories={categories}
+        accounts={accounts}
+      />
     </div>
   );
 }

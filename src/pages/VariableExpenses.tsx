@@ -12,6 +12,7 @@ const VARIABLE_EXPENSE_STATUS_OPTIONS = [
 ];
 
 import { useServerDataOptional } from '../contexts/ServerDataContext';
+import { getCurrentMonth, getCurrentDate } from '../utils/dateUtils';
 
 export default function VariableExpenses() {
   const serverData = useServerDataOptional();
@@ -36,7 +37,7 @@ export default function VariableExpenses() {
     expense?: Transaction;
   }>({ isOpen: false });
   
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(() => getCurrentMonth());
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
@@ -303,7 +304,7 @@ export default function VariableExpenses() {
     } else {
       setEditingId(null);
       setFormData({
-        date: new Date().toISOString().split('T')[0],
+        date: getCurrentDate(),
         recurrenceDay: new Date().getDate(),
         amount: 0,
         status: 'cleared',

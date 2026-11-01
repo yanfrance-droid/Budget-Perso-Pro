@@ -10,6 +10,7 @@ import {
 import { useServerDataOptional } from '../contexts/ServerDataContext';
 import { apiClient } from '../services/apiClient';
 import { estimateLoanPayoffClient } from '../engine/calculations';
+import { getCurrentMonth } from '../utils/dateUtils';
 
 const LOAN_PAYMENT_STATUS_OPTIONS = [
   { value: 'cleared', label: 'Débité' },
@@ -66,7 +67,7 @@ export default function Loans() {
   const [isSavingTier, setIsSavingTier] = useState(false);
   const [appliedEndDateSuccess, setAppliedEndDateSuccess] = useState(false);
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = getCurrentMonth();
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
   const formatMonth = (ym: string) => {

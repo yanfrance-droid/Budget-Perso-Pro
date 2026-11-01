@@ -5,6 +5,7 @@ import { Card, Button, Modal, StatusBadgeSelect } from '../components/ui/Compone
 import { calculateRealBalance } from '../engine/calculations';
 import { Plus, Edit2, Trash2, Filter, CheckCircle2, Repeat, ArrowRight, ShieldAlert, AlertCircle, AlertTriangle, RotateCcw, Wallet, ChevronDown, ChevronRight, Archive, XCircle, Settings, TrendingUp, X } from 'lucide-react';
 import { computeOccurrenceDate } from '../services/recurrenceService';
+import { getCurrentMonth, getCurrentDate } from '../utils/dateUtils';
 
 const SAVINGS_STATUS_OPTIONS = [
   { value: 'cleared', label: 'Effectué' },
@@ -69,7 +70,7 @@ export default function Savings() {
   const categories = (serverData?.categories || []).filter(c => c.type === 'transfer');
   const accounts = serverData?.accounts || [];
 
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(() => getCurrentMonth());
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
 

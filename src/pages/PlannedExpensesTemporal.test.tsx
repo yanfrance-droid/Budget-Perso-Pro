@@ -57,7 +57,7 @@ describe('PlannedExpenses Page - Comportement temporel et persistance d\'afficha
     expect(await screen.findByText('Chaudière à condensation')).toBeDefined();
     expect(await screen.findByText(/2024-06-01/)).toBeDefined();
     expect(screen.getAllByText(/3\s?200,00\s?€/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('1 dépense active')).toBeDefined();
+    expect(screen.getByText('1 projet actif')).toBeDefined();
   });
 
   it('affiche une dépense sans date ou avec une date très lointaine (ex: 2035)', async () => {
@@ -84,7 +84,7 @@ describe('PlannedExpenses Page - Comportement temporel et persistance d\'afficha
     vi.mocked(apiClient.plannedExpenses.getAll).mockResolvedValueOnce([]);
 
     render(<PlannedExpenses />);
-    await screen.findByText('Dépenses prévisionnelles');
+    await screen.findByText('Mes projets');
 
     // Vérifier l'absence totale de champ mois (contrairement à Incomes ou CurrentExpenses)
     expect(screen.queryByLabelText(/Mois/i)).toBeNull();

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Wallet, CreditCard, PiggyBank, Settings, FileText, HeartPulse, Building, BarChart3, LogOut, AlertCircle, RotateCcw, Eye, EyeOff, Moon, Sun, ShoppingBag, HelpCircle, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Wallet, CreditCard, PiggyBank, Settings, FileText, HeartPulse, Building, BarChart3, LogOut, AlertCircle, RotateCcw, Eye, EyeOff, Moon, Sun, ShoppingBag, HelpCircle, Menu, X, CalendarClock } from 'lucide-react';
 import Incomes from './pages/Incomes';
 import FixedExpenses from './pages/FixedExpenses';
 import VariableExpenses from './pages/VariableExpenses';
 import CurrentExpenses from './pages/CurrentExpenses';
+import FutureExpenses from './pages/FutureExpenses';
 import PlannedExpenses from './pages/PlannedExpenses';
 import ExpenseAnalysis from './pages/ExpenseAnalysis';
 import Health from './pages/Health';
@@ -192,11 +193,12 @@ function AppContent() {
             <NavLink to="/revenus"><Wallet size={18} style={{marginRight: '8px'}} /> Revenus</NavLink>
             <NavLink to="/charges-fixes"><FileText size={18} style={{marginRight: '8px'}} /> Charges fixes</NavLink>
             <NavLink to="/charges-variables"><FileText size={18} style={{marginRight: '8px'}} /> Charges variables</NavLink>
-            <NavLink to="/depenses-courantes"><CreditCard size={18} style={{marginRight: '8px'}} /> Dépenses</NavLink>
-            <NavLink to="/depenses-previsionnelles"><ShoppingBag size={18} style={{marginRight: '8px'}} /> Dépenses prévisionnelles</NavLink>
-            <NavLink to="/analyse-depenses"><BarChart3 size={18} style={{marginRight: '8px'}} /> Analyse des dépenses</NavLink>
-            <NavLink to="/sante"><HeartPulse size={18} style={{marginRight: '8px'}} /> Santé</NavLink>
             <NavLink to="/credits"><Building size={18} style={{marginRight: '8px'}} /> Crédits</NavLink>
+            <NavLink to="/sante"><HeartPulse size={18} style={{marginRight: '8px'}} /> Santé</NavLink>
+            <NavLink to="/depenses-courantes"><CreditCard size={18} style={{marginRight: '8px'}} /> Dépenses</NavLink>
+            <NavLink to="/depenses-futures"><CalendarClock size={18} style={{marginRight: '8px'}} /> Dépenses futures</NavLink>
+            <NavLink to="/analyse-depenses"><BarChart3 size={18} style={{marginRight: '8px'}} /> Analyse des dépenses</NavLink>
+            <NavLink to="/mes-projets"><ShoppingBag size={18} style={{marginRight: '8px'}} /> Mes projets</NavLink>
             <NavLink to="/epargne"><PiggyBank size={18} style={{marginRight: '8px'}} /> Épargne & transferts</NavLink>
           </nav>
 
@@ -242,7 +244,8 @@ function AppContent() {
             <Route path="/charges-fixes" element={<FixedExpenses />} />
             <Route path="/charges-variables" element={<VariableExpenses />} />
             <Route path="/depenses-courantes" element={<CurrentExpenses />} />
-            <Route path="/depenses-previsionnelles" element={<PlannedExpenses />} />
+            <Route path="/depenses-futures" element={<FutureExpenses />} />
+            <Route path="/mes-projets" element={<PlannedExpenses />} />
             <Route path="/analyse-depenses" element={<ExpenseAnalysis />} />
             <Route path="/sante" element={<Health />} />
             <Route path="/credits" element={<Loans />} />
