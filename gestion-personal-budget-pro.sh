@@ -182,7 +182,7 @@ update_install() {
     check_git_clean || return 1
     backup_database || return 1
 
-    git -C "$APP_DIR" fetch origin --tags || return 1
+    git -C "$APP_DIR" fetch --tags --force || return 1
     git -C "$APP_DIR" pull --ff-only origin "$BRANCH" || return 1
 
     compose -f "$APP_DIR/docker-compose.yml" \
