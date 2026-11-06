@@ -117,7 +117,7 @@ describe('CurrentExpenses - Moyen de paiement et numéro de chèque', () => {
     const modalForm = screen.getByText('Enregistrer').closest('form')!;
     const dateInput = modalForm.querySelector('input[type="date"]') as HTMLInputElement;
     const labelInput = screen.getByPlaceholderText(/Ex: Courses/i);
-    const amountInput = modalForm.querySelector('input[type="number"]') as HTMLInputElement;
+    const amountInput = modalForm.querySelector('input[role="spinbutton"], input[type="number"]') as HTMLInputElement;
     const paymentSelect = screen.getByTestId('payment-method-select');
 
     fireEvent.change(dateInput, { target: { value: `${currentMonth}-10` } });
@@ -160,7 +160,7 @@ describe('CurrentExpenses - Moyen de paiement et numéro de chèque', () => {
     // Remplir les autres champs obligatoires et enregistrer
     const modalForm = screen.getByText('Enregistrer').closest('form')!;
     const dateInput = modalForm.querySelector('input[type="date"]') as HTMLInputElement;
-    const amountInput = modalForm.querySelector('input[type="number"]') as HTMLInputElement;
+    const amountInput = modalForm.querySelector('input[role="spinbutton"], input[type="number"]') as HTMLInputElement;
 
     fireEvent.change(dateInput, { target: { value: `${currentMonth}-11` } });
     fireEvent.change(screen.getByPlaceholderText(/Ex: Courses/i), { target: { value: 'Supermarché' } });

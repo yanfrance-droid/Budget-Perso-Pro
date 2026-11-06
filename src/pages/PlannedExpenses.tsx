@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Button, Modal } from '../components/ui/Components';
+import { Card, Button, Modal, AmountInput } from '../components/ui/Components';
 import { Plus, Edit2, Trash2, CheckCircle, Clock, AlertTriangle, Calendar, FileText, Tag, Filter } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import { useServerDataOptional } from '../contexts/ServerDataContext';
@@ -536,10 +536,7 @@ export default function PlannedExpenses() {
               <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.85rem' }}>
                 Montant estimé (€) <span style={{ color: '#dc2626' }}>*</span>
               </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
+              <AmountInput
                 required
                 placeholder="Ex: 450.00"
                 value={formData.estimatedAmount}

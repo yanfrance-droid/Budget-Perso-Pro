@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateId } from '../../db/database';
 import type { Transaction, Category, Account } from '../../db/database';
-import { Modal, Button, AccountSelect } from '../ui/Components';
+import { Modal, Button, AccountSelect, AmountInput } from '../ui/Components';
 import { Plus } from 'lucide-react';
 import { useServerDataOptional } from '../../contexts/ServerDataContext';
 
@@ -184,13 +184,11 @@ export default function ExpenseModal({
         </div>
         <div className="form-group">
           <label className="form-label">Montant (€)</label>
-          <input 
-            type="number" 
-            step="0.01" 
+          <AmountInput 
             className="form-control" 
             required 
             value={formData.amount === undefined ? '' : formData.amount} 
-            onChange={e => setFormData({ ...formData, amount: parseFloat(e.target.value) })} 
+            onValueChange={val => setFormData({ ...formData, amount: val })} 
           />
         </div>
         <div className="form-group">

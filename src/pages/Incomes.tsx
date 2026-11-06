@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { generateId } from '../db/database';
 import type { Transaction, IncomePayer } from '../db/database';
-import { Card, Button, Modal, StatusBadgeSelect, AccountSelect, IncomePayerSelect } from '../components/ui/Components';
+import { Card, Button, Modal, StatusBadgeSelect, AccountSelect, IncomePayerSelect, AmountInput } from '../components/ui/Components';
 import { Plus, Edit2, Trash2, Filter, Repeat, RotateCcw } from 'lucide-react';
+import { roundCurrency } from '../engine/calculations';
 
 const INCOME_STATUS_OPTIONS = [
   { value: 'cleared', label: 'Encaissé' },
@@ -88,6 +89,7 @@ export default function Incomes() {
   const totalObligatoires = useMemo(() => {
     if (!allTransactions || !loans) return 0;
 
+    const accountMap = new Map((accounts || []).map(a => [a.id, a]));
     const activeTx = allTransactions.filter(t => t.status !== 'disabled');
     const selectedMonthTx = activeTx.filter(t => {
       if (t.recurrenceDay && !t.templateId) return selectedMonth >= t.date.substring(0, 7);
@@ -102,7 +104,15 @@ export default function Incomes() {
       const amt = Math.abs(Number(t.amount) || 0);
       if (t.type === 'fixed_expense') fixed += amt;
       else if (t.type === 'variable_expense') variable += amt;
-      else if (t.type === 'transfer') transfer += amt;
+      else if (t.type === 'transfer') {
+        const srcAcc = t.accountId ? accountMap.get(t.accountId) : undefined;
+        const destAcc = t.destinationAccountId ? accountMap.get(t.destinationAccountId) : undefined;
+        const isSrcSavings = srcAcc ? srcAcc.type === 'savings' : false;
+        const isDestSavings = destAcc ? destAcc.type === 'savings' : true;
+        if (isDestSavings && !isSrcSavings) {
+          transfer += amt;
+        }
+      }
     });
 
     let totalLoanPlanned = 0;
@@ -141,8 +151,8 @@ export default function Incomes() {
       }
     });
 
-    return fixed + variable + totalLoanPlanned + transfer;
-  }, [allTransactions, loans, selectedMonth]);
+    return roundCurrency(fixed + variable + totalLoanPlanned + transfer);
+  }, [allTransactions, loans, accounts, selectedMonth]);
 
   const resteAVivreBrutTheorique = totalPlanned - totalObligatoires;
 
@@ -690,13 +700,11 @@ export default function Incomes() {
 
           <div className="form-group">
             <label className="form-label">Montant (€)</label>
-            <input 
-              type="number" 
-              step="0.01" 
+            <AmountInput 
               className="form-control" 
               required 
               value={formData.amount === undefined ? '' : formData.amount} 
-              onChange={e => setFormData({...formData, amount: parseFloat(e.target.value)})} 
+              onValueChange={val => setFormData({...formData, amount: val})} 
             />
           </div>
 

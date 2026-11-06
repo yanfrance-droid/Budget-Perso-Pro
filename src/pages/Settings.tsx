@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { generateId } from '../db/database';
 import type { Category, TransactionType, Account, AccountType, IncomePayer } from '../db/database';
-import { Card, Button, Modal } from '../components/ui/Components';
+import { Card, Button, Modal, AmountInput } from '../components/ui/Components';
 import { 
   Plus, Edit2, Archive, ArchiveRestore, Trash2, Download, Upload, 
   AlertTriangle, CheckCircle, ShieldCheck, Server, RefreshCw, LogOut, 
@@ -2289,10 +2289,9 @@ export default function Settings() {
 
           <div className="form-group">
             <label className="form-label" htmlFor="acc-balance-field">Solde initial (€)</label>
-            <input 
+            <AmountInput 
               id="acc-balance-field"
-              type="number" 
-              step="0.01"
+              allowNegative
               className="form-control" 
               required 
               value={accountInitialBalance} 

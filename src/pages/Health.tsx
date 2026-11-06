@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { generateId } from '../db/database';
 import type { Transaction } from '../db/database';
-import { Card, Button, Modal, StatusBadgeSelect, AccountSelect } from '../components/ui/Components';
+import { Card, Button, Modal, StatusBadgeSelect, AccountSelect, AmountInput } from '../components/ui/Components';
 import { Plus, Edit2, Trash2, DollarSign, CheckCircle2, AlertCircle, Filter, RotateCcw } from 'lucide-react';
 import { calculateMonthlyHealthSummary } from '../engine/calculations';
 import { getCurrentMonth } from '../utils/dateUtils';
@@ -630,7 +630,7 @@ export default function Health() {
           </div>
           <div className="form-group">
             <label className="form-label">Montant (€)</label>
-            <input type="number" step="0.01" className="form-control" required value={expenseForm.amount === undefined ? '' : expenseForm.amount} onChange={e => setExpenseForm({...expenseForm, amount: parseFloat(e.target.value)})} />
+            <AmountInput className="form-control" required value={expenseForm.amount === undefined ? '' : expenseForm.amount} onValueChange={val => setExpenseForm({...expenseForm, amount: val})} />
           </div>
           <div className="form-group">
             <label className="form-label">Catégorie</label>
@@ -683,7 +683,7 @@ export default function Health() {
           </div>
           <div className="form-group">
             <label className="form-label">Montant remboursé (€)</label>
-            <input type="number" step="0.01" className="form-control" required value={reimbursementForm.amount === undefined ? '' : reimbursementForm.amount} onChange={e => setReimbursementForm({...reimbursementForm, amount: parseFloat(e.target.value)})} />
+            <AmountInput className="form-control" required value={reimbursementForm.amount === undefined ? '' : reimbursementForm.amount} onValueChange={val => setReimbursementForm({...reimbursementForm, amount: val})} />
           </div>
           <div className="form-group">
             <label className="form-label">Compte crédité</label>

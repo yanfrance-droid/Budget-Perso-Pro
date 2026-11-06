@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { generateId } from '../db/database';
 import type { Transaction } from '../db/database';
-import { Card, Button, Modal, StatusBadgeSelect, AccountSelect } from '../components/ui/Components';
+import { Card, Button, Modal, StatusBadgeSelect, AccountSelect, AmountInput } from '../components/ui/Components';
 import { Plus, Edit2, Trash2, Filter, AlertTriangle, CheckCircle, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 
 const FIXED_EXPENSE_STATUS_OPTIONS = [
@@ -807,7 +807,7 @@ export default function FixedExpenses() {
 
           <div className="form-group">
             <label className="form-label">Montant {isAnnual ? 'Annuel' : 'Mensuel'} (€)</label>
-            <input type="number" step="0.01" className="form-control" required value={formData.amount === undefined ? '' : formData.amount} onChange={e => setFormData({...formData, amount: parseFloat(e.target.value)})} />
+            <AmountInput className="form-control" required value={formData.amount === undefined ? '' : formData.amount} onValueChange={val => setFormData({...formData, amount: val})} />
           </div>
           
           <div className="form-group">

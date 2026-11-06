@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { generateId } from '../db/database';
 import type { Loan, Transaction, LoanPaymentHistory } from '../db/database';
-import { Card, Button, Modal, StatusBadgeSelect, AccountSelect } from '../components/ui/Components';
+import { Card, Button, Modal, StatusBadgeSelect, AccountSelect, AmountInput } from '../components/ui/Components';
 import { 
   Plus, Edit2, Trash2, Filter, Pause, Play, 
   Archive, ArchiveRestore, History, CreditCard, Info, AlertCircle, CheckCircle 
@@ -921,26 +921,26 @@ export default function Loans() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label">Capital initial (€)</label>
-              <input type="number" step="0.01" name="initialAmount" defaultValue={editingLoan?.initialAmount} required className="form-control" />
+              <AmountInput name="initialAmount" defaultValue={editingLoan?.initialAmount} required className="form-control" />
             </div>
             <div className="form-group">
               <label className="form-label">Capital restant dû (€)</label>
-              <input type="number" step="0.01" name="remainingCapital" defaultValue={editingLoan?.remainingCapital} required className="form-control" />
+              <AmountInput name="remainingCapital" defaultValue={editingLoan?.remainingCapital} required className="form-control" />
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label">Mensualité (€)</label>
-              <input type="number" step="0.01" name="monthlyPayment" defaultValue={editingLoan?.monthlyPayment} required className="form-control" />
+              <AmountInput name="monthlyPayment" defaultValue={editingLoan?.monthlyPayment} required className="form-control" />
             </div>
             <div className="form-group">
               <label className="form-label">Taux (%)</label>
-              <input type="number" step="0.01" name="interestRate" defaultValue={editingLoan?.interestRate} className="form-control" />
+              <AmountInput decimals={4} name="interestRate" defaultValue={editingLoan?.interestRate} className="form-control" />
             </div>
             <div className="form-group">
               <label className="form-label">Assurance (€)</label>
-              <input type="number" step="0.01" name="insurancePart" defaultValue={editingLoan?.insurancePart} className="form-control" />
+              <AmountInput name="insurancePart" defaultValue={editingLoan?.insurancePart} className="form-control" />
             </div>
           </div>
 
@@ -1170,9 +1170,7 @@ export default function Loans() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Nouvelle mensualité (€) *</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
+                  <AmountInput 
                     className="form-control" 
                     value={newPaymentAmount} 
                     onChange={(e) => setNewPaymentAmount(e.target.value)} 
@@ -1349,9 +1347,7 @@ export default function Loans() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label">Montant total (€)</label>
-              <input 
-                type="number" 
-                step="0.01" 
+              <AmountInput 
                 name="amount" 
                 defaultValue={editingPayment ? editingPayment.amount : allLoans.find(l => l.id === selectedLoanId)?.monthlyPayment} 
                 required 
@@ -1388,9 +1384,7 @@ export default function Loans() {
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
                 Si laissée vide, elle sera calculée automatiquement selon le taux d'intérêt. Ce montant sera déduit du capital restant dû lorsque la mensualité est débitée (et recrédité si elle repasse en attente).
               </p>
-              <input 
-                type="number" 
-                step="0.01" 
+              <AmountInput 
                 name="amortizedCapital" 
                 defaultValue={editingPayment?.amortizedCapital}
                 placeholder="Ex: 500" 

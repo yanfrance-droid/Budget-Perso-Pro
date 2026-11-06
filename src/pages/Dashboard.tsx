@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
+import { AmountInput } from '../components/ui/Components';
 import { getDashboardStorageKeys } from '../db/database';
 import { EXPENSE_TYPES } from '../engine/calculations';
 import { 
@@ -822,9 +823,8 @@ export default function Dashboard() {
             <div className="bank-input-row">
               <label className="bank-input-label">Solde bancaire réel</label>
               <div className="bank-input-wrapper">
-                <input 
-                  type="number" 
-                  step="0.01" 
+                <AmountInput 
+                  allowNegative
                   className="bank-input-field" 
                   value={manualBalance} 
                   onChange={e => {
@@ -845,9 +845,7 @@ export default function Dashboard() {
             <div className="bank-input-row">
               <label className="bank-input-label">Encours Carte 1 (débit différé)</label>
               <div className="bank-input-wrapper">
-                <input 
-                  type="number" 
-                  step="0.01" 
+                <AmountInput 
                   className="bank-input-field" 
                   value={card1} 
                   onChange={e => {
@@ -868,9 +866,7 @@ export default function Dashboard() {
             <div className="bank-input-row">
               <label className="bank-input-label">Encours Carte 2 (débit différé)</label>
               <div className="bank-input-wrapper">
-                <input 
-                  type="number" 
-                  step="0.01" 
+                <AmountInput 
                   className="bank-input-field" 
                   value={card2} 
                   onChange={e => {

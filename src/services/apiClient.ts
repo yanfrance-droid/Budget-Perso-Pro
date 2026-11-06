@@ -61,8 +61,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const timeoutSignal = typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(15000) : undefined;
+
   const response = await fetch(`${baseUrl}${endpoint}`, {
     ...options,
+    signal: options.signal || timeoutSignal,
     headers
   });
 

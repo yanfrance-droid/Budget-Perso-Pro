@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { generateId } from '../db/database';
 import type { Transaction, Account } from '../db/database';
-import { Card, Button, Modal, StatusBadgeSelect } from '../components/ui/Components';
+import { Card, Button, Modal, StatusBadgeSelect, AmountInput } from '../components/ui/Components';
 import { calculateRealBalance } from '../engine/calculations';
 import { Plus, Edit2, Trash2, Filter, CheckCircle2, Repeat, ArrowRight, ShieldAlert, AlertCircle, AlertTriangle, RotateCcw, Wallet, ChevronDown, ChevronRight, Archive, XCircle, Settings, TrendingUp, X } from 'lucide-react';
 import { computeOccurrenceDate } from '../services/recurrenceService';
@@ -95,6 +95,7 @@ export default function Savings() {
 
   // État panneau latéral de paramètres dédié à un compte d'épargne
   const [selectedAccountForDrawer, setSelectedAccountForDrawer] = useState<Account | null>(null);
+  const isMouseDownOnDrawerOverlayRef = useRef(false);
 
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [newAddAccountForm, setNewAddAccountForm] = useState<{
@@ -1832,14 +1833,12 @@ export default function Savings() {
 
           <div className="form-group">
             <label className="form-label" htmlFor="operation-amount">Montant (€)</label>
-            <input 
+            <AmountInput 
               id="operation-amount"
-              type="number" 
-              step="0.01" 
               className="form-control" 
               required 
               value={formData.amount === undefined ? '' : formData.amount} 
-              onChange={e => setFormData({...formData, amount: parseFloat(e.target.value)})} 
+              onValueChange={val => setFormData({...formData, amount: val})} 
             />
           </div>
 
@@ -2142,12 +2141,11 @@ export default function Savings() {
           </div>
           <div className="form-group">
             <label className="form-label">Solde initial (€)</label>
-            <input 
-              type="number" 
-              step="0.01" 
+            <AmountInput 
+              allowNegative
               className="form-control" 
               value={newAccountForm.initialBalance} 
-              onChange={e => setNewAccountForm({...newAccountForm, initialBalance: parseFloat(e.target.value) || 0})} 
+              onValueChange={val => setNewAccountForm({...newAccountForm, initialBalance: val ?? 0})} 
             />
           </div>
           <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
@@ -2218,9 +2216,9 @@ export default function Savings() {
 
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" htmlFor="new-acc-balance">Solde initial (€) *</label>
-              <input
+              <AmountInput
                 id="new-acc-balance"
-                type="text"
+                allowNegative
                 className="form-control"
                 required
                 value={newAddAccountForm.initialBalance}
@@ -2232,9 +2230,9 @@ export default function Savings() {
               <label className="form-label" htmlFor="new-acc-rate">
                 Taux d'intérêt annuel (%) <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>(facultatif)</span>
               </label>
-              <input
+              <AmountInput
                 id="new-acc-rate"
-                type="text"
+                decimals={3}
                 className="form-control"
                 placeholder="Ex: 3.0"
                 value={newAddAccountForm.interestRate}
@@ -2246,9 +2244,8 @@ export default function Savings() {
               <label className="form-label" htmlFor="new-acc-target">
                 Objectif d'épargne (€) <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>(facultatif)</span>
               </label>
-              <input
+              <AmountInput
                 id="new-acc-target"
-                type="text"
                 className="form-control"
                 placeholder="Ex: 10000"
                 value={newAddAccountForm.targetAmount}
@@ -2276,7 +2273,18 @@ export default function Savings() {
           !(allTransactions || []).some(t => t.accountId === acc.id || t.destinationAccountId === acc.id);
 
         return (
-          <div className="drawer-overlay" onClick={handleCloseAccountDrawer}>
+          <div 
+            className="drawer-overlay" 
+            onMouseDown={e => {
+              isMouseDownOnDrawerOverlayRef.current = e.target === e.currentTarget;
+            }}
+            onClick={e => {
+              if (isMouseDownOnDrawerOverlayRef.current && e.target === e.currentTarget) {
+                handleCloseAccountDrawer();
+              }
+              isMouseDownOnDrawerOverlayRef.current = false;
+            }}
+          >
             <div className="drawer-panel" onClick={e => e.stopPropagation()}>
               {/* En-tête du panneau */}
               <div className="drawer-header">
@@ -2376,9 +2384,9 @@ export default function Savings() {
                         <label className="form-label" htmlFor={`drawer-balance-${acc.id}`}>
                           Solde initial de départ (€)
                         </label>
-                        <input
+                        <AmountInput
                           id={`drawer-balance-${acc.id}`}
-                          type="text"
+                          allowNegative
                           className="form-control"
                           required
                           value={drawerForm.initialBalance}
@@ -2423,9 +2431,9 @@ export default function Savings() {
                         <label className="form-label" htmlFor={`drawer-rate-${acc.id}`}>
                           Taux d'intérêt annuel (%) <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>(facultatif, informatif)</span>
                         </label>
-                        <input
+                        <AmountInput
                           id={`drawer-rate-${acc.id}`}
-                          type="text"
+                          decimals={3}
                           className="form-control"
                           placeholder="Ex: 3.0"
                           value={drawerForm.interestRate}
@@ -2437,9 +2445,8 @@ export default function Savings() {
                         <label className="form-label" htmlFor={`drawer-target-${acc.id}`}>
                           Objectif d'épargne (€) <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>(facultatif)</span>
                         </label>
-                        <input
+                        <AmountInput
                           id={`drawer-target-${acc.id}`}
-                          type="text"
                           className="form-control"
                           placeholder="Ex: 10000"
                           value={drawerForm.targetAmount}

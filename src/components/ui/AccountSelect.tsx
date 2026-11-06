@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react';
 import type { Account } from '../../db/database';
 import { generateId } from '../../db/database';
 import { useServerDataOptional } from '../../contexts/ServerDataContext';
-import { Button, Modal } from './Components';
+import { Button, Modal, AmountInput } from './Components';
 import { formatAccountOptionLabel } from '../../services/accountPresentation';
 
 export interface AccountSelectProps {
@@ -220,12 +220,11 @@ export const AccountSelect: React.FC<AccountSelectProps> = ({
 
             <div className="form-group">
               <label className="form-label">Solde initial (€)</label>
-              <input
-                type="number"
-                step="0.01"
+              <AmountInput
+                allowNegative
                 className="form-control"
                 value={newAccForm.initialBalance}
-                onChange={e => setNewAccForm({ ...newAccForm, initialBalance: parseFloat(e.target.value) || 0 })}
+                onValueChange={val => setNewAccForm({ ...newAccForm, initialBalance: val ?? 0 })}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
                     e.preventDefault();

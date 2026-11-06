@@ -22,9 +22,22 @@ export function Button({ children, variant = 'primary', icon, className, ...prop
 }
 
 export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode }) {
+  const isMouseDownOnOverlayRef = React.useRef(false);
+
   if (!isOpen) return null;
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div 
+      className="modal-overlay" 
+      onMouseDown={e => {
+        isMouseDownOnOverlayRef.current = e.target === e.currentTarget;
+      }}
+      onClick={e => {
+        if (isMouseDownOnOverlayRef.current && e.target === e.currentTarget) {
+          onClose();
+        }
+        isMouseDownOnOverlayRef.current = false;
+      }}
+    >
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{title}</h2>
@@ -39,3 +52,4 @@ export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean, o
 export { StatusBadgeSelect, type StatusOption, type StatusBadgeSelectProps } from './StatusBadgeSelect';
 export { AccountSelect, type AccountSelectProps } from './AccountSelect';
 export { IncomePayerSelect, type IncomePayerSelectProps } from './IncomePayerSelect';
+export { AmountInput, type AmountInputProps } from './AmountInput';

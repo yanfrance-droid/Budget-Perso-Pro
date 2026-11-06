@@ -20,6 +20,7 @@ export function initDatabase(dbPath = process.env.DB_PATH || './data/budget.db')
 
   // Activation des contraintes et du mode WAL pour la concurrence multi-appareils
   db.exec('PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA busy_timeout = 5000;');
   if (dbPath !== ':memory:') {
     db.exec('PRAGMA journal_mode = WAL;');
   }
