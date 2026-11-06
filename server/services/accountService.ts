@@ -121,6 +121,12 @@ export function deleteAccount(db: DatabaseSync, id: string): void {
     throw new Error('Impossible de supprimer ce compte : un prêt en cours y est associé.');
   }
 
+  const recurrenceCheck = db.prepare('SELECT COUNT(*) as count FROM recurrence_templates WHERE accountId = ? OR destinationAccountId = ?');
+  const recurrenceCount = (recurrenceCheck.get(id, id) as any).count;
+  if (recurrenceCount > 0) {
+    throw new Error('Impossible de supprimer ce compte : un modèle d\'opération récurrente y est associé.');
+  }
+
   const stmt = db.prepare('DELETE FROM accounts WHERE id = ?');
   stmt.run(id);
 }

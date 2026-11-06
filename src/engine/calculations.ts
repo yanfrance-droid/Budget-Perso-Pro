@@ -11,6 +11,16 @@ export const EXPENSE_TYPES = [
 
 export type ExpenseType = typeof EXPENSE_TYPES[number];
 
+/**
+ * Arrondit strictement au centime d'euro le plus proche (2 décimales)
+ * et neutralise tout résidu négatif infinitésimal (-0 ou -2.84e-14 issu de IEEE 754).
+ */
+export function roundCurrency(val: number): number {
+  if (isNaN(val) || !isFinite(val)) return 0;
+  const rounded = Math.round((val + Number.EPSILON) * 100) / 100;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
 export function getTransactionImpact(t: Transaction): number {
   if (t.type === 'income') return t.amount;
   if (['fixed_expense', 'variable_expense', 'daily', 'health_expense', 'loan_payment'].includes(t.type)) {
@@ -26,60 +36,63 @@ export function getTransactionImpact(t: Transaction): number {
 }
 
 export function calculateRealBalance(account: Account, transactions: Transaction[]): number {
-  return account.initialBalance + transactions
+  const sum = account.initialBalance + transactions
     .filter(t => (t.accountId === account.id || t.destinationAccountId === account.id) && t.status === 'cleared')
-    .reduce((sum, t) => {
+    .reduce((s, t) => {
       if (t.type === 'transfer') {
         if (t.accountId === account.id && t.destinationAccountId === account.id) {
-          return sum;
+          return s;
         }
         if (t.destinationAccountId === account.id) {
-          return sum + Math.abs(t.amount);
+          return s + Math.abs(t.amount);
         }
         if (t.accountId === account.id) {
-          return sum - Math.abs(t.amount);
+          return s - Math.abs(t.amount);
         }
       }
-      return sum + getTransactionImpact(t);
+      return s + getTransactionImpact(t);
     }, 0);
+  return roundCurrency(sum);
 }
 
 export function calculateAvailableBalance(account: Account, transactions: Transaction[]): number {
-  return account.initialBalance + transactions
+  const sum = account.initialBalance + transactions
     .filter(t => (t.accountId === account.id || t.destinationAccountId === account.id) && ['cleared', 'pending'].includes(t.status))
-    .reduce((sum, t) => {
+    .reduce((s, t) => {
       if (t.type === 'transfer') {
         if (t.accountId === account.id && t.destinationAccountId === account.id) {
-          return sum;
+          return s;
         }
         if (t.destinationAccountId === account.id) {
-          return sum + Math.abs(t.amount);
+          return s + Math.abs(t.amount);
         }
         if (t.accountId === account.id) {
-          return sum - Math.abs(t.amount);
+          return s - Math.abs(t.amount);
         }
       }
-      return sum + getTransactionImpact(t);
+      return s + getTransactionImpact(t);
     }, 0);
+  return roundCurrency(sum);
 }
 
 export function calculateForecastedBalance(account: Account, transactions: Transaction[]): number {
-  return account.initialBalance + transactions
+  const sum = account.initialBalance + transactions
     .filter(t => (t.accountId === account.id || t.destinationAccountId === account.id) && t.status !== 'disabled')
-    .reduce((sum, t) => {
+    .reduce((s, t) => {
       if (t.type === 'transfer') {
         if (t.accountId === account.id && t.destinationAccountId === account.id) {
-          return sum;
+          return s;
         }
         if (t.destinationAccountId === account.id) {
-          return sum + Math.abs(t.amount);
+          return s + Math.abs(t.amount);
         }
         if (t.accountId === account.id) {
-          return sum - Math.abs(t.amount);
+          return s - Math.abs(t.amount);
         }
       }
-      return sum + getTransactionImpact(t);
+      return s + getTransactionImpact(t);
     }, 0);
+  return roundCurrency(sum);
 }
 
 export function calculateResteAVivre(
@@ -114,7 +127,7 @@ export function calculateResteAVivre(
     expenses += savingsOut;
   }
   
-  return incomes + healthReimbursements - expenses;
+  return roundCurrency(incomes + healthReimbursements - expenses);
 }
 
 export function applyLoanPayment(loan: Loan, paymentAmount: number, isInterestIncluded: boolean, interestAmount: number = 0): Loan {
@@ -160,7 +173,12 @@ export function calculateHealthSummary(expenses: Transaction[], reimbursements: 
     totalRemaining += remaining;
   });
 
-  return { totalExpense, totalReimbursed, totalExpected, totalRemaining };
+  return {
+    totalExpense: roundCurrency(totalExpense),
+    totalReimbursed: roundCurrency(totalReimbursed),
+    totalExpected: roundCurrency(totalExpected),
+    totalRemaining: roundCurrency(totalRemaining)
+  };
 }
 
 /**
@@ -204,7 +222,12 @@ export function calculateMonthlyHealthSummary(
   // Solde net santé du mois (peut être négatif si les remboursements du mois dépassent les dépenses)
   const totalRemaining = totalExpense - totalReimbursed;
 
-  return { totalExpense, totalReimbursed, totalExpected, totalRemaining };
+  return {
+    totalExpense: roundCurrency(totalExpense),
+    totalReimbursed: roundCurrency(totalReimbursed),
+    totalExpected: roundCurrency(totalExpected),
+    totalRemaining: roundCurrency(totalRemaining)
+  };
 }
 
 export function calculateLoanProgress(initialAmount: number, remainingCapital: number): number {

@@ -29,7 +29,7 @@ import {
   type LoanCapitalRecordInput, 
   type DiscrepancyReport 
 } from '../services/loanCapitalHistoryService';
-import { calculateRealBalance } from '../engine/calculations';
+import { calculateRealBalance, roundCurrency } from '../engine/calculations';
 import { apiClient } from '../services/apiClient';
 import { resolvePrimaryAccountId } from '../services/accountPresentation';
 
@@ -42,12 +42,13 @@ const formatMonthLabel = (m: string) => {
 
 // Formatage français conforme aux exigences d'affichage (ex: 2 100,00 €)
 const formatCurrency = (val: number): string => {
+  const normalized = roundCurrency(val);
   return new Intl.NumberFormat('fr-FR', {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  }).format(val);
+  }).format(normalized);
 };
 import { useServerDataOptional } from '../contexts/ServerDataContext';
 
@@ -85,37 +86,59 @@ export default function Dashboard() {
   const currentMonth = getCurrentMonth();
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
-  const isEditingSettingsRef = useRef(false);
+  const isUserEditedRef = useRef(false);
   const isSettingsInitializedRef = useRef(false);
+  const serverDataRef = useRef(serverData);
+  serverDataRef.current = serverData;
 
-  // Synchronisation des paramètres depuis le serveur (uniquement si non en cours d'édition locale)
+  // Génération automatique des échéances récurrentes pour le mois courant et le mois sélectionné
   useEffect(() => {
-    if (serverData?.dashboardSettings && !isEditingSettingsRef.current) {
-      setManualBalance(serverData.dashboardSettings.manualBalance || "0");
-      setCard1(serverData.dashboardSettings.card1 || "0");
-      setCard2(serverData.dashboardSettings.card2 || "0");
+    if (serverData && typeof serverData.generateMonthlyOccurrences === 'function') {
+      serverData.generateMonthlyOccurrences(currentMonth).catch(console.error);
+      if (selectedMonth && selectedMonth !== currentMonth) {
+        serverData.generateMonthlyOccurrences(selectedMonth).catch(console.error);
+      }
+    }
+  }, [selectedMonth, currentMonth, serverData?.generateMonthlyOccurrences]);
+
+  // Synchronisation des paramètres depuis le serveur (uniquement si non en cours d'édition utilisateur)
+  useEffect(() => {
+    if (serverData?.dashboardSettings && !isUserEditedRef.current) {
+      const newManualBalance = serverData.dashboardSettings.manualBalance || "0";
+      const newCard1 = serverData.dashboardSettings.card1 || "0";
+      const newCard2 = serverData.dashboardSettings.card2 || "0";
+      setManualBalance(newManualBalance);
+      setCard1(newCard1);
+      setCard2(newCard2);
+      localStorage.setItem(storageKeys.manualBalance, newManualBalance);
+      localStorage.setItem(storageKeys.card1, newCard1);
+      localStorage.setItem(storageKeys.card2, newCard2);
       isSettingsInitializedRef.current = true;
     }
-  }, [serverData?.dashboardSettings]);
+  }, [serverData?.dashboardSettings, storageKeys]);
 
+  // Sauvegarde automatique vers le serveur UNIQUEMENT suite à une saisie utilisateur volontaire
   useEffect(() => {
-    localStorage.setItem(storageKeys.manualBalance, manualBalance);
-    localStorage.setItem(storageKeys.card1, card1);
-    localStorage.setItem(storageKeys.card2, card2);
+    if (isUserEditedRef.current) {
+      localStorage.setItem(storageKeys.manualBalance, manualBalance);
+      localStorage.setItem(storageKeys.card1, card1);
+      localStorage.setItem(storageKeys.card2, card2);
+    }
 
-    // Ne pas déclencher de sauvegarde automatique vers le serveur tant que les paramètres réels n'ont pas été chargés depuis SQLite
-    if (!isSettingsInitializedRef.current) {
+    // Ne pas déclencher de sauvegarde vers le serveur si ce n'est pas une saisie utilisateur volontaire
+    if (!isSettingsInitializedRef.current || !isUserEditedRef.current) {
       return;
     }
 
     const timer = setTimeout(() => {
-      if (serverData) {
-        serverData.saveDashboardSettings({ manualBalance, card1, card2 }).catch(console.error);
+      if (serverDataRef.current) {
+        serverDataRef.current.saveDashboardSettings({ manualBalance, card1, card2 }).catch(console.error);
+        isUserEditedRef.current = false;
       }
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [manualBalance, card1, card2, storageKeys, serverData]);
+  }, [manualBalance, card1, card2, storageKeys]);
   
   const parsedManualBalance = Number(manualBalance) || 0;
   const parsedCard1 = Number(card1) || 0;
@@ -315,6 +338,16 @@ export default function Dashboard() {
     isResteAPayer = false
   ) => {
     txs.forEach(t => {
+      // Filtrage strict du compte principal dans le calcul du Solde Prévisionnel :
+      // Les dépenses directes (hors transferts) ne doivent alimenter le "Reste à payer" que si elles concernent
+      // le compte principal ou ne possèdent pas d'accountId explicite (rétrocompatibilité historique).
+      if (isResteAPayer && t.type !== 'transfer') {
+        const belongsToPrimary = !primaryAccountId || !t.accountId || t.accountId === primaryAccountId;
+        if (!belongsToPrimary) {
+          return;
+        }
+      }
+
       const amt = Math.abs(Number(t.amount) || 0);
       if (t.type === 'fixed_expense') target.fixed += amt;
       else if (t.type === 'variable_expense') target.variable += amt;
@@ -384,7 +417,9 @@ export default function Dashboard() {
       // Toute sortie non pointée débitant le compte principal est un impayé antérieur
       return isDebitingPrimary;
     }
-    return true;
+    // Pour toutes les autres charges directes : filtrer strictement sur le compte principal
+    const belongsToPrimary = !primaryAccountId || !t.accountId || t.accountId === primaryAccountId;
+    return belongsToPrimary;
   });
   const totalImpayesPassesCurrent = pastUnpaidExpensesCurrent.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
 
@@ -435,14 +470,14 @@ export default function Dashboard() {
   });
   currentResteAPayer.loan = currentMonthLoanRemaining;
 
-  const totalResteAPayerCurrentMonth = currentResteAPayer.fixed + currentResteAPayer.variable + currentResteAPayer.loan + currentResteAPayer.daily + currentResteAPayer.health + currentResteAPayer.transfer + totalImpayesPassesCurrent;
+  const totalResteAPayerCurrentMonth = roundCurrency(currentResteAPayer.fixed + currentResteAPayer.variable + currentResteAPayer.loan + currentResteAPayer.daily + currentResteAPayer.health + currentResteAPayer.transfer + totalImpayesPassesCurrent);
 
-  const cardTotal = parsedCard1 + parsedCard2;
+  const cardTotal = roundCurrency(parsedCard1 + parsedCard2);
 
   // Solde prévisionnel en banque = solde réel déclaré + virements internes entrants prévus − cartes différées − reste à payer actuel
   // Note : les remboursements de santé encaissés ('cleared') sont déjà présents sur le compte bancaire réel,
   // ils ne doivent donc pas être additionnés une seconde fois pour éviter tout double comptage.
-  const soldePrevisionnel = parsedManualBalance + pendingIncomingTransfersCurrent - cardTotal - totalResteAPayerCurrentMonth;
+  const soldePrevisionnel = roundCurrency(parsedManualBalance + pendingIncomingTransfersCurrent - cardTotal - totalResteAPayerCurrentMonth);
 
   // -------------------------------------------------------------
   // 2. Charges et budget du mois sélectionné (selectedMonth)
@@ -495,10 +530,11 @@ export default function Dashboard() {
     totalLoanRemainingPrevu += Math.max(0, plannedForLoan - handledForLoan);
   });
 
-  // Prise en compte des paiements effectifs de crédits archivés ce mois-ci
-  const activeLoanIds = new Set(loans.map(l => l.id));
+  // Prise en compte des paiements effectifs de crédits archivés ce mois-ci (exclut les crédits supprimés)
+  const archivedLoans = (serverData?.loans || []).filter(l => l.isArchived);
+  const archivedLoanIds = new Set(archivedLoans.map(l => l.id));
   selectedMonthPayments.forEach(p => {
-    if (p.linkedId && !activeLoanIds.has(p.linkedId)) {
+    if (p.linkedId && archivedLoanIds.has(p.linkedId)) {
       if (p.status === 'cleared' || p.status === 'pending') {
         const amt = Number(p.amount) || 0;
         totalLoanPlanned += amt;
@@ -513,7 +549,7 @@ export default function Dashboard() {
   resteAPayer.loan = totalLoanRemaining;
   resteAPayerPrevu.loan = totalLoanRemainingPrevu;
 
-  const totalCharges = chargesMois.fixed + chargesMois.variable + chargesMois.loan + chargesMois.daily + chargesMois.health + chargesMois.transfer;
+  const totalCharges = roundCurrency(chargesMois.fixed + chargesMois.variable + chargesMois.loan + chargesMois.daily + chargesMois.health + chargesMois.transfer);
 
   // Données de répartition pour le graphique circulaire (6 grands postes de dépenses)
   const rawExpenseItems = [
@@ -617,13 +653,13 @@ export default function Dashboard() {
     (EXPENSE_TYPES as readonly string[]).includes(t.type) &&
     !(t.recurrenceDay && !t.templateId)
   ).sort((a, b) => a.date.localeCompare(b.date));
-  const totalImpayesPassesSelected = pastUnpaidExpensesSelected.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
+  const totalImpayesPassesSelected = roundCurrency(pastUnpaidExpensesSelected.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0));
 
   // Reste à payer strict du mois sélectionné (sans ajout des impayés antérieurs pour éviter tout doublon)
-  const totalResteAPayerMois = resteAPayer.fixed + resteAPayer.variable + resteAPayer.loan + resteAPayer.daily + resteAPayer.health + resteAPayer.transfer;
+  const totalResteAPayerMois = roundCurrency(resteAPayer.fixed + resteAPayer.variable + resteAPayer.loan + resteAPayer.daily + resteAPayer.health + resteAPayer.transfer);
 
   // Total des charges obligatoires du mois sélectionné
-  const totalObligatoires = chargesMois.fixed + chargesMois.variable + chargesMois.loan + chargesMois.transfer;
+  const totalObligatoires = roundCurrency(chargesMois.fixed + chargesMois.variable + chargesMois.loan + chargesMois.transfer);
 
   // -------------------------------------------------------------
   // Suivi informatif des remboursements de santé en attente
@@ -791,12 +827,14 @@ export default function Dashboard() {
                   step="0.01" 
                   className="bank-input-field" 
                   value={manualBalance} 
-                  onChange={e => setManualBalance(e.target.value)} 
-                  onFocus={() => { isEditingSettingsRef.current = true; }}
+                  onChange={e => {
+                    isUserEditedRef.current = true;
+                    setManualBalance(e.target.value);
+                  }} 
                   onBlur={() => {
-                    isEditingSettingsRef.current = false;
-                    if (serverData) {
-                      serverData.saveDashboardSettings({ manualBalance, card1, card2 }).catch(console.error);
+                    if (isUserEditedRef.current && serverDataRef.current) {
+                      serverDataRef.current.saveDashboardSettings({ manualBalance, card1, card2 }).catch(console.error);
+                      isUserEditedRef.current = false;
                     }
                   }}
                 />
@@ -812,12 +850,14 @@ export default function Dashboard() {
                   step="0.01" 
                   className="bank-input-field" 
                   value={card1} 
-                  onChange={e => setCard1(e.target.value)} 
-                  onFocus={() => { isEditingSettingsRef.current = true; }}
+                  onChange={e => {
+                    isUserEditedRef.current = true;
+                    setCard1(e.target.value);
+                  }} 
                   onBlur={() => {
-                    isEditingSettingsRef.current = false;
-                    if (serverData) {
-                      serverData.saveDashboardSettings({ manualBalance, card1, card2 }).catch(console.error);
+                    if (isUserEditedRef.current && serverDataRef.current) {
+                      serverDataRef.current.saveDashboardSettings({ manualBalance, card1, card2 }).catch(console.error);
+                      isUserEditedRef.current = false;
                     }
                   }}
                 />
@@ -833,12 +873,14 @@ export default function Dashboard() {
                   step="0.01" 
                   className="bank-input-field" 
                   value={card2} 
-                  onChange={e => setCard2(e.target.value)} 
-                  onFocus={() => { isEditingSettingsRef.current = true; }}
+                  onChange={e => {
+                    isUserEditedRef.current = true;
+                    setCard2(e.target.value);
+                  }} 
                   onBlur={() => {
-                    isEditingSettingsRef.current = false;
-                    if (serverData) {
-                      serverData.saveDashboardSettings({ manualBalance, card1, card2 }).catch(console.error);
+                    if (isUserEditedRef.current && serverDataRef.current) {
+                      serverDataRef.current.saveDashboardSettings({ manualBalance, card1, card2 }).catch(console.error);
+                      isUserEditedRef.current = false;
                     }
                   }}
                 />

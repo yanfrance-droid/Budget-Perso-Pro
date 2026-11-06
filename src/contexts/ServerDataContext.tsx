@@ -40,7 +40,7 @@ export interface ServerDataContextType {
   reactivateLoanFuturePlanned: (id: string) => Promise<number>;
   updateLoanPaymentStatus: (paymentId: string, status: Transaction['status']) => Promise<{ payment: Transaction; loan: Loan }>;
   saveRecurrenceTemplate: (template: Partial<RecurrenceTemplate>) => Promise<RecurrenceTemplate>;
-  deleteRecurrenceTemplate: (id: string) => Promise<void>;
+  deleteRecurrenceTemplate: (id: string, fromDate?: string) => Promise<void>;
   generateMonthlyOccurrences: (month: string) => Promise<number>;
   saveDashboardSettings: (settings: Partial<DashboardSettings>) => Promise<void>;
 }
@@ -332,9 +332,13 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return saved;
   };
 
-  const deleteRecurrenceTemplate = async (id: string): Promise<void> => {
-    await apiClient.recurrence.delete(id);
+  const deleteRecurrenceTemplate = async (id: string, fromDate?: string): Promise<void> => {
+    await apiClient.recurrence.delete(id, fromDate);
     setRecurrenceTemplates(prev => prev.filter(t => t.id !== id));
+    try {
+      const freshTxs = await apiClient.transactions.get();
+      setTransactions(freshTxs);
+    } catch {}
   };
 
   const generateMonthlyOccurrences = async (month: string): Promise<number> => {

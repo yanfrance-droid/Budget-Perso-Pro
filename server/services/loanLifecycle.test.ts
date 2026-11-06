@@ -4,6 +4,7 @@ import { initDatabase } from '../db.ts';
 import { 
   saveLoan, 
   getLoanById, 
+  deleteLoan,
   updateLoanPaymentStatus,
   calculateAmortizedCapitalServer,
   withTransaction 
@@ -583,6 +584,67 @@ describe('Cycle de vie complet et Fiabilité du Module Crédits (SQLite)', () =>
       // Cas où montant négatif ou capital négatif -> retourne 0
       expect(calculateAmortizedCapitalServer(-100, 10000)).toBe(0);
       expect(calculateAmortizedCapitalServer(300, -500)).toBe(0);
+    });
+  });
+
+  describe('9. Nettoyage propre lors de la suppression d\'un crédit (MOYEN-04)', () => {
+    it('supprime les mensualités impayées (planned/pending) et détache les mensualités payées (cleared)', () => {
+      const loan = saveLoan(db, {
+        name: 'Prêt Personnel à supprimer',
+        lender: 'Banque Test',
+        initialAmount: 6000,
+        remainingCapital: 5000,
+        monthlyPayment: 200,
+        startDate: '2026-08-01',
+        durationMonths: 30,
+        accountId
+      });
+
+      // 1. Mensualité passée déjà payée (cleared)
+      const clearedTx = saveTransaction(db, {
+        date: '2026-08-05',
+        type: 'loan_payment',
+        amount: 200,
+        status: 'cleared',
+        accountId,
+        linkedId: loan.id
+      });
+
+      // 2. Mensualité en cours en attente (pending)
+      const pendingTx = saveTransaction(db, {
+        date: '2026-09-05',
+        type: 'loan_payment',
+        amount: 200,
+        status: 'pending',
+        accountId,
+        linkedId: loan.id
+      });
+
+      // 3. Mensualité future prévue (planned)
+      const plannedTx = saveTransaction(db, {
+        date: '2026-10-05',
+        type: 'loan_payment',
+        amount: 200,
+        status: 'planned',
+        accountId,
+        linkedId: loan.id
+      });
+
+      // Suppression du prêt
+      deleteLoan(db, loan.id!);
+
+      // Le prêt n'existe plus
+      expect(getLoanById(db, loan.id!)).toBeNull();
+
+      // Les mensualités non cleared (pending et planned) sont définitivement supprimées
+      expect(getTransactionById(db, pendingTx.id!)).toBeNull();
+      expect(getTransactionById(db, plannedTx.id!)).toBeNull();
+
+      // La mensualité passée cleared est conservée mais détachée (linkedId = null)
+      const preservedClearedTx = getTransactionById(db, clearedTx.id!);
+      expect(preservedClearedTx).not.toBeNull();
+      expect(preservedClearedTx?.status).toBe('cleared');
+      expect(preservedClearedTx?.linkedId).toBeNull();
     });
   });
 });

@@ -26,6 +26,7 @@ vi.mock('../contexts/ServerDataContext', () => ({
       updateTransactionStatus: vi.fn(),
       updateLoanPaymentStatus: vi.fn(),
       saveDashboardSettings: vi.fn().mockResolvedValue({ success: true }),
+      generateMonthlyOccurrences: vi.fn().mockResolvedValue(0),
       refreshAll: vi.fn()
     };
   }

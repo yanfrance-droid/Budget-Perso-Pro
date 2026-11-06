@@ -499,7 +499,8 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
       }
       if (pathname.startsWith('/api/recurrence-templates/') && req.method === 'DELETE') {
         const id = pathname.split('/').pop()!;
-        deleteRecurrenceTemplate(db, id);
+        const fromDate = parsedUrl.searchParams.get('fromDate') || undefined;
+        deleteRecurrenceTemplate(db, id, fromDate);
         return sendJson(200, { success: true });
       }
       if (pathname === '/api/recurrence-templates/generate' && req.method === 'POST') {

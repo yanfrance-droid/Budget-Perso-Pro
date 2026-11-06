@@ -410,7 +410,8 @@ export default function FixedExpenses() {
                   accountId: formData.accountId || tpl.accountId,
                   categoryId: formData.categoryId || tpl.categoryId,
                   notes: formData.notes !== undefined ? formData.notes : tpl.notes,
-                  recurrenceDay: safeDay
+                  recurrenceDay: safeDay,
+                  updateFutureOccurrencesFromDate: realDate
                 });
               }
             }
@@ -423,6 +424,10 @@ export default function FixedExpenses() {
               recurrenceDay: safeDay,
               isCustomized: !updateFutureMonths
             });
+
+            if (updateFutureMonths) {
+              await serverData.refreshAll();
+            }
           }
         }
       } else if (formData.recurrenceDay) {
@@ -527,7 +532,7 @@ export default function FixedExpenses() {
     if (!deleteModalState.expense?.templateId) return;
     try {
       if (serverData) {
-        await serverData.deleteRecurrenceTemplate(deleteModalState.expense.templateId);
+        await serverData.deleteRecurrenceTemplate(deleteModalState.expense.templateId, `${selectedMonth}-01`);
         await serverData.deleteTransaction(deleteModalState.expense.id);
       }
       setDeleteModalState({ isOpen: false });

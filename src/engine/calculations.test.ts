@@ -10,7 +10,8 @@ import {
   calculateMonthlyHealthSummary,
   calculateLoanProgress, 
   getLoanPaymentsSummary,
-  calculateAmortizedCapital
+  calculateAmortizedCapital,
+  roundCurrency
 } from './calculations';
 
 describe('Financial Calculations', () => {
@@ -213,6 +214,44 @@ describe('Financial Calculations', () => {
       expect(calculateAmortizedCapital(-500, 10000, 2.0, 10)).toBe(0);
       expect(calculateAmortizedCapital(500, -10000, 2.0, 10)).toBe(0);
       expect(calculateAmortizedCapital(NaN, 10000, 2.0, 10)).toBe(0);
+    });
+  });
+
+  describe('roundCurrency and floating-point protection (CRITIQUE-06)', () => {
+    it('neutralizes IEEE 754 precision drift like 1 - 0.9 - 0.1 and negative zero', () => {
+      const rawDiff = 1 - 0.9 - 0.1; // -2.7755575615628914e-17 in IEEE 754
+      expect(rawDiff < 0).toBe(true);
+      const rounded = roundCurrency(rawDiff);
+      expect(rounded).toBe(0);
+      expect(Object.is(rounded, -0)).toBe(false);
+      expect(Object.is(rounded, 0)).toBe(true);
+      expect(rounded < 0).toBe(false);
+    });
+
+    it('rounds currency amounts accurately to 2 decimal places', () => {
+      expect(roundCurrency(10.004)).toBe(10);
+      expect(roundCurrency(10.005)).toBe(10.01);
+      expect(roundCurrency(-0)).toBe(0);
+      expect(roundCurrency(NaN)).toBe(0);
+      expect(roundCurrency(Infinity)).toBe(0);
+    });
+
+    it('calculates real, available and forecasted balance without floating point drift', () => {
+      const testAccount: Account = {
+        id: 'acc-drift',
+        name: 'Checking Drift',
+        type: 'checking',
+        initialBalance: 1000.2,
+        referenceDate: '2026-10-01'
+      };
+      const driftTxs: Transaction[] = [
+        { id: 'd1', date: '2026-10-02', type: 'fixed_expense', amount: 700.1, status: 'cleared', accountId: 'acc-drift' },
+        { id: 'd2', date: '2026-10-03', type: 'fixed_expense', amount: 300.1, status: 'cleared', accountId: 'acc-drift' }
+      ];
+      const real = calculateRealBalance(testAccount, driftTxs);
+      expect(real).toBe(0);
+      expect(Object.is(real, 0)).toBe(true);
+      expect(real < 0).toBe(false);
     });
   });
 });

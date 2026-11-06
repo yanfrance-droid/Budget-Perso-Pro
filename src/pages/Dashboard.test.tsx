@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
 import Dashboard from './Dashboard';
 
 let mockAccounts: any[] = [];
@@ -11,6 +11,7 @@ let mockDashboardSettings: any = null;
 const mockUpdateTransactionStatus = vi.fn().mockResolvedValue(true);
 const mockUpdateLoanPaymentStatus = vi.fn().mockResolvedValue(true);
 const mockSaveDashboardSettings = vi.fn().mockResolvedValue({ success: true });
+const mockGenerateMonthlyOccurrences = vi.fn().mockResolvedValue(0);
 
 vi.mock('../contexts/ServerDataContext', () => ({
   useServerDataOptional: () => {
@@ -27,6 +28,7 @@ vi.mock('../contexts/ServerDataContext', () => ({
       updateTransactionStatus: mockUpdateTransactionStatus,
       updateLoanPaymentStatus: mockUpdateLoanPaymentStatus,
       saveDashboardSettings: mockSaveDashboardSettings,
+      generateMonthlyOccurrences: mockGenerateMonthlyOccurrences,
       refreshAll: vi.fn(),
     };
   }
@@ -894,25 +896,97 @@ describe('Dashboard component', () => {
       vi.useRealTimers();
     });
 
-    it('déclenche saveDashboardSettings une fois les paramètres initialisés et après modification ou blur', async () => {
+    it('ne renvoie PAS de requête écrasante saveDashboardSettings lors du chargement des paramètres serveur ou d\'une restauration (CRITIQUE-02)', async () => {
       vi.useFakeTimers();
       mockAccounts = [{ id: 'acc-1', name: 'Courant', type: 'checking' }];
       mockDashboardSettings = { manualBalance: '1500', card1: '100', card2: '50' };
 
       const { rerender } = render(<Dashboard />);
-
-      // Après chargement des paramètres depuis SQLite
       rerender(<Dashboard />);
 
-      // Si l'utilisateur ou le composant effectue un autosave suite à une modification
+      // Avancer le temps au-delà de 500ms
+      vi.advanceTimersByTime(1000);
+
+      // Aucune sauvegarde parasite vers le serveur si l'utilisateur n'a pas effectué de saisie volontaire
+      expect(mockSaveDashboardSettings).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('déclenche saveDashboardSettings suite à une saisie utilisateur volontaire (onChange / debounce)', async () => {
+      vi.useFakeTimers();
+      mockAccounts = [{ id: 'acc-1', name: 'Courant', type: 'checking' }];
+      mockDashboardSettings = { manualBalance: '1500', card1: '100', card2: '50' };
+
+      const { container } = render(<Dashboard />);
+      const balanceInput = container.querySelector('input.bank-input-field') as HTMLInputElement;
+      expect(balanceInput).not.toBeNull();
+
+      fireEvent.change(balanceInput, { target: { value: '1750' } });
+
+      // Avancer le temps pour déclencher le debounce de 500ms
       vi.advanceTimersByTime(600);
 
       expect(mockSaveDashboardSettings).toHaveBeenCalledWith(expect.objectContaining({
-        manualBalance: '1500',
+        manualBalance: '1750',
         card1: '100',
         card2: '50'
       }));
       vi.useRealTimers();
+    });
+
+    it('appelle automatiquement generateMonthlyOccurrences pour le mois courant au montage du tableau de bord (CRITIQUE-03)', () => {
+      mockAccounts = [{ id: 'acc-1', name: 'Courant', type: 'checking' }];
+      render(<Dashboard />);
+      expect(mockGenerateMonthlyOccurrences).toHaveBeenCalledWith('2026-10');
+    });
+
+    it('neutralise le drift IEEE 754 dans le solde prévisionnel et n\'affiche jamais -0,00 € (CRITIQUE-06)', () => {
+      mockAccounts = [{ id: 'acc-1', name: 'Courant', type: 'checking' }];
+      // Solde réel déclaré = 1000.2
+      // Charges restantes = 700.1 (fixed_expense) + 300.1 (variable_expense)
+      // 1000.2 - 700.1 - 300.1 = -2.8421709430404007e-14
+      mockDashboardSettings = { manualBalance: '1000.2', card1: '0', card2: '0' };
+      mockTransactions = [
+        { id: 'tx-1', date: '2026-10-10', type: 'fixed_expense', amount: 700.1, status: 'planned', accountId: 'acc-1' },
+        { id: 'tx-2', date: '2026-10-20', type: 'variable_expense', amount: 300.1, status: 'planned', accountId: 'acc-1' }
+      ];
+
+      const { container } = render(<Dashboard />);
+      const forecastCard = container.querySelector('.forecast-card');
+      expect(forecastCard).not.toBeNull();
+      // Ne doit PAS avoir la classe d'alerte négative
+      expect(forecastCard?.classList.contains('forecast-negative')).toBe(false);
+      // Le montant affiché doit être 0,00 € et non -0,00 €
+      const forecastAmount = container.querySelector('.forecast-amount');
+      expect(forecastAmount?.textContent).toContain('0,00');
+      expect(forecastAmount?.textContent).not.toContain('-');
+    });
+
+    it('filtre strictement le compte principal dans le calcul du Solde Prévisionnel et ignore les dépenses d\'un compte secondaire (CRITIQUE-04)', () => {
+      mockAccounts = [
+        { id: 'acc-main', name: 'Compte Principal', type: 'checking' },
+        { id: 'acc-secondary', name: 'Compte Secondaire', type: 'checking' }
+      ];
+      mockDashboardSettings = { 
+        manualBalance: '2000', 
+        card1: '0', 
+        card2: '0',
+        primaryAccountId: 'acc-main'
+      };
+      mockTransactions = [
+        // Dépense sur le compte principal : 500 € à payer -> doit être déduite
+        { id: 'tx-main', date: '2026-10-15', type: 'fixed_expense', amount: 500, status: 'planned', accountId: 'acc-main' },
+        // Dépense historique sans accountId : 200 € à payer -> doit être déduite
+        { id: 'tx-legacy', date: '2026-10-18', type: 'variable_expense', amount: 200, status: 'planned' },
+        // Dépense explicitement sur le compte secondaire : 800 € à payer -> NE DOIT PAS être déduite du compte principal !
+        { id: 'tx-sec', date: '2026-10-20', type: 'fixed_expense', amount: 800, status: 'planned', accountId: 'acc-secondary' }
+      ];
+
+      const { container } = render(<Dashboard />);
+      const forecastAmount = container.querySelector('.forecast-amount');
+      expect(forecastAmount).not.toBeNull();
+      // Solde prévisionnel attendu : 2000 - 500 - 200 = 1300 € (et non 2000 - 1500 = 500 €)
+      expect(forecastAmount?.textContent).toContain('1\u202f300,00');
     });
   });
 });

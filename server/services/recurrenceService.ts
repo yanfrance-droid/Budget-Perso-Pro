@@ -19,6 +19,7 @@ export interface RecurrenceTemplateData {
   createdAt?: string;
   updatedAt?: string;
   payerId?: string;
+  updateFutureOccurrencesFromDate?: string;
 }
 
 export function getAllRecurrenceTemplates(db: DatabaseSync): RecurrenceTemplateData[] {
@@ -113,6 +114,47 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
     disableStmt.run(id, fromDate);
   }
 
+  // Si demandé (application aux mois futurs), mettre à jour toutes les occurrences futures déjà générées
+  // qui ne sont pas déjà débitées ('cleared') et n'ont pas fait l'objet d'une personnalisation ponctuelle (isCustomized = 0)
+  if (data.updateFutureOccurrencesFromDate) {
+    const fromDate = data.updateFutureOccurrencesFromDate;
+    const futureOccurrences = db.prepare(`
+      SELECT id, date FROM transactions
+      WHERE templateId = ? AND date > ? AND status != 'cleared' AND isCustomized = 0
+    `).all(id, fromDate) as { id: string; date: string }[];
+
+    for (const occ of futureOccurrences) {
+      const [y, m] = occ.date.split('-').map(Number);
+      const newOccDate = computeOccurrenceDate(y, m, recurrenceDay);
+      db.prepare(`
+        UPDATE transactions
+        SET amount = ?,
+            label = ?,
+            accountId = ?,
+            destinationAccountId = ?,
+            categoryId = ?,
+            notes = ?,
+            recurrenceDay = ?,
+            date = ?,
+            expectedDate = ?,
+            payerId = ?
+        WHERE id = ?
+      `).run(
+        amount,
+        label,
+        accountId,
+        destinationAccountId,
+        categoryId,
+        notes,
+        recurrenceDay,
+        newOccDate,
+        newOccDate,
+        payerId,
+        occ.id
+      );
+    }
+  }
+
   const getStmt = db.prepare('SELECT * FROM recurrence_templates WHERE id = ?');
   const r = getStmt.get(id) as any;
   return {
@@ -193,17 +235,33 @@ export function generateMonthlyOccurrences(db: DatabaseSync, targetMonth: string
   return generatedCount;
 }
 
-export function deleteRecurrenceTemplate(db: DatabaseSync, id: string): void {
+export function deleteRecurrenceTemplate(db: DatabaseSync, id: string, fromDate?: string): void {
   // Supprime le modèle récurrent
   const stmt = db.prepare('DELETE FROM recurrence_templates WHERE id = ?');
   stmt.run(id);
 
-  // Supprime les occurrences futures associées qui n'ont jamais été débitées en banque (statut != 'cleared')
+  // Détermination de la date pivot (début du mois en cours par défaut)
+  const thresholdDate = fromDate || (() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}-01`;
+  })();
+
+  // Supprime UNIQUEMENT les occurrences futures associées qui n'ont jamais été débitées en banque (statut != 'cleared' et date >= thresholdDate)
   // pour que la récurrence disparaisse définitivement de la vue sur tous les mois futurs,
-  // tout en préservant scrupuleusement l'historique financier des mois où elle a été payée ('cleared').
+  // tout en préservant scrupuleusement l'historique financier et les impayés des mois passés (statut planned ou pending antérieurs).
   const cleanStmt = db.prepare(`
     DELETE FROM transactions
-    WHERE templateId = ? AND status != 'cleared'
+    WHERE templateId = ? AND status != 'cleared' AND date >= ?
   `);
-  cleanStmt.run(id);
+  cleanStmt.run(id, thresholdDate);
+
+  // Détacher les éventuelles transactions passées restantes pour éviter un lien orphelin vers un template supprimé
+  const detachStmt = db.prepare(`
+    UPDATE transactions
+    SET templateId = NULL
+    WHERE templateId = ?
+  `);
+  detachStmt.run(id);
 }

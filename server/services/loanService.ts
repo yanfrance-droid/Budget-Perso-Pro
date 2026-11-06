@@ -366,8 +366,20 @@ export function updateLoanPaymentStatus(
 }
 
 export function deleteLoan(db: DatabaseSync, id: string): void {
-  const stmt = db.prepare('DELETE FROM loans WHERE id = ?');
-  stmt.run(id);
+  withTransaction(db, () => {
+    // 1. Supprime toutes les transactions associées à ce prêt qui ne sont pas encore pointées/payées
+    db.prepare("DELETE FROM transactions WHERE linkedId = ? AND status != 'cleared'").run(id);
+
+    // 2. Détache les transactions déjà payées pour préserver l'historique bancaire sans référence orpheline
+    db.prepare("UPDATE transactions SET linkedId = NULL WHERE linkedId = ? AND status = 'cleared'").run(id);
+
+    // 3. Supprime l'historique des paliers du prêt
+    db.prepare('DELETE FROM loan_payment_history WHERE loanId = ?').run(id);
+
+    // 4. Supprime le prêt de la table loans
+    const stmt = db.prepare('DELETE FROM loans WHERE id = ?');
+    stmt.run(id);
+  });
 }
 
 export function getLoanPaymentHistory(db: DatabaseSync, loanId: string): LoanPaymentHistoryData[] {

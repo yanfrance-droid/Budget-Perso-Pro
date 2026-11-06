@@ -191,7 +191,7 @@ export default function Incomes() {
       if (serverData) {
         // En mode serveur : détache la transaction courante en revenu ponctuel et supprime le modèle récurrent
         const finalAmount = Number(formData.amount) || 0;
-        await serverData.deleteRecurrenceTemplate(formData.templateId);
+        await serverData.deleteRecurrenceTemplate(formData.templateId, `${selectedMonth}-01`);
         await serverData.saveTransaction({
           ...formData,
           id: editingId,
@@ -269,7 +269,7 @@ export default function Incomes() {
 
         try {
           if (serverData) {
-            await serverData.deleteRecurrenceTemplate(formData.templateId);
+            await serverData.deleteRecurrenceTemplate(formData.templateId, `${selectedMonth}-01`);
             await serverData.saveTransaction({
               ...formData,
               id: editingId,
@@ -285,28 +285,72 @@ export default function Incomes() {
           return;
         }
       } else {
-        // 3. Modification classique (ponctuel restant ponctuel, ou récurrent restant récurrent = modification de ce mois uniquement)
+        // 3. Modification classique (ponctuel restant ponctuel, ou récurrent avec choix d'application aux mois futurs)
         let realDate = formData.date || new Date().toISOString().split('T')[0];
+        const daysInMonth = new Date(selYear, selMonth, 0).getDate();
+        const safeDay = Math.min(Math.max(1, recurrenceDay || 1), daysInMonth);
         if (isRecurring && selectedMonth) {
-          const safeDay = Math.min(recurrenceDay || 1, new Date(selYear, selMonth, 0).getDate());
           realDate = `${selYear}-${String(selMonth).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
         }
 
-        // Si l'occurrence est issue d'un modèle, on active isCustomized pour la protéger de toute propagation future
-        const isCustomized = formData.templateId ? true : formData.isCustomized;
+        const existingTx = serverData?.transactions.find(t => t.id === editingId);
+        const templateId = formData.templateId || existingTx?.templateId;
 
-        const payload: Transaction = {
-          ...formData,
-          date: realDate,
-          amount: finalAmount,
-          id: editingId,
-          type: 'income',
-          recurrenceDay: isRecurring ? recurrenceDay : undefined,
-          isCustomized
-        } as Transaction;
+        if (isRecurring && templateId) {
+          const updateFutureMonths = window.confirm(
+            "Souhaitez-vous appliquer ces modifications (montant, libellé, organisme verseur, etc.) également pour TOUS LES MOIS FUTURS ?\n\n" +
+            "• Cliquez sur OK pour mettre à jour ce mois et tous les mois suivants.\n" +
+            "• Cliquez sur Annuler pour modifier UNIQUEMENT ce mois-ci."
+          );
 
-        if (serverData) {
-          await serverData.saveTransaction(payload);
+          if (serverData) {
+            if (updateFutureMonths) {
+              const tpl = serverData.recurrenceTemplates.find(t => t.id === templateId);
+              if (tpl) {
+                await serverData.saveRecurrenceTemplate({
+                  ...tpl,
+                  amount: finalAmount,
+                  label: formData.label || tpl.label,
+                  accountId: formData.accountId || tpl.accountId,
+                  categoryId: formData.categoryId || tpl.categoryId,
+                  notes: formData.notes !== undefined ? formData.notes : tpl.notes,
+                  recurrenceDay: safeDay,
+                  payerId: formData.payerId !== undefined ? (formData.payerId || undefined) : tpl.payerId,
+                  updateFutureOccurrencesFromDate: realDate
+                });
+              }
+            }
+
+            await serverData.saveTransaction({
+              ...formData,
+              id: editingId,
+              date: realDate,
+              amount: finalAmount,
+              type: 'income',
+              recurrenceDay: safeDay,
+              payerId: formData.payerId !== undefined ? (formData.payerId || undefined) : undefined,
+              isCustomized: !updateFutureMonths
+            });
+
+            if (updateFutureMonths) {
+              await serverData.refreshAll();
+            }
+          }
+        } else {
+          // Ponctuel ou sans modèle récurrent
+          const payload: Transaction = {
+            ...formData,
+            date: realDate,
+            amount: finalAmount,
+            id: editingId,
+            type: 'income',
+            recurrenceDay: isRecurring ? safeDay : undefined,
+            isCustomized: false
+          } as Transaction;
+
+          if (serverData) {
+            await serverData.saveTransaction(payload);
+          }
         }
       }
     } else {

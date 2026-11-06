@@ -232,7 +232,7 @@ export const apiClient = {
     getAll: () => request<any[]>('/api/recurrence-templates'),
     save: (template: any) => request<any>('/api/recurrence-templates', { method: 'POST', body: JSON.stringify(template) }),
     saveTemplate: (template: any) => request<any>('/api/recurrence-templates', { method: 'POST', body: JSON.stringify(template) }),
-    delete: (id: string) => request<{ success: boolean }>(`/api/recurrence-templates/${id}`, { method: 'DELETE' }),
+    delete: (id: string, fromDate?: string) => request<{ success: boolean }>(`/api/recurrence-templates/${id}${fromDate ? `?fromDate=${encodeURIComponent(fromDate)}` : ''}`, { method: 'DELETE' }),
     generate: (month: string) => request<{ generated: number }>('/api/recurrence-templates/generate', {
       method: 'POST',
       body: JSON.stringify({ month })

@@ -74,6 +74,7 @@ export interface RecurrenceTemplate {
   createdAt?: string;
   updatedAt?: string;
   payerId?: string; // Référence vers l'organisme verseur IncomePayer
+  updateFutureOccurrencesFromDate?: string;
 }
 
 export interface Loan {
