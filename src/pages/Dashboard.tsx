@@ -33,6 +33,8 @@ import {
 import { calculateRealBalance, roundCurrency } from '../engine/calculations';
 import { apiClient } from '../services/apiClient';
 import { resolvePrimaryAccountId } from '../services/accountPresentation';
+import { DashboardInsightsWidget } from '../components/dashboard/DashboardInsightsWidget';
+import { type InsightsContext } from '../engine/insightsEngine';
 
 // Libellés dynamiques des mois en français
 const formatMonthLabel = (m: string) => {
@@ -703,6 +705,86 @@ export default function Dashboard() {
     return [...overdue, ...upcoming].slice(0, 5);
   }, [transactions, todayStr]);
 
+  // -------------------------------------------------------------
+  // Contexte Conseiller Financier & Flash Insights (100 % en mémoire)
+  // -------------------------------------------------------------
+  const currentDailyTotal = useMemo(() => {
+    return roundCurrency(
+      transactions
+        .filter(t => t.type === 'daily' && t.status !== 'disabled' && t.date.startsWith(currentMonth))
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
+    );
+  }, [transactions, currentMonth]);
+
+  const average3MonthsDaily = useMemo(() => {
+    const [yearStr, monthStr] = currentMonth.split('-');
+    const y = parseInt(yearStr, 10);
+    const m = parseInt(monthStr, 10);
+    const pastMonths: string[] = [];
+    for (let i = 1; i <= 3; i++) {
+      const d = new Date(y, m - 1 - i, 1);
+      const prevMonthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      pastMonths.push(prevMonthStr);
+    }
+    const totals = pastMonths.map(month =>
+      transactions
+        .filter(t => t.type === 'daily' && t.status !== 'disabled' && t.date.startsWith(month))
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
+    );
+    const validTotals = totals.filter(t => t > 0);
+    if (validTotals.length === 0) return 0;
+    return roundCurrency(validTotals.reduce((a, b) => a + b, 0) / validTotals.length);
+  }, [transactions, currentMonth]);
+
+  const { daysElapsed, daysInMonth } = useMemo(() => {
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const dim = new Date(y, m, 0).getDate();
+    return { daysElapsed: d, daysInMonth: dim };
+  }, [todayStr]);
+
+  const liquidSavingsTotal = useMemo(() => {
+    const savingsAccs = accounts.filter(a => a.type === 'savings' && !a.isClosed);
+    return roundCurrency(savingsAccs.reduce((sum, acc) => sum + calculateRealBalance(acc, transactions), 0));
+  }, [accounts, transactions]);
+
+  const healthExpenses = useMemo(() => {
+    return transactions.filter(t => t.type === 'health_expense' && t.status !== 'disabled');
+  }, [transactions]);
+
+  const healthReimbursements = useMemo(() => {
+    return transactions.filter(t => t.type === 'health_reimbursement' && t.status !== 'disabled');
+  }, [transactions]);
+
+  const insightsContext = useMemo<InsightsContext>(() => ({
+    currentDate: todayStr,
+    manualBalance: parsedManualBalance,
+    soldePrevisionnel,
+    pendingTransactions: transactions,
+    currentDailyTotal,
+    average3MonthsDaily,
+    daysElapsed,
+    daysInMonth,
+    liquidSavingsTotal,
+    totalObligatoires,
+    healthExpenses,
+    healthReimbursements,
+    loans
+  }), [
+    todayStr,
+    parsedManualBalance,
+    soldePrevisionnel,
+    transactions,
+    currentDailyTotal,
+    average3MonthsDaily,
+    daysElapsed,
+    daysInMonth,
+    liquidSavingsTotal,
+    totalObligatoires,
+    healthExpenses,
+    healthReimbursements,
+    loans
+  ]);
+
   const currentMonthLabel = formatMonthLabel(currentMonth);
   const selectedMonthLabel = formatMonthLabel(selectedMonth);
 
@@ -806,6 +888,9 @@ export default function Dashboard() {
           <p className="kpi-card-subtext">Fixes, variables, crédit, épargne</p>
         </div>
       </div>
+
+      {/* Conseiller Financier - Flash Insights */}
+      <DashboardInsightsWidget context={insightsContext} />
 
       {/* Grille principale : C. Situation bancaire & E. Tableau des charges */}
       <div className="dashboard-main-grid">

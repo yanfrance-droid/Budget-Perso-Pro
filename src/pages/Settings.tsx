@@ -2155,6 +2155,20 @@ export default function Settings() {
                 </div>
 
                 <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <h4 style={{ margin: '0 0 0.4rem 0', fontSize: '0.98rem' }}>💡 Flash Insights (Conseiller)</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary, #666)', lineHeight: 1.4 }}>
+                    Audit automatique et souverain de votre trésorerie en temps réel (anti-découvert intrajournalier, opportunités d'épargne, dérives des dépenses, vigilance livrets et reste à charge santé).
+                  </p>
+                </div>
+
+                <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <h4 style={{ margin: '0 0 0.4rem 0', fontSize: '0.98rem' }}>📈 Analyse des Charges</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary, #666)', lineHeight: 1.4 }}>
+                    Pilotage stratégique de vos contrats et enveloppes de charges : calcul du taux d'effort fixe réel sur rentrées constatées, détection automatique des hausses tarifaires et cadrage des charges variables.
+                  </p>
+                </div>
+
+                <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   <h4 style={{ margin: '0 0 0.4rem 0', fontSize: '0.98rem' }}>💼 Revenus & Organismes</h4>
                   <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary, #666)', lineHeight: 1.4 }}>
                     Saisie de vos salaires, primes ou pensions. Associez-les à des organismes verseurs (employeurs, caisses) et définissez des récurrences mensuelles automatiques.
@@ -2203,6 +2217,78 @@ export default function Settings() {
                   </p>
                 </div>
               </div>
+
+              {/* NOUVEAUTE V1.2.0 : CONSEILLER FINANCIER & ANALYSE STRATEGIQUE */}
+              <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div style={{ backgroundColor: 'var(--bg-secondary, #fafafa)', padding: '1.25rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.05rem', color: 'var(--text-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>💡 Conseiller Financier & Flash Insights (Moteur Heuristique Local v1.2.0)</span>
+                  </h4>
+                  <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.88rem', lineHeight: 1.5, color: 'var(--text-secondary, #555)' }}>
+                    Intégré directement sur votre Tableau de bord, le Conseiller Financier exécute un audit algorithmique complet de votre situation en moins de <strong>2 millisecondes</strong>, de façon 100 % déterministe en mémoire. Vos données bancaires ne transitent par aucun serveur externe ni modèle d'IA opaque (zéro fuite, confidentialité et souveraineté absolues).
+                  </p>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '0.85rem' }}>
+                    <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', borderLeft: '4px solid #ef4444', backgroundColor: 'rgba(239, 68, 68, 0.08)' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#b91c1c' }}>🚨 Rouge (Critique)</strong>
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: 'var(--text-secondary, #666)' }}>Risque de découvert bancaire intrajournalier ou reste à vivre négatif.</p>
+                    </div>
+                    <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', borderLeft: '4px solid #f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.08)' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#b45309' }}>⚠️ Ambre (Attention)</strong>
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: 'var(--text-secondary, #666)' }}>Sur-cadence des dépenses du quotidien ou dérive d'enveloppe variable.</p>
+                    </div>
+                    <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', borderLeft: '4px solid #3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.08)' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#1d4ed8' }}>ℹ️ Bleu (Conseil)</strong>
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: 'var(--text-secondary, #666)' }}>Recommandation d'optimisation (plafonnement livret A, reste à charge santé).</p>
+                    </div>
+                    <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', borderLeft: '4px solid #10b981', backgroundColor: 'rgba(16, 185, 129, 0.08)' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#047857' }}>✨ Émeraude (Optimal)</strong>
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: 'var(--text-secondary, #666)' }}>Opportunité d'épargne détectée sur excédent net prévisionnel ou situation équilibrée.</p>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.85rem', lineHeight: 1.5, color: 'var(--text-secondary, #555)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div>
+                      <strong>Priorisation & Ergonomie :</strong> Les 3 conseils les plus urgents s'affichent par défaut. Un bouton permet de déplier l'ensemble des insights si nécessaire. Chaque carte peut être masquée pour la session via sa croix (X), mémorisée localement en sessionStorage sans polluer l'interface, avec un bouton de réinitialisation disponible en permanence.
+                    </div>
+                    <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.06)', padding: '0.75rem', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.15)' }}>
+                      <strong style={{ color: 'var(--primary-color)' }}>⚖️ La Règle d'Or Bancaire du Moteur :</strong>
+                      <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.2rem', fontSize: '0.82rem' }}>
+                        <li><strong>Anti-découvert (Crash-Test) :</strong> simule jour par jour le <em>Solde Réel intrajournalier</em> en appliquant conventionnellement les débits avant les crédits afin de garantir que vous ne passerez jamais sous zéro entre deux dates.</li>
+                        <li><strong>Opportunité d'épargne :</strong> ne s'appuie <em>JAMAIS</em> sur le solde réel de début de mois (qui financera les charges à venir), mais attend STRICTEMENT le <em>Solde Prévisionnel net d'atterrissage</em> minoré du fond de roulement de sécurité (500 € par défaut).</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: 'var(--bg-secondary, #fafafa)', padding: '1.25rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.05rem', color: 'var(--text-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>📈 Analyse des Charges Fixes & Variables (/analyse-charges - v1.2.0)</span>
+                  </h4>
+                  <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.88rem', lineHeight: 1.5, color: 'var(--text-secondary, #555)' }}>
+                    Ce module indépendant est strictement séparé de l'<em>Analyse des Dépenses</em> (dédiée aux tickets et courses du quotidien). Il cible la structure de vos coûts contractuels et enveloppes périodiques sur un historique glissant de 6 à 12 mois.
+                  </p>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginTop: '0.5rem' }}>
+                    <div style={{ padding: '0.85rem', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <strong style={{ fontSize: '0.9rem', color: 'var(--text-color)' }}>📑 Volet Charges Fixes (Contrats incompressibles)</strong>
+                      <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontSize: '0.82rem', color: 'var(--text-secondary, #555)', lineHeight: 1.5 }}>
+                        <li><strong>Taux d'Effort Réel :</strong> calculé exclusivement sur les rentrées réelles constatées (<code style={{ fontSize: '0.75rem' }}>Total Charges Fixes / Revenus Encaissés</code>), alertant si le seuil prudentiel de 33 % est dépassé.</li>
+                        <li><strong>Détection des Hausses Tarifaires :</strong> compare chaque contrat entre le mois M et M-1 / moyenne 12 mois. Détecte les augmentations invisibles de forfaits, assurances ou abonnements et calcule immédiatement l'<strong>impact financier annualisé</strong> (+X €/mois = +Y €/an).</li>
+                      </ul>
+                    </div>
+
+                    <div style={{ padding: '0.85rem', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <strong style={{ fontSize: '0.9rem', color: 'var(--text-color)' }}>⛽ Volet Charges Variables (Enveloppes périodiques)</strong>
+                      <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontSize: '0.82rem', color: 'var(--text-secondary, #555)', lineHeight: 1.5 }}>
+                        <li><strong>Comparaison Réalisé vs Budgété :</strong> confrontation directe des pointages effectifs par rapport aux montants prévus définis dans vos charges.</li>
+                        <li><strong>Règle de Dérive Chronique :</strong> si une charge dépasse son budget de plus de 15 % pendant 3 mois consécutifs, le moteur signale un sous-dimensionnement et propose une réévaluation basée sur la moyenne constatée.</li>
+                        <li><strong>Pics Saisonniers :</strong> repérage des anomalies et pics de consommation (chauffage d'hiver, révisions estivales, assurances annuelles).</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* PARTIE 2 : GUIDE TECHNIQUE & ADMINISTRATION */}
@@ -2237,6 +2323,13 @@ export default function Settings() {
                   <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.98rem' }}>🧹 Maintenance, Compactage (VACUUM) & Purge</h4>
                   <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary, #666)', lineHeight: 1.5 }}>
                     L'administrateur peut à tout moment compacter la base via le bouton VACUUM (vidage du WAL et réorganisation des B-Trees) ou purger l'ensemble des fichiers d'instantanés anciens sans jamais impacter la base active <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>budget.db</code>.
+                  </p>
+                </div>
+
+                <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.98rem' }}>🚀 Exploitation & Maintenance Automatisée (Script Shell)</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary, #666)', lineHeight: 1.5 }}>
+                    Le script d'exploitation <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>gestion-personal-budget-pro.sh</code> à la racine du projet automatise la routine de mise à jour, réinstallation et build Docker. Avant chaque opération, il génère une sauvegarde physique SQLite vérifiée par <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>PRAGMA integrity_check</code> et garantit la préservation intégrale des données dans <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>data/</code> et <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>logs/</code>.
                   </p>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Wallet, CreditCard, PiggyBank, Settings, FileText, HeartPulse, Building, BarChart3, LogOut, AlertCircle, RotateCcw, Eye, EyeOff, Moon, Sun, ShoppingBag, HelpCircle, Menu, X, CalendarClock } from 'lucide-react';
+import { LayoutDashboard, Wallet, CreditCard, PiggyBank, Settings, FileText, HeartPulse, Building, BarChart3, LogOut, AlertCircle, RotateCcw, Eye, EyeOff, Moon, Sun, ShoppingBag, HelpCircle, Menu, X, CalendarClock, SlidersHorizontal } from 'lucide-react';
 import Incomes from './pages/Incomes';
 import FixedExpenses from './pages/FixedExpenses';
 import VariableExpenses from './pages/VariableExpenses';
@@ -8,6 +8,7 @@ import CurrentExpenses from './pages/CurrentExpenses';
 import FutureExpenses from './pages/FutureExpenses';
 import PlannedExpenses from './pages/PlannedExpenses';
 import ExpenseAnalysis from './pages/ExpenseAnalysis';
+import ChargesAnalysis from './pages/ChargesAnalysis';
 import Health from './pages/Health';
 import Loans from './pages/Loans';
 import Savings from './pages/Savings';
@@ -198,6 +199,7 @@ function AppContent() {
             <NavLink to="/depenses-courantes" onClick={() => setIsMobileMenuOpen(false)}><CreditCard size={18} style={{marginRight: '8px'}} /> Dépenses</NavLink>
             <NavLink to="/depenses-futures" onClick={() => setIsMobileMenuOpen(false)}><CalendarClock size={18} style={{marginRight: '8px'}} /> Dépenses futures</NavLink>
             <NavLink to="/analyse-depenses" onClick={() => setIsMobileMenuOpen(false)}><BarChart3 size={18} style={{marginRight: '8px'}} /> Analyse des dépenses</NavLink>
+            <NavLink to="/analyse-charges" onClick={() => setIsMobileMenuOpen(false)}><SlidersHorizontal size={18} style={{marginRight: '8px'}} /> Analyse des charges</NavLink>
             <NavLink to="/mes-projets" onClick={() => setIsMobileMenuOpen(false)}><ShoppingBag size={18} style={{marginRight: '8px'}} /> Mes projets</NavLink>
             <NavLink to="/epargne" onClick={() => setIsMobileMenuOpen(false)}><PiggyBank size={18} style={{marginRight: '8px'}} /> Épargne & transferts</NavLink>
           </nav>
@@ -247,6 +249,7 @@ function AppContent() {
             <Route path="/depenses-futures" element={<FutureExpenses />} />
             <Route path="/mes-projets" element={<PlannedExpenses />} />
             <Route path="/analyse-depenses" element={<ExpenseAnalysis />} />
+            <Route path="/analyse-charges" element={<ChargesAnalysis />} />
             <Route path="/sante" element={<Health />} />
             <Route path="/credits" element={<Loans />} />
             <Route path="/epargne" element={<Savings />} />

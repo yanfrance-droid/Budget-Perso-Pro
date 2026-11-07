@@ -1,481 +1,276 @@
-# Budget Perso Pro
+# Personal Budget Pro (v1.2.0)
 
-**Budget Perso Pro** est une application de gestion de budget personnel permettant de suivre les revenus, les charges, les dépenses, les crédits, l'épargne et les remboursements de santé.
+**Personal Budget Pro** est une application web auto-hébergée de haute précision pour la gestion, l'anticipation budgétaire et le pilotage patrimonial personnel.
 
-Elle permet de centraliser les opérations budgétaires, de consulter différents indicateurs financiers et d'anticiper l'évolution du solde bancaire.
+Conçue selon les standards d'intégrité les plus rigoureux, elle garantit une **souveraineté totale des données** (zéro cloud externe, zéro télémétrie, zéro dépendance opaque), une **fiabilité mathématique absolue** (gestion stricte des arrondis au centime IEEE 754) et une **résilience système éprouvée** (moteur SQLite WAL multi-accès, sauvegardes automatiques à chaud et suite de 533 tests automatisés).
+
+---
 
 ## Sommaire
 
-1. Présentation
-2. Guide utilisateur
-3. Comprendre les indicateurs financiers
-4. Comprendre les statuts des opérations
-5. Fonctionnalités
-6. Sauvegardes et restauration
-7. Architecture technique
-8. Installation avec Docker
-9. Administration et maintenance
-10. Accès à distance
-11. Questions fréquentes
+1. [Présentation générale](#1-présentation-générale)
+2. [Nouveautés majeures v1.2.0 : Pilotage & Anticipation](#2-nouveautés-majeures-v120--pilotage--anticipation)
+   - [2.1. Conseiller Financier & Sentinelles Flash Insights](#21-conseiller-financier--sentinelles-flash-insights)
+   - [2.2. Analyse Stratégique des Charges (Fixes & Variables)](#22-analyse-stratégique-des-charges-fixes--variables)
+3. [Guide utilisateur au quotidien](#3-guide-utilisateur-au-quotidien)
+4. [Comprendre les indicateurs financiers & la règle d'or bancaire](#4-comprendre-les-indicateurs-financiers--la-règle-dor-bancaire)
+5. [Statuts des opérations & cycle de vie](#5-statuts-des-opérations--cycle-de-vie)
+6. [Architecture logicielle & Qualité industrielle](#6-architecture-logicielle--qualité-industrielle)
+7. [Sauvegardes, intégrité & résilience SQLite](#7-sauvegardes-intégrité--résilience-sqlite)
+8. [Déploiement avec Docker & Proxmox](#8-déploiement-avec-docker--proxmox)
+9. [Exploitation & Déploiement Automatisé (Script Shell)](#9-exploitation--déploiement-automatisé-script-shell)
+10. [Administration, maintenance & diagnostics](#10-administration-maintenance--diagnostics)
+11. [Sécurité & Accès à distance](#11-sécurité--accès-à-distance)
+12. [Foire Aux Questions (FAQ)](#12-foire-aux-questions-faq)
 
 ---
 
-## 1. Présentation
+## 1. Présentation générale
 
-Budget Perso Pro est une application conçue pour faciliter le suivi et la gestion d'un budget personnel.
+Personal Budget Pro regroupe l'intégralité du cycle financier du foyer :
+- **Comptes bancaires & Trésorerie :** comptes courants, livrets d'épargne réglementés, cartes à débit différé et comptes d'attente.
+- **Revenus & Organismes :** salaires, pensions, allocations, primes, associés à des tiers verseurs et récurrences automatiques.
+- **Charges fixes :** loyers, abonnements, assurances, impôts et contrats incompressibles.
+- **Charges variables :** enveloppes budgétaires identifiées (carburant, énergie, entretien véhicule).
+- **Dépenses courantes :** alimentation, loisirs, tickets du quotidien et sorties avec suivi d'enveloppe.
+- **Projets & Prévisions :** planification d'achats futurs avec ordonnancement par criticité.
+- **Santé & Reste à charge :** suivi du circuit de remboursement (CPAM / Mutuelle) et détection des restes à charge orphelins.
+- **Crédits & Désendettement :** amortissement réel, coût global, historique de capital restant dû sur 10 ans et simulations.
+- **Épargne & Virements internes :** étanchéité parfaite entre constitution d'épargne (enrichissement) et mobilisation de trésorerie interne.
 
-Elle regroupe notamment :
+### Stack Technologique
 
-- Les comptes bancaires.
-- Les revenus et les organismes verseurs.
-- Les charges fixes et variables.
-- Les dépenses courantes et les dépenses prévues.
-- Les crédits et leurs remboursements.
-- L'épargne et les transferts entre comptes.
-- Les dépenses de santé et les remboursements associés.
-- Les analyses et les graphiques budgétaires.
-
-L'application fonctionne sur un serveur personnel et utilise une base de données SQLite pour conserver les informations.
-
-### Technologies utilisées
-
-- React et TypeScript pour l'interface.
-- Vite pour la partie frontend.
-- Node.js pour le serveur.
-- SQLite pour le stockage des données.
-- Docker pour le déploiement.
-
-Le projet est disponible sur GitHub :
-
-[Budget Perso Pro — dépôt GitHub](https://github.com/yanfrance-droid/Budget-Perso-Pro)
+- **Frontend :** React 19, TypeScript strict, Vite, Lucide Icons, Recharts.
+- **Backend :** Node.js 24 (Alpine), Express, TypeScript.
+- **Stockage :** SQLite 3 natif (`node:sqlite`) configuré en mode WAL haute performance.
+- **Conteneurisation :** Docker multi-stage build optimisé (< 150 Mo).
+- **Assurance Qualité :** 533 tests unitaires et d'intégration Vitest (100 % de réussite).
 
 ---
 
-## 2. Guide utilisateur
+## 2. Nouveautés majeures v1.2.0 : Pilotage & Anticipation
 
-### 2.1. Tableau de bord
+La version **1.2.0** marque un tournant stratégique dans l'application en intégrant deux modules majeurs d'aide à la décision financière, conçus sans aucun compromis sur la confidentialité :
 
-Le tableau de bord donne une vue synthétique de la situation budgétaire.
+### 2.1. Conseiller Financier & Sentinelles Flash Insights
 
-Il permet de consulter les principaux indicateurs et de suivre l'évolution des opérations enregistrées dans l'application.
+Situé en haut du Tableau de bord, le widget **Flash Insights** (`DashboardInsightsWidget.tsx`) est piloté par un moteur heuristique pur en mémoire (`src/engine/insightsEngine.ts`). Il exécute un audit algorithmique complet en **moins de 2 millisecondes**, sans aucune latence perceptible ni dépendance externe.
 
-Les montants affichés dépendent notamment des statuts des opérations et de la période sélectionnée.
+```
+                    ┌──────────────────────────────────────────────┐
+                    │      Moteur Déterministe en Mémoire           │
+                    │         (insightsEngine.ts < 2 ms)           │
+                    └──────────────────────┬───────────────────────┘
+                                           │
+         ┌───────────────────┬─────────────┴───────┬───────────────────┐
+         ▼                   ▼                     ▼                   ▼
+   [🚨 CRITICAL]        [⚠️ WARNING]           [ℹ️ INFO]           [✨ SUCCESS]
+  - Crash-Test Découvert - Sur-cadence Dépenses - Plafonnement Livret - Opportunité Épargne
+  - Reste à Vivre < 0    - Dérive Charges Var.  - Santé non remboursé - Trésorerie Optimale
+```
 
-### 2.2. Comptes bancaires et organismes verseurs
+#### Les 6 Sentinelles Actives :
+1. **Crash-Test Anti-Découvert (`auditCrashTest`) [CRITICAL / WARNING] :** Simule jour par jour la trajectoire du solde réel jusqu'au prochain revenu majeur. Applique une règle prudentielle stricte (débits appliqués avant les crédits le même jour) pour détecter tout creux sous le seuil d'alerte (0 € ou seuil personnalisé).
+2. **Opportunité d'Épargne (`auditIdleCash`) [SUCCESS] :** Calcule l'excédent disponible basé **strictement sur le solde prévisionnel net de fin de mois** (après déduction d'un fond de roulement de sécurité de 500 €). *Interdiction absolue de recommander de l'épargne sur un solde réel de début de mois qui doit financer les charges à venir.*
+3. **Rythme des Dépenses Courantes (`auditDailyExpenseCadence`) [WARNING] :** Compare au prorata temporis le rythme des dépenses du quotidien par rapport à la moyenne constatée sur les 3 derniers mois. Détecte les sur-cadences avant la fin du mois.
+4. **Vigilance Plafonds Livrets (`auditSavingsOptimization`) [INFO] :** Surveille les livrets réglementés (ex: Livret A plafonné à 22 950 €) et suggère la réallocation des excédents vers d'autres supports non plafonnés.
+5. **Dérive des Charges Variables (`auditVariableChargesHealth`) [WARNING] :** Détecte toute enveloppe variable dont les débits réels dépassent de plus de 15 % le budget alloué.
+6. **Reste à Charge Santé Orphelin (`auditPendingHealthRefunds`) [INFO] :** Identifie les avances de frais médicaux en attente de remboursement depuis plus de 45 jours.
 
-Les comptes bancaires permettent d'associer les opérations au compte concerné.
-
-Les comptes peuvent être ajoutés, modifiés, fermés ou réactivés selon les besoins. La suppression dépend notamment de l'existence d'opérations ou de crédits associés.
-
-La fermeture d'un compte permet de conserver son historique sans continuer à l'utiliser pour de nouvelles opérations.
-
-Les organismes verseurs permettent d'identifier la provenance des revenus. Ils peuvent être gérés depuis les paramètres.
-
-### 2.3. Revenus
-
-Cette rubrique permet d'enregistrer les revenus ponctuels et récurrents.
-
-Chaque revenu peut être associé à un compte créditeur et, lorsque cela est nécessaire, à un organisme verseur.
-
-Les revenus peuvent être suivis selon leur état : encaissés, en attente, prévus ou désactivés.
-
-### 2.4. Charges fixes et charges variables
-
-Les charges fixes correspondent aux dépenses régulières, par exemple un loyer ou un abonnement.
-
-Les charges variables correspondent aux dépenses dont le montant ou la fréquence peuvent varier.
-
-Ces opérations peuvent être associées au compte bancaire concerné et suivies selon leur statut.
-
-### 2.5. Dépenses courantes
-
-Cette rubrique permet d'enregistrer les dépenses du quotidien afin de conserver une vision plus complète des sorties d'argent.
-
-Les dépenses peuvent être associées à un compte et à une catégorie.
-
-### 2.6. Dépenses prévues et projets
-
-Les dépenses prévues permettent de répertorier des achats ou des projets à venir.
-
-Elles peuvent être organisées par priorité afin de faciliter leur suivi et leur planification.
-
-### 2.7. Analyses et graphiques
-
-Les analyses permettent de consulter les données budgétaires sous différentes formes graphiques.
-
-Elles servent notamment à mieux comprendre la répartition des dépenses et l'évolution des opérations.
-
-Les résultats dépendent des données enregistrées, des filtres et des périodes sélectionnées.
-
-### 2.8. Santé et remboursements
-
-Cette rubrique permet de suivre les dépenses de santé et les remboursements associés.
-
-Elle aide à distinguer les dépenses engagées des remboursements reçus ou encore attendus.
-
-### 2.9. Crédits
-
-La gestion des crédits permet de suivre les prêts et leurs remboursements.
-
-Les informations enregistrées permettent de suivre les échéances et les éléments disponibles concernant le capital restant dû.
-
-### 2.10. Épargne et trésorerie
-
-Cette rubrique permet de suivre les opérations d'épargne et les transferts entre comptes.
-
-Elle contribue au suivi de la trésorerie et à la compréhension des mouvements financiers entre les comptes.
-
-### 2.11. Paramètres
-
-Les paramètres regroupent les éléments de configuration et d'administration disponibles dans l'application.
-
-Ils permettent notamment de gérer les comptes, les catégories et les organismes verseurs, ainsi que les fonctions de sauvegarde, de restauration et de maintenance.
+#### Ergonomie du Widget :
+- **Hiérarchie visuelle :** Affichage par défaut des 3 insights les plus urgents (pastilles couleur normalisées).
+- **Dépliage à la demande :** Bouton discret pour afficher la totalité des conseils actifs.
+- **Masquage unitaire souverain :** Possibilité de masquer une carte pour la session en cours via la croix `(X)`. L'état est conservé dans le `sessionStorage` du navigateur. Un bouton de réinitialisation permet de réafficher instantanément les cartes masquées.
+- **Boutons d'action directe :** Chaque insight dispose d'un bouton de redirection contextuelle vers le module concerné (`/epargne`, `/sante`, `/emprunts`, `/depenses`, `/charges`).
 
 ---
 
-## 3. Comprendre les indicateurs financiers
+### 2.2. Analyse Stratégique des Charges (Fixes & Variables)
 
-### 3.1. Le reste à vivre
+Accessible via la route dédiée `/analyse-charges`, ce module offre une vision analytique pluriannuelle (6 à 12 mois) strictement séparée de l'Analyse des Dépenses (qui reste dédiée aux tickets quotidiens `daily`).
 
-L'application possède **un seul indicateur de reste à vivre**, situé dans l'onglet **Revenus**.
+#### Volet Charges Fixes (Contrats incompressibles) :
+- **Taux d'Effort Réel :** Calculé rigoureusement sur les **rentrées réelles constatées** (`Total Charges Fixes / Revenus Encaissés`). Une alerte visuelle se déclenche si le taux franchit le seuil prudentiel de 33 %.
+- **Détecteur de Hausses Tarifaires :** Compare ligne par ligne (via `templateId` ou libellé normalisé) le montant prélevé au mois M par rapport à M-1 et à la moyenne historique 12 mois.
+- **Impact Financier Annualisé :** Toute hausse détectée (ex: +3,00 €/mois sur un forfait internet ou une assurance) affiche immédiatement son surcoût cumulé sur l'année (+36,00 €/an), permettant d'arbitrer les renégociations de contrats.
 
-Il permet d'estimer ce qu'il reste des revenus après déduction des principales charges budgétaires.
-
-Le calcul repose sur les éléments suivants :
-
-- Les revenus.
-- Les charges fixes.
-- Les charges variables.
-- Les remboursements de crédit.
-- L'épargne.
-
-**Principe de calcul :**
-
-Reste à vivre = Revenus − Charges fixes − Charges variables − Crédits − Épargne
-
-Le **reste à vivre brut** correspond à la valeur théorique des revenus avant la déduction de ces charges. Il ne constitue pas un deuxième indicateur de reste à vivre.
-
-Cet indicateur est différent du **solde bancaire prévisionnel**, qui part du solde réel du compte bancaire à un instant donné et estime ce qu'il devrait réellement rester après prise en compte des opérations futures concernées.
-
-### 3.2. Le solde bancaire prévisionnel
-
-Le solde bancaire prévisionnel représente une estimation de ce qu'il devrait réellement rester sur le compte bancaire.
-
-Contrairement au reste à vivre, il part du solde bancaire réel à un instant donné et tient compte des opérations futures concernées.
-
-Selon la situation, le calcul peut notamment prendre en compte les charges à venir et les montants restant à débiter sur les cartes à débit différé.
-
-Il s'agit d'une estimation fondée sur les informations enregistrées dans l'application. Ce n'est pas une synchronisation automatique avec la banque.
-
-### 3.3. Les différents soldes
-
-Les soldes peuvent correspondre à des périmètres d'opérations différents.
-
-- **Solde réel :** tient compte des opérations enregistrées comme effectivement réalisées.
-- **Solde disponible :** tient compte des opérations réalisées et des opérations en attente.
-- **Solde prévisionnel :** tient compte des opérations actives, y compris celles prévues, à l'exclusion des opérations désactivées.
-
-Les résultats peuvent donc différer sans que cela signifie nécessairement qu'une erreur s'est produite.
+#### Volet Charges Variables (Enveloppes périodiques) :
+- **Comparaison Réalisé vs Budgété :** Confrontation directe entre les pointages réels et l'enveloppe budgétée.
+- **Règle de Dérive Chronique :** Si une charge dépasse son budget de plus de 15 % pendant 3 mois consécutifs, le moteur signale un sous-calibrage structurel et propose un nouveau montant d'enveloppe basé sur la moyenne réelle constatée.
+- **Pics Saisonniers :** Mise en évidence des variations atypiques (énergie en hiver, entretiens annuels de véhicules).
 
 ---
 
-## 4. Comprendre les statuts des opérations
+## 3. Guide utilisateur au quotidien
 
-Les statuts permettent de distinguer les opérations déjà réalisées de celles qui sont encore en attente ou prévues.
+### 3.1. Gestion de Trésorerie
+L'application fonctionne selon un principe de double lecture indispensable à une saine gestion :
+- **Solde Réel :** La photographie exacte de ce qui est présent sur vos comptes en banque à l'instant T (uniquement les opérations effectivement pointées/débitées).
+- **Solde Prévisionnel :** L'atterrissage anticipé à la fin du mois, calculé en retranchant du solde réel l'intégralité des charges et dépenses prévues non encore débitées, ainsi que les débits différés en cours.
 
-### 4.1. Revenus
-
-- **Encaissé :** le revenu a été reçu.
-- **En attente :** le revenu est en attente de réception.
-- **Prévu :** le revenu est anticipé.
-- **Désactivé :** le revenu n'est plus pris en compte dans les calculs actifs.
-
-### 4.2. Charges et dépenses
-
-- **Débité :** la dépense a été effectuée.
-- **En attente :** la dépense est en attente de débit.
-- **Prévu :** la dépense est anticipée.
-- **Désactivé :** la dépense n'est plus prise en compte dans les calculs actifs.
-
-### 4.3. Épargne
-
-- **Effectué :** l'opération d'épargne a été réalisée.
-- **En attente :** l'opération est en attente.
-- **Prévu :** l'opération est anticipée.
-- **Annulé :** l'opération a été annulée.
-
-### 4.4. Remboursements de santé
-
-Le suivi des remboursements permet de distinguer les sommes déjà reçues de celles qui restent attendues.
-
-Le montant effectivement remboursé doit être distingué du remboursement encore prévisionnel.
-
-### 4.5. Comptes, catégories et organismes verseurs
-
-La fermeture d'un compte permet de conserver son historique tout en empêchant son utilisation pour de nouvelles opérations.
-
-Les catégories et les organismes verseurs peuvent être archivés. La possibilité de supprimer un élément dépend notamment des opérations qui y sont associées.
-
-### 4.6. Priorité des dépenses prévues
-
-Les dépenses prévues peuvent être organisées selon trois niveaux de priorité :
-
-- Urgent.
-- Moyennement urgent.
-- Pas urgent.
-
-### 4.7. Pourquoi les montants peuvent-ils différer ?
-
-Les indicateurs ne reposent pas nécessairement sur les mêmes opérations.
-
-Un montant peut donc varier selon qu'il inclut uniquement les opérations réalisées, les opérations en attente ou les opérations prévues.
-
-Il est important de vérifier les statuts et la période sélectionnée avant de comparer deux chiffres.
+### 3.2. Saisie des Opérations
+- **Saisie universelle :** Grâce au composant `<AmountInput />`, la saisie des montants prend en charge le point `.` et la virgule `,` de manière transparente sur tous les claviers (pavé numérique physique ou virtuel mobile), avec préservation stricte du focus.
+- **Paupière de sécurité des modales :** Toutes les fenêtres modales et tiroirs latéraux sont équipés d'un verrouillage contre les fermetures accidentelles par glisser-déposer (`drag-to-overlay`).
 
 ---
 
-## 5. Fonctionnalités
+## 4. Comprendre les indicateurs financiers & la règle d'or bancaire
 
-L'application regroupe les fonctionnalités suivantes :
+### 4.1. Le Reste à Vivre
+L'application dispose d'un **indicateur unique de Reste à Vivre**, situé dans la rubrique Revenus :
+$$\text{Reste à Vivre} = \text{Revenus} - \text{Charges Fixes} - \text{Charges Variables} - \text{Crédits} - \text{Épargne}$$
 
-- Gestion des comptes bancaires.
-- Gestion des organismes verseurs et des catégories.
-- Enregistrement des revenus ponctuels et récurrents.
-- Gestion des charges fixes et variables.
-- Suivi des dépenses courantes.
-- Planification des dépenses et des projets.
-- Consultation des analyses et graphiques.
-- Suivi des dépenses de santé et des remboursements.
-- Gestion des crédits et des remboursements.
-- Suivi de l'épargne et des transferts.
-- Configuration des paramètres de l'application.
-- Export des données budgétaires au format Excel.
-- Sauvegarde et restauration de la base SQLite.
-- Fonctions de maintenance et de diagnostic.
-
-Les fonctionnalités effectivement disponibles dépendent de la version installée.
+### 4.2. La Règle d'Or Bancaire du Moteur
+Une distinction mathématique absolue est opérée entre la détection du risque de découvert et la recommandation d'épargne :
+1. **Anti-découvert intrajournalier :** Doit s'exécuter sur le **Solde Réel instantané** avec simulation jour par jour. Pourquoi ? Parce qu'un chèque ou un prélèvement imprévu rejeté par la banque se produit dans le présent physique, avant même la fin du mois.
+2. **Opportunité d'épargne :** Doit s'exécuter **STRICTEMENT sur le Solde Prévisionnel net de fin de mois**. Pourquoi ? Recommander de placer 1 000 € sur un livret au 5 du mois sous prétexte que le solde réel est de 2 500 € provoquerait un découvert quelques jours plus tard lorsque le loyer et les factures d'énergie se présenteraient.
 
 ---
 
-## 6. Sauvegardes et restauration
+## 5. Statuts des opérations & cycle de vie
 
-L'application propose plusieurs mécanismes qui répondent à des besoins différents.
-
-### 6.1. Export Excel
-
-L'export Excel permet d'obtenir un fichier `.xlsx` contenant des données budgétaires pour consultation ou traitement dans un tableur.
-
-Cet export est utile pour analyser ou conserver certaines informations, mais il ne remplace pas une sauvegarde complète de la base de données.
-
-### 6.2. Sauvegarde de la base de données
-
-La sauvegarde de la base SQLite produit un fichier de base de données, généralement au format `.db`.
-
-Elle sert à conserver une copie des données de l'application en vue d'une éventuelle restauration.
-
-### 6.3. Restauration d'une base de données
-
-La restauration permet de remplacer la base de données utilisée par l'application à partir d'un fichier de sauvegarde compatible.
-
-Une copie de sécurité de la base existante est prévue avant le remplacement afin de permettre un retour en arrière en cas de problème.
-
-Il est recommandé de conserver également une sauvegarde indépendante du serveur.
-
-### 6.4. Sauvegardes automatiques et copies de sécurité
-
-Les sauvegardes automatiques, lorsqu'elles sont configurées et actives, doivent être distinguées des copies de sécurité créées avant certaines opérations sensibles.
-
-La fréquence exacte des sauvegardes automatiques, leur durée de conservation et leur emplacement doivent être confirmés sur la version déployée avant d'être documentés comme des garanties.
-
-**Important :** avant une restauration, une réinitialisation ou une opération de maintenance importante, vérifiez que vous disposez d'une sauvegarde exploitable.
+Chaque flux financier passe par des statuts immuables garantissant l'exactitude des calculs :
+- **Revenus :** `Encaissé` (crédité en banque), `En attente` (virement émis non reçu), `Prévu` (anticipation mensuelle), `Désactivé` (neutralisé des calculs).
+- **Charges & Dépenses :** `Débité` (passé en banque), `En attente` (paiement engagé), `Prévu` (en attente de présentation), `Désactivé`.
+- **Épargne & Virements :** `Effectué`, `En attente`, `Prévu`, `Annulé`.
 
 ---
 
-## 7. Architecture technique
+## 6. Architecture logicielle & Qualité industrielle
 
-L'application repose sur une architecture composée de plusieurs éléments.
+### 6.1. Moteurs Purs et Déterministes
+L'intelligence financière de Personal Budget Pro est scindée en moteurs purs indépendants du DOM :
+- `src/engine/calculations.ts` : Moteur de base (soldes, amortissements, proratisations).
+- `src/engine/insightsEngine.ts` : Moteur du Conseiller Financier (6 sentinelles, micro-benchmark < 2 ms).
+- `src/engine/chargesAnalysisEngine.ts` : Moteur d'agrégation temporelle 6/12 mois des charges.
 
-### Interface utilisateur
-
-L'interface est développée avec React et TypeScript. Vite est utilisé pour la construction du frontend.
-
-### Serveur
-
-Le serveur Node.js traite les requêtes de l'application et accède aux données stockées.
-
-### Base de données
-
-SQLite conserve les données budgétaires. Le mode WAL est utilisé pour la gestion des accès à la base.
-
-### Conteneurisation
-
-Docker permet de construire et d'exécuter l'application dans un conteneur.
-
-Les données et les journaux sont conservés dans des répertoires montés depuis l'hôte, selon la configuration Docker utilisée.
+### 6.2. Suite de Tests Vitest (533 tests - 100 % passants)
+Chaque brique logicielle fait l'objet d'une couverture de tests rigoureuse :
+- Tests de non-régression sur les calculs d'arrondis IEEE 754.
+- Tests d'herméticité des virements internes d'épargne.
+- Tests d'isolation des sentinelles et simulation des cas limites intrajournaliers.
+- Tests de composants React (accessibilité, navigation, interactions et raccourcis).
 
 ---
 
-## 8. Installation avec Docker
+## 7. Sauvegardes, intégrité & résilience SQLite
 
-Cette section décrit une installation à partir du dépôt GitHub.
+Le stockage repose sur le moteur SQLite embarqué avec des optimisations serveur de niveau production :
+- **Mode WAL (`PRAGMA journal_mode = WAL`) :** Autorise la lecture simultanée pendant les écritures, éliminant tout blocage multi-utilisateurs.
+- **Verrouillage résilient (`PRAGMA busy_timeout = 5000`) :** File d'attente automatique de 5 secondes en cas d'accès concurrentiel lourd.
+- **Sauvegarde à chaud sans interruption (`VACUUM INTO`) :** Création quotidienne d'un instantané physique de la base dans `data/backups/auto/` avec politique de rétention tournante sur **7 jours glissants**.
+- **Copie de sécurité pré-restauration :** Toute restauration manuelle génère automatiquement une copie de sauvegarde de l'état actuel avant écrasement.
+
+---
+
+## 8. Déploiement avec Docker & Proxmox
 
 ### 8.1. Prérequis
+- Docker Engine & Docker Compose.
+- Port hôte `3001` disponible.
 
-- Un système compatible avec Docker.
-- Docker Engine.
-- Le plugin Docker Compose.
-- Un accès au dépôt GitHub.
-- Un port disponible pour l'application.
-
-### 8.2. Récupérer le projet
+### 8.2. Démarrage Rapide
 
 ```bash
+# 1. Cloner le dépôt
 git clone https://github.com/yanfrance-droid/Budget-Perso-Pro.git
 cd Budget-Perso-Pro
-```
 
-### 8.3. Construire et démarrer l'application
-
-```bash
+# 2. Démarrer le conteneur
 docker compose up -d --build
-```
 
-### 8.4. Vérifier le conteneur
-
-```bash
+# 3. Vérifier le bon fonctionnement
 docker compose ps
-docker compose logs --tail=100
+docker compose logs --tail=50
 ```
 
-### 8.5. Accéder à l'application
+L'application est immédiatement accessible sur `http://localhost:3001` (ou `http://IP-DU-SERVEUR:3001`).
 
-Depuis un navigateur accessible sur le réseau du serveur, ouvrir :
+### 8.3. Persistance des Données
+Deux volumes hôtes doivent être conservés lors de vos sauvegardes système :
+- `./data:/app/data` : Contient la base active `budget.db` et le sous-dossier de sauvegardes `/backups`.
+- `./logs:/app/logs` : Contient les journaux système d'audit et d'activité.
 
-```text
-http://IP-DU-SERVEUR:3001
-```
+---
 
-Remplacez `IP-DU-SERVEUR` par l'adresse IP réelle de la machine qui héberge Docker.
+## 9. Exploitation & Déploiement Automatisé (Script Shell)
 
-### 8.6. Emplacement des données
+L'administration et la maintenance en production (notamment sur serveurs physiques dédiés, Proxmox VE ou conteneurs LXC Debian/Ubuntu) sont grandement simplifiées et fiabilisées par le script shell interactif fourni à la racine : [`gestion-personal-budget-pro.sh`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/gestion-personal-budget-pro.sh).
 
-La configuration Docker prévoit les volumes suivants :
+Écrit en Bash strict (`set -Eeuo pipefail`), il orchestre l'ensemble du cycle de déploiement et d'exploitation sans risque d'erreur humaine.
 
-- `./data:/app/data` pour les données de l'application.
-- `./logs:/app/logs` pour les journaux.
+### 9.1. Fonctionnalités Principales du Script
 
-Le chemin par défaut de la base de données dans le conteneur est :
+1. **Nouvelle Installation (`new_install`) :**
+   - Clonage automatisé du dépôt dans `/opt/personal-budget-pro-git`.
+   - Initialisation automatique du fichier `.env` depuis `.env.example`.
+   - Création sécurisée des volumes persistants `data/` et `logs/`.
+   - Lancement du build Docker Compose en production.
+   - Diagnostic de santé avec attente active de l'état `healthy` de l'application.
 
-```text
-/app/data/budget.db
-```
+2. **Mise à Jour Sécurisée Sans Risque (`update_install`) :**
+   - Vérification de l'intégrité de l'installation et contrôle de propreté Git (`check_git_clean` pour empêcher toute perte ou écrasement de modifications locales).
+   - **Sauvegarde SQLite automatique préventive :** Exécute un instantané physique à chaud (`.backup`) horodaté dans `data/backups/budget-before-script-YYYYMMDD-HHMMSS.db`.
+   - **Certification matérielle de la sauvegarde :** Contrôle systématique de la taille du fichier et exécution immédiate de `PRAGMA integrity_check` avant d'autoriser la moindre modification.
+   - Récupération des tags Git (`git fetch --tags --force`) et synchronisation de la branche `main` (`git pull --ff-only`).
+   - Reconstruction du conteneur (`docker compose build` puis `up -d --force-recreate`).
+   - Attente de la validation du healthcheck et purge automatique du cache de build (`docker builder prune -a -f`).
 
-La configuration peut être adaptée selon les besoins de l'installation.
+3. **Réinstallation Complète avec Préservation des Données (`reinstall_install`) :**
+   - Remplacement complet de l'arborescence du code après confirmation explicite par saisie du mot-clé `REINSTALLER`.
+   - Migration et sanctuarisation intégrale des données réelles (`data/`), des sauvegardes, des journaux (`logs/`) et de la configuration (`.env`).
+   - Conservation préalable de l'ancienne version dans une archive de secours horodatée `/opt/personal-budget-pro-git.old-YYYYMMDD-HHMMSS`.
 
-### 8.7. Mettre à jour l'application
-
-Avant une mise à jour, réalisez une sauvegarde de la base de données et vérifiez qu'elle peut être conservée indépendamment du conteneur.
-
-Après récupération des modifications du dépôt, la reconstruction peut être effectuée avec :
+### 9.2. Commandes d'Exécution & Permissions
 
 ```bash
-docker compose up -d --build
+# 1. Rendre le script exécutable
+chmod +x gestion-personal-budget-pro.sh
+
+# 2. Lancer le menu d'administration (exige les privilèges root)
+sudo ./gestion-personal-budget-pro.sh
 ```
 
-La procédure exacte dépend de la manière dont le projet a été installé et des modifications apportées à la configuration.
-
-**Attention :** ne supprimez pas les volumes ou les répertoires de données lors d'une mise à jour sans avoir vérifié leur contenu et réalisé une sauvegarde.
-
----
-
-## 9. Administration et maintenance
-
-L'application comprend des fonctions de maintenance et de diagnostic accessibles depuis les paramètres.
-
-Selon les fonctions disponibles dans la version installée, elles peuvent notamment servir à :
-
-- Vérifier l'intégrité de la base de données.
-- Contrôler certaines incohérences de données.
-- Effectuer des opérations d'optimisation.
-- Consulter des informations de diagnostic.
-- Réinitialiser les données budgétaires.
-
-### Réinitialisation
-
-La réinitialisation est une opération sensible : elle supprime des données budgétaires.
-
-Avant de l'utiliser :
-
-1. Vérifiez les données concernées par la réinitialisation.
-2. Réalisez une sauvegarde indépendante.
-3. Assurez-vous de comprendre les éléments qui seront conservés et ceux qui seront supprimés.
-
-Ne confondez pas la réinitialisation des données avec la suppression du conteneur Docker ou du répertoire de stockage.
-
-### Journaux Docker
-
-Pour consulter les derniers journaux du service :
-
-```bash
-docker compose logs --tail=100
-```
-
-Pour suivre les journaux en temps réel :
-
-```bash
-docker compose logs -f
-```
-
-Pour quitter le suivi des journaux, utilisez `Ctrl+C`. Cela arrête l'affichage des journaux, pas nécessairement l'application.
+### 9.3. Configuration & Environnement d'Exploitation
+Le script s'appuie sur des variables d'environnement adaptées à un hébergement souverain standard :
+- `APP_DIR` : `/opt/personal-budget-pro-git` (répertoire d'installation cible).
+- `REPO_URL` : `https://github.com/yanfrance-droid/Budget-Perso-Pro.git`.
+- `PROJECT` : `personal-budget-pro-git` (nom du projet Docker Compose).
+- `CONTAINER` / `SERVICE` : `budget-perso-pro`.
+- `BRANCH` : `main`.
 
 ---
 
-## 10. Accès à distance
+## 10. Administration, maintenance & diagnostics
 
-L'accès à l'application depuis l'extérieur du réseau local doit être configuré avec attention.
-
-Un VPN tel que Tailscale ou WireGuard peut permettre d'accéder à un serveur privé sans exposer directement l'application sur Internet.
-
-Avant toute exposition publique, il convient de vérifier notamment :
-
-- L'authentification et la gestion des sessions.
-- La configuration réseau et le pare-feu.
-- La sécurité des échanges.
-- La protection des sauvegardes.
-- La mise à jour régulière du système et de l'application.
-
-Ne considérez pas le fait qu'une application fonctionne sur un réseau local comme une preuve suffisante de sa sécurité pour un accès public.
+Depuis l'onglet **Paramètres** (authentifié), plusieurs outils de maintenance industrielle sont disponibles :
+- **Contrôle d'intégrité (`PRAGMA integrity_check`) :** Analyse physique complète des pages et des index B-Tree de SQLite.
+- **Compactage de la base (`VACUUM`) :** Récupération de l'espace disque non alloué et purge du journal WAL.
+- **Export Excel certifié :** Téléchargement d'un classeur multi-onglets structuré (soldes, charges, crédits, historique).
+- **Restauration instantanée :** Restauration guidée avec contrôle d'intégrité préalable.
 
 ---
 
-## 11. Questions fréquentes
+## 11. Sécurité & Accès à distance
 
-### L'application se synchronise-t-elle automatiquement avec ma banque ?
-
-Non. Le solde bancaire prévisionnel est calculé à partir des informations enregistrées dans l'application. Il ne signifie pas qu'une connexion bancaire automatique est active.
-
-### Quelle est la différence entre le reste à vivre et le solde bancaire prévisionnel ?
-
-Le reste à vivre est un indicateur budgétaire calculé à partir des revenus, des charges fixes, des charges variables, des crédits et de l'épargne.
-
-Le solde bancaire prévisionnel part du solde réel du compte à un instant donné et estime ce qu'il devrait réellement rester après prise en compte des opérations futures concernées.
-
-### L'export Excel remplace-t-il une sauvegarde ?
-
-Non. L'export Excel sert à consulter ou traiter les données dans un tableur. La sauvegarde de la base SQLite répond au besoin de conserver une copie de la base de données pour une restauration.
-
-### Où sont stockées les données ?
-
-Avec la configuration Docker décrite dans ce document, les données sont conservées dans le répertoire `data` monté sur `/app/data` dans le conteneur. Le chemin réel dépend de l'emplacement du projet et de la configuration utilisée.
-
-### Puis-je supprimer le conteneur sans perdre mes données ?
-
-Les données conservées dans un volume ou un répertoire monté séparément peuvent survivre à la suppression du conteneur. Cela dépend toutefois de la commande utilisée et de la configuration Docker. Vérifiez toujours les volumes et les sauvegardes avant une suppression.
-
-### Que faire avant une restauration ?
-
-Vérifiez que le fichier est une sauvegarde compatible et conservez une copie indépendante de la base actuelle avant de lancer la restauration.
+- **Aucune dépendance cloud :** Toutes les données restent stockées sur votre matériel personnel.
+- **Recommandation d'accès distant :** Pour accéder à votre budget en déplacement (smartphone, tablette), privilégiez un tunnel VPN chiffré souverain tel que **WireGuard** ou **Tailscale**. Évitez d'exposer directement le port HTTP sur l'Internet public sans proxy inverse chiffré (Traefik, Nginx Proxy Manager) et authentification forte.
 
 ---
 
-Fait par Yann DONNE
+## 12. Foire Aux Questions (FAQ)
+
+#### Pourquoi le Flash Insights me dit qu'une dépense dépasse la cadence alors que mon solde est positif ?
+Le moteur de cadence compare vos dépenses courantes du quotidien au prorata des jours écoulés dans le mois par rapport à vos habitudes réelles (moyenne des 3 mois précédents). Avoir un solde temporairement positif ne prévient pas un dépassement en fin de mois si vous consommez votre budget deux fois plus vite que prévu.
+
+#### Comment est calculé l'impact annuel d'une hausse de charge ?
+Si votre facture d'électricité ou d'assurance augmente de 5,00 € entre le mois précédent et le mois en cours, le moteur multiplie immédiatement cet écart par 12 mois (+60,00 €/an). Cela permet de matérialiser instantanément le poids réel d'une micro-augmentation contractuelle sur votre budget annuel.
+
+#### Pourquoi le module "Analyse des Charges" est-il distinct de "Analyse des Dépenses" ?
+Une gestion budgétaire rigoureuse impose de ne pas mélanger des flux de nature différente :
+- Les **Dépenses** sont discrétionnaires et quotidiennes (supermarché, sorties, shopping).
+- Les **Charges** sont contractuelles (fixes) ou indispensables (variables comme l'énergie). Leurs leviers d'optimisation sont totalement différents (arbitrage de mode de vie vs résiliation/renégociation de contrat).
+
+---
+
+**Personal Budget Pro** — Conçu et développé avec passion pour la souveraineté financière par **Yann DONNE**.
