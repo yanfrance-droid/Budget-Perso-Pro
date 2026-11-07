@@ -3,7 +3,8 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { initDatabase } from '../db.ts';
+import { initDatabase, runStartupMaintenance } from '../db.ts';
+import { deleteTransaction } from './transactionService.ts';
 import { 
   getMaintenanceStatus, 
   vacuumAndOptimize, 
@@ -63,6 +64,197 @@ describe('maintenanceService', () => {
     const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get('tx-orphan-1') as any;
     expect(tx.categoryId).toBeNull();
     expect(tx.templateId).toBeNull();
+  });
+
+  it('3b. audit exhaustif : détecte et répare toutes les anomalies relationnelles des 12 tables', () => {
+    const acc = db.prepare('SELECT id FROM accounts LIMIT 1').get() as { id: string };
+
+    // 1. Prêt avec capital négatif
+    db.prepare(`
+      INSERT INTO loans (id, name, lender, initialAmount, remainingCapital, monthlyPayment, startDate, durationMonths, accountId)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('loan-neg', 'Prêt test', 'Banque', 10000, -150, 200, '2026-01-01', 12, acc.id);
+
+    // 2. Mensualité de prêt liée à un prêt inexistant
+    db.prepare(`
+      INSERT INTO transactions (id, date, type, amount, status, accountId, linkedId)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('tx-loan-orphan', '2026-10-01', 'loan_payment', 200, 'planned', acc.id, 'ghost-loan');
+
+    // 3. Remboursement santé lié à un acte de soin inexistant
+    db.prepare(`
+      INSERT INTO transactions (id, date, type, amount, status, accountId, linkedId)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('tx-health-orphan', '2026-10-02', 'health_reimbursement', 35, 'cleared', acc.id, 'ghost-health-exp');
+
+    // 4. Virement avec destinationAccountId inexistant
+    db.prepare(`
+      INSERT INTO transactions (id, date, type, amount, status, accountId, destinationAccountId)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('tx-dest-orphan', '2026-10-03', 'transfer', 100, 'cleared', acc.id, 'ghost-dest-acc');
+
+    // 5. Transaction avec payerId inexistant
+    db.prepare(`
+      INSERT INTO transactions (id, date, type, amount, status, accountId, payerId)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('tx-payer-orphan', '2026-10-04', 'income', 1500, 'cleared', acc.id, 'ghost-payer');
+
+    // 6. Dépense prévisionnelle avec catégorie inexistante
+    db.prepare(`
+      INSERT INTO planned_expenses (id, label, estimatedAmount, urgency, createdAt, categoryId)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run('pe-orphan', 'Achat test', 80, 'medium', '2026-10-01', 'ghost-cat');
+
+    // 7. Modèle récurrent lié à un compte inexistant
+    db.prepare(`
+      INSERT INTO recurrence_templates (id, type, amount, recurrenceDay, accountId, startDate, isActive)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `).run('rec-acc-orphan', 'fixed_expense', 50, 5, 'ghost-acc', '2026-01');
+
+    // 8. Modèle récurrent avec payerId inexistant
+    db.prepare(`
+      INSERT INTO recurrence_templates (id, type, amount, recurrenceDay, accountId, startDate, isActive, payerId)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+    `).run('rec-payer-orphan', 'income', 2000, 1, acc.id, '2026-01', 'ghost-payer');
+
+    // 9. Modèle récurrent arrivé à échéance (passé) mais toujours actif
+    db.prepare(`
+      INSERT INTO recurrence_templates (id, type, amount, recurrenceDay, accountId, startDate, endDate, isActive)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    `).run('rec-expired', 'fixed_expense', 30, 10, acc.id, '2025-01', '2025-12');
+
+    // 10. Palier d'historique de prêt orphelin (inséré temporairement sans FK pour simuler une corruption externe)
+    db.exec('PRAGMA foreign_keys = OFF;');
+    db.prepare(`
+      INSERT INTO loan_payment_history (id, loanId, effectiveMonth, monthlyPayment, createdAt)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('hist-orphan', 'ghost-loan', '2026-01', 300, new Date().toISOString());
+    db.exec('PRAGMA foreign_keys = ON;');
+
+    // 11. Mensualité avec amortizedCapital > amount
+    db.prepare(`
+      INSERT INTO transactions (id, date, type, amount, status, accountId, amortizedCapital)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('tx-excess-amort', '2026-10-05', 'loan_payment', 250, 'cleared', acc.id, 500);
+
+    // 12. Session utilisateur expirée
+    db.prepare(`
+      INSERT INTO users (id, username, password_hash, salt, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('u-test-sess', 'testuser', 'h', 's', '2026-01-01');
+
+    db.prepare(`
+      INSERT INTO sessions (token, user_id, created_at, expires_at)
+      VALUES (?, ?, ?, ?)
+    `).run('token-expired', 'u-test-sess', '2025-01-01T00:00:00Z', '2025-01-02T00:00:00Z');
+
+    // Vérification de détection
+    const report = checkOrphans(db);
+    expect(report.orphanTransactionsCount).toBeGreaterThanOrEqual(12);
+    expect(report.brokenLoanLinks).toBe(1);
+    expect(report.brokenHealthLinks).toBe(1);
+    expect(report.brokenDestinationAccounts).toBe(1);
+    expect(report.brokenPayers).toBe(1);
+    expect(report.brokenPlannedCategories).toBe(1);
+    expect(report.brokenRecurrenceAccounts).toBe(1);
+    expect(report.brokenRecurrencePayers).toBe(1);
+    expect(report.expiredRecurrences).toBe(1);
+    expect(report.brokenLoanPaymentHistories).toBe(1);
+    expect(report.negativeLoanCapitals).toBe(1);
+    expect(report.excessAmortizedCapitals).toBe(1);
+    expect(report.expiredSessionsCount).toBe(1);
+    expect(report.details.length).toBeGreaterThanOrEqual(12);
+
+    // Réparation
+    const repair = repairOrphans(db);
+    expect(repair.success).toBe(true);
+    expect(repair.repaired).toBeGreaterThanOrEqual(12);
+
+    // Vérification post-réparation
+    const postReport = checkOrphans(db);
+    expect(postReport.orphanTransactionsCount).toBe(0);
+    expect(postReport.details.length).toBe(0);
+
+    // Contrôles spécifiques des états réparés
+    const txLoan = db.prepare('SELECT * FROM transactions WHERE id = ?').get('tx-loan-orphan') as any;
+    expect(txLoan.linkedId).toBeNull();
+
+    const txHealth = db.prepare('SELECT * FROM transactions WHERE id = ?').get('tx-health-orphan') as any;
+    expect(txHealth.linkedId).toBeNull();
+
+    const txDest = db.prepare('SELECT * FROM transactions WHERE id = ?').get('tx-dest-orphan') as any;
+    expect(txDest.destinationAccountId).toBeNull();
+
+    const txPayer = db.prepare('SELECT * FROM transactions WHERE id = ?').get('tx-payer-orphan') as any;
+    expect(txPayer.payerId).toBeNull();
+
+    const pe = db.prepare('SELECT * FROM planned_expenses WHERE id = ?').get('pe-orphan') as any;
+    expect(pe.categoryId).toBeNull();
+
+    const recAcc = db.prepare('SELECT * FROM recurrence_templates WHERE id = ?').get('rec-acc-orphan') as any;
+    expect(recAcc.isActive).toBe(0);
+
+    const recPayer = db.prepare('SELECT * FROM recurrence_templates WHERE id = ?').get('rec-payer-orphan') as any;
+    expect(recPayer.payerId).toBeNull();
+
+    const recExp = db.prepare('SELECT * FROM recurrence_templates WHERE id = ?').get('rec-expired') as any;
+    expect(recExp.isActive).toBe(0);
+
+    const histCount = db.prepare('SELECT COUNT(*) as c FROM loan_payment_history WHERE id = ?').get('hist-orphan') as any;
+    expect(histCount.c).toBe(0);
+
+    const loanNeg = db.prepare('SELECT * FROM loans WHERE id = ?').get('loan-neg') as any;
+    expect(loanNeg.remainingCapital).toBe(0);
+
+    const txAmort = db.prepare('SELECT * FROM transactions WHERE id = ?').get('tx-excess-amort') as any;
+    expect(txAmort.amortizedCapital).toBe(250);
+
+    const sessCount = db.prepare('SELECT COUNT(*) as c FROM sessions WHERE token = ?').get('token-expired') as any;
+    expect(sessCount.c).toBe(0);
+  });
+
+  it('3c. deleteTransaction détache automatiquement les transactions liées (ex: santé)', () => {
+    const acc = db.prepare('SELECT id FROM accounts LIMIT 1').get() as { id: string };
+
+    // Créer une dépense de soin
+    db.prepare(`
+      INSERT INTO transactions (id, date, type, amount, status, accountId)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run('exp-dentiste', '2026-10-10', 'health_expense', 120, 'cleared', acc.id);
+
+    // Créer un remboursement lié
+    db.prepare(`
+      INSERT INTO transactions (id, date, type, amount, status, accountId, linkedId)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('reimb-cpam', '2026-10-15', 'health_reimbursement', 80, 'cleared', acc.id, 'exp-dentiste');
+
+    // Suppression de la dépense via deleteTransaction
+    deleteTransaction(db, 'exp-dentiste');
+
+    // Vérifier que la dépense est supprimée
+    const expRow = db.prepare('SELECT * FROM transactions WHERE id = ?').get('exp-dentiste');
+    expect(expRow).toBeUndefined();
+
+    // Vérifier que le remboursement existe toujours mais a été détaché (linkedId = null) sans erreur orpheline
+    const reimbRow = db.prepare('SELECT * FROM transactions WHERE id = ?').get('reimb-cpam') as any;
+    expect(reimbRow).toBeDefined();
+    expect(reimbRow.linkedId).toBeNull();
+  });
+
+  it('3d. runStartupMaintenance auto-répare silencieusement la base et trace l opération', () => {
+    const acc = db.prepare('SELECT id FROM accounts LIMIT 1').get() as { id: string };
+
+    // Insérer une anomalie
+    db.prepare(`
+      INSERT INTO transactions (id, date, type, amount, status, accountId, linkedId)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('tx-start-orphan', '2026-10-01', 'loan_payment', 100, 'planned', acc.id, 'ghost-loan');
+
+    const res = runStartupMaintenance(db);
+    expect(res.repaired).toBeGreaterThan(0);
+
+    const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get('tx-start-orphan') as any;
+    expect(tx.linkedId).toBeNull();
   });
 
   it('4. réinitialise les données tout en conservant l utilisateur et en réensemençant des catégories propres', () => {

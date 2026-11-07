@@ -6,6 +6,24 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.2.1] - 2026-11-07
+
+### Sécurité & Intégrité des Données (Fixed & Hardened)
+- **Sécurisation de la suppression de transactions (`deleteTransaction`) :**
+  - Détachement automatique (`UPDATE transactions SET linkedId = NULL WHERE linkedId = ?`) des opérations filles (ex: remboursements santé rattachés) lors de la suppression unitaire d'une dépense de soin, empêchant l'apparition de `linkedId` orphelins.
+- **Auto-Maintenance Industrielle des 12 Tables (`maintenanceService.ts`) :**
+  - Détection et assainissement relationnel des vrais `linkedId` orphelins (`loan_payment` sans prêt associé, `health_reimbursement` sans dépense de soin associée).
+  - Contrôle et détachement des `destinationAccountId` (virements) et `payerId` orphelins sur `transactions`.
+  - Contrôle et détachement des `categoryId` orphelins sur `planned_expenses`.
+  - Désactivation automatique et assainissement des modèles récurrents (`recurrence_templates`) rattachés à des comptes/payeurs supprimés ou arrivés à terme (`endDate < mois_courant`).
+  - Purge des historiques de mensualités orphelins (`loan_payment_history`) et réajustement préventif des capitaux négatifs (`loans.remainingCapital < 0`).
+  - Plafonnement de cohérence du capital amorti au montant de l'échéance (`amortizedCapital <= amount`).
+  - Purge automatique des sessions expirées (`sessions.expires_at < datetime('now')`).
+- **Routine Silencieuse au Démarrage (`initDatabase` / `runStartupMaintenance`) :**
+  - Exécution systématique et idempotente de l'auto-maintenance à chaque initialisation de la base SQLite avec journalisation d'audit dans `technical.log`.
+
+---
+
 ## [1.2.0] - 2026-11-07
 
 ### Ajouté (Added)

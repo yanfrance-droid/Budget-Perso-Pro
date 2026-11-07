@@ -374,6 +374,18 @@ export const apiClient = {
       missingAccountTransactions: number;
       missingCategoryTransactions: number;
       brokenRecurringLinks: number;
+      brokenLoanLinks?: number;
+      brokenHealthLinks?: number;
+      brokenDestinationAccounts?: number;
+      brokenPayers?: number;
+      brokenPlannedCategories?: number;
+      brokenRecurrenceAccounts?: number;
+      brokenRecurrencePayers?: number;
+      expiredRecurrences?: number;
+      brokenLoanPaymentHistories?: number;
+      negativeLoanCapitals?: number;
+      excessAmortizedCapitals?: number;
+      expiredSessionsCount?: number;
       details: string[];
     }>('/api/maintenance/orphans/check'),
     repairOrphans: () => request<{

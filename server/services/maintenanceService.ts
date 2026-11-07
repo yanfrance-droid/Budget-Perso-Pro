@@ -4,7 +4,6 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { createSafetyBackup } from './migrationService.ts';
-import { initDatabase } from '../db.ts';
 
 export interface SystemHealthMetrics {
   uptimeSeconds: number;
@@ -55,6 +54,18 @@ export interface OrphanCheckResult {
   missingAccountTransactions: number;
   missingCategoryTransactions: number;
   brokenRecurringLinks: number;
+  brokenLoanLinks?: number;
+  brokenHealthLinks?: number;
+  brokenDestinationAccounts?: number;
+  brokenPayers?: number;
+  brokenPlannedCategories?: number;
+  brokenRecurrenceAccounts?: number;
+  brokenRecurrencePayers?: number;
+  expiredRecurrences?: number;
+  brokenLoanPaymentHistories?: number;
+  negativeLoanCapitals?: number;
+  excessAmortizedCapitals?: number;
+  expiredSessionsCount?: number;
   details: string[];
 }
 
@@ -279,7 +290,7 @@ export function vacuumAndOptimize(db: DatabaseSync): { success: boolean; message
 }
 
 /**
- * Analyse et diagnostic des enregistrements orphelins.
+ * Analyse et diagnostic exhaustif des enregistrements orphelins et anomalies d'intégrité métier.
  */
 export function checkOrphans(db: DatabaseSync): OrphanCheckResult {
   const missingAccounts = db.prepare(`
@@ -301,16 +312,143 @@ export function checkOrphans(db: DatabaseSync): OrphanCheckResult {
       AND t.templateId NOT IN (SELECT id FROM recurrence_templates)
   `).get() as { c: number };
 
+  // 1. Vrais linkedId orphelins
+  const brokenLoanLinks = db.prepare(`
+    SELECT COUNT(*) as c FROM transactions
+    WHERE type = 'loan_payment'
+      AND linkedId IS NOT NULL 
+      AND linkedId != '' 
+      AND linkedId NOT IN (SELECT id FROM loans)
+  `).get() as { c: number };
+
+  const brokenHealthLinks = db.prepare(`
+    SELECT COUNT(*) as c FROM transactions
+    WHERE type = 'health_reimbursement'
+      AND linkedId IS NOT NULL 
+      AND linkedId != '' 
+      AND linkedId NOT IN (SELECT id FROM transactions WHERE type = 'health_expense')
+  `).get() as { c: number };
+
+  // 2. destinationAccountId, payerId et planned_expenses.categoryId orphelins
+  const brokenDestinationAccounts = db.prepare(`
+    SELECT COUNT(*) as c FROM transactions
+    WHERE destinationAccountId IS NOT NULL 
+      AND destinationAccountId != '' 
+      AND destinationAccountId NOT IN (SELECT id FROM accounts)
+  `).get() as { c: number };
+
+  const brokenPayers = db.prepare(`
+    SELECT COUNT(*) as c FROM transactions
+    WHERE payerId IS NOT NULL 
+      AND payerId != '' 
+      AND payerId NOT IN (SELECT id FROM income_payers)
+  `).get() as { c: number };
+
+  const brokenPlannedCategories = db.prepare(`
+    SELECT COUNT(*) as c FROM planned_expenses
+    WHERE categoryId IS NOT NULL 
+      AND categoryId != '' 
+      AND categoryId NOT IN (SELECT id FROM categories)
+  `).get() as { c: number };
+
+  // 3. recurrence_templates liés à des comptes/payeurs supprimés ou arrivés à terme
+  const brokenRecurrenceAccounts = db.prepare(`
+    SELECT COUNT(*) as c FROM recurrence_templates
+    WHERE accountId NOT IN (SELECT id FROM accounts)
+       OR (destinationAccountId IS NOT NULL AND destinationAccountId != '' AND destinationAccountId NOT IN (SELECT id FROM accounts))
+  `).get() as { c: number };
+
+  const brokenRecurrencePayers = db.prepare(`
+    SELECT COUNT(*) as c FROM recurrence_templates
+    WHERE payerId IS NOT NULL 
+      AND payerId != '' 
+      AND payerId NOT IN (SELECT id FROM income_payers)
+  `).get() as { c: number };
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const expiredRecurrences = db.prepare(`
+    SELECT COUNT(*) as c FROM recurrence_templates
+    WHERE isActive = 1 
+      AND endDate IS NOT NULL 
+      AND endDate != '' 
+      AND endDate < ?
+  `).get(currentMonth) as { c: number };
+
+  // 4. loan_payment_history orphelins, capital négatif et amortissement excessif
+  const brokenLoanPaymentHistories = db.prepare(`
+    SELECT COUNT(*) as c FROM loan_payment_history
+    WHERE loanId NOT IN (SELECT id FROM loans)
+  `).get() as { c: number };
+
+  const negativeLoanCapitals = db.prepare(`
+    SELECT COUNT(*) as c FROM loans
+    WHERE remainingCapital < 0
+  `).get() as { c: number };
+
+  const excessAmortizedCapitals = db.prepare(`
+    SELECT COUNT(*) as c FROM transactions
+    WHERE type = 'loan_payment' 
+      AND amortizedCapital IS NOT NULL 
+      AND amortizedCapital > amount
+  `).get() as { c: number };
+
+  // 5. Sessions expirées
+  const expiredSessions = db.prepare(`
+    SELECT COUNT(*) as c FROM sessions
+    WHERE expires_at < datetime('now')
+  `).get() as { c: number };
+
   const details: string[] = [];
   if (missingAccounts.c > 0) details.push(`${missingAccounts.c} transaction(s) sans compte bancaire rattaché.`);
   if (missingCategories.c > 0) details.push(`${missingCategories.c} transaction(s) avec catégorie inexistante.`);
   if (brokenRecurrences.c > 0) details.push(`${brokenRecurrences.c} transaction(s) liée(s) à un modèle de récurrence supprimé.`);
+  if (brokenLoanLinks.c > 0) details.push(`${brokenLoanLinks.c} mensualité(s) de crédit liée(s) à un prêt inexistant.`);
+  if (brokenHealthLinks.c > 0) details.push(`${brokenHealthLinks.c} remboursement(s) santé lié(s) à un acte de soin inexistant.`);
+  if (brokenDestinationAccounts.c > 0) details.push(`${brokenDestinationAccounts.c} virement(s) vers un compte destinataire inexistant.`);
+  if (brokenPayers.c > 0) details.push(`${brokenPayers.c} transaction(s) avec organisme verseur inexistant.`);
+  if (brokenPlannedCategories.c > 0) details.push(`${brokenPlannedCategories.c} dépense(s) prévisionnelle(s) avec catégorie inexistante.`);
+  if (brokenRecurrenceAccounts.c > 0) details.push(`${brokenRecurrenceAccounts.c} modèle(s) de récurrence rattaché(s) à un compte inexistant.`);
+  if (brokenRecurrencePayers.c > 0) details.push(`${brokenRecurrencePayers.c} modèle(s) de récurrence avec organisme verseur inexistant.`);
+  if (expiredRecurrences.c > 0) details.push(`${expiredRecurrences.c} modèle(s) de récurrence actif(s) arrivé(s) à échéance.`);
+  if (brokenLoanPaymentHistories.c > 0) details.push(`${brokenLoanPaymentHistories.c} palier(s) d'historique de mensualité rattaché(s) à un prêt inexistant.`);
+  if (negativeLoanCapitals.c > 0) details.push(`${negativeLoanCapitals.c} prêt(s) avec un capital restant négatif.`);
+  if (excessAmortizedCapitals.c > 0) details.push(`${excessAmortizedCapitals.c} mensualité(s) dont le capital amorti dépasse le montant.`);
+  if (expiredSessions.c > 0) details.push(`${expiredSessions.c} session(s) utilisateur expirée(s).`);
+
+  const orphanTransactionsCount =
+    missingAccounts.c +
+    missingCategories.c +
+    brokenRecurrences.c +
+    brokenLoanLinks.c +
+    brokenHealthLinks.c +
+    brokenDestinationAccounts.c +
+    brokenPayers.c +
+    brokenPlannedCategories.c +
+    brokenRecurrenceAccounts.c +
+    brokenRecurrencePayers.c +
+    expiredRecurrences.c +
+    brokenLoanPaymentHistories.c +
+    negativeLoanCapitals.c +
+    excessAmortizedCapitals.c +
+    expiredSessions.c;
 
   return {
-    orphanTransactionsCount: missingAccounts.c + missingCategories.c + brokenRecurrences.c,
+    orphanTransactionsCount,
     missingAccountTransactions: missingAccounts.c,
     missingCategoryTransactions: missingCategories.c,
     brokenRecurringLinks: brokenRecurrences.c,
+    brokenLoanLinks: brokenLoanLinks.c,
+    brokenHealthLinks: brokenHealthLinks.c,
+    brokenDestinationAccounts: brokenDestinationAccounts.c,
+    brokenPayers: brokenPayers.c,
+    brokenPlannedCategories: brokenPlannedCategories.c,
+    brokenRecurrenceAccounts: brokenRecurrenceAccounts.c,
+    brokenRecurrencePayers: brokenRecurrencePayers.c,
+    expiredRecurrences: expiredRecurrences.c,
+    brokenLoanPaymentHistories: brokenLoanPaymentHistories.c,
+    negativeLoanCapitals: negativeLoanCapitals.c,
+    excessAmortizedCapitals: excessAmortizedCapitals.c,
+    expiredSessionsCount: expiredSessions.c,
     details
   };
 }
@@ -356,6 +494,138 @@ export function repairOrphans(db: DatabaseSync): { success: boolean; repaired: n
       const accChanges = brokenAccStmt.run(firstAccount.id);
       repaired += Number(accChanges.changes || 0);
     }
+
+    // 4. Détacher les mensualités de prêt orphelines (pointant vers un prêt inexistant)
+    const brokenLoanStmt = db.prepare(`
+      UPDATE transactions 
+      SET linkedId = NULL 
+      WHERE type = 'loan_payment' 
+        AND linkedId IS NOT NULL 
+        AND linkedId != '' 
+        AND linkedId NOT IN (SELECT id FROM loans)
+    `);
+    const loanChanges = brokenLoanStmt.run();
+    repaired += Number(loanChanges.changes || 0);
+
+    // 5. Détacher les remboursements santé orphelins (pointant vers un acte de soin inexistant)
+    const brokenHealthStmt = db.prepare(`
+      UPDATE transactions 
+      SET linkedId = NULL 
+      WHERE type = 'health_reimbursement' 
+        AND linkedId IS NOT NULL 
+        AND linkedId != '' 
+        AND linkedId NOT IN (SELECT id FROM transactions WHERE type = 'health_expense')
+    `);
+    const healthChanges = brokenHealthStmt.run();
+    repaired += Number(healthChanges.changes || 0);
+
+    // 6. Dissocier les comptes de destination de virement inexistants
+    const brokenDestStmt = db.prepare(`
+      UPDATE transactions 
+      SET destinationAccountId = NULL 
+      WHERE destinationAccountId IS NOT NULL 
+        AND destinationAccountId != '' 
+        AND destinationAccountId NOT IN (SELECT id FROM accounts)
+    `);
+    const destChanges = brokenDestStmt.run();
+    repaired += Number(destChanges.changes || 0);
+
+    // 7. Dissocier les organismes verseurs inexistants sur les transactions
+    const brokenPayerStmt = db.prepare(`
+      UPDATE transactions 
+      SET payerId = NULL 
+      WHERE payerId IS NOT NULL 
+        AND payerId != '' 
+        AND payerId NOT IN (SELECT id FROM income_payers)
+    `);
+    const payerChanges = brokenPayerStmt.run();
+    repaired += Number(payerChanges.changes || 0);
+
+    // 8. Dissocier les catégories inexistantes sur les dépenses prévisionnelles
+    const brokenPlannedCatStmt = db.prepare(`
+      UPDATE planned_expenses 
+      SET categoryId = NULL 
+      WHERE categoryId IS NOT NULL 
+        AND categoryId != '' 
+        AND categoryId NOT IN (SELECT id FROM categories)
+    `);
+    const plannedCatChanges = brokenPlannedCatStmt.run();
+    repaired += Number(plannedCatChanges.changes || 0);
+
+    // 9. Désactiver et assainir les modèles de récurrence rattachés à des comptes inexistants
+    const fallbackAccountId = firstAccount ? firstAccount.id : (db.prepare('SELECT id FROM accounts LIMIT 1').get() as { id: string } | undefined)?.id;
+    if (fallbackAccountId) {
+      const brokenRecAccStmt = db.prepare(`
+        UPDATE recurrence_templates 
+        SET isActive = 0,
+            accountId = CASE WHEN accountId NOT IN (SELECT id FROM accounts) THEN ? ELSE accountId END,
+            destinationAccountId = CASE WHEN destinationAccountId IS NOT NULL AND destinationAccountId != '' AND destinationAccountId NOT IN (SELECT id FROM accounts) THEN NULL ELSE destinationAccountId END
+        WHERE accountId NOT IN (SELECT id FROM accounts)
+           OR (destinationAccountId IS NOT NULL AND destinationAccountId != '' AND destinationAccountId NOT IN (SELECT id FROM accounts))
+      `);
+      const recAccChanges = brokenRecAccStmt.run(fallbackAccountId);
+      repaired += Number(recAccChanges.changes || 0);
+    }
+
+    // 10. Dissocier les organismes verseurs inexistants sur les modèles de récurrence
+    const brokenRecPayerStmt = db.prepare(`
+      UPDATE recurrence_templates 
+      SET payerId = NULL 
+      WHERE payerId IS NOT NULL 
+        AND payerId != '' 
+        AND payerId NOT IN (SELECT id FROM income_payers)
+    `);
+    const recPayerChanges = brokenRecPayerStmt.run();
+    repaired += Number(recPayerChanges.changes || 0);
+
+    // 11. Désactiver les modèles de récurrence arrivés à échéance (endDate < mois courant)
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const expiredRecStmt = db.prepare(`
+      UPDATE recurrence_templates 
+      SET isActive = 0 
+      WHERE isActive = 1 
+        AND endDate IS NOT NULL 
+        AND endDate != '' 
+        AND endDate < ?
+    `);
+    const expiredRecChanges = expiredRecStmt.run(currentMonth);
+    repaired += Number(expiredRecChanges.changes || 0);
+
+    // 12. Supprimer les paliers d'historique de prêt orphelins
+    const brokenLoanHistStmt = db.prepare(`
+      DELETE FROM loan_payment_history 
+      WHERE loanId NOT IN (SELECT id FROM loans)
+    `);
+    const loanHistChanges = brokenLoanHistStmt.run();
+    repaired += Number(loanHistChanges.changes || 0);
+
+    // 13. Réajuster les capitaux restants négatifs sur les prêts
+    const negCapStmt = db.prepare(`
+      UPDATE loans 
+      SET remainingCapital = 0 
+      WHERE remainingCapital < 0
+    `);
+    const negCapChanges = negCapStmt.run();
+    repaired += Number(negCapChanges.changes || 0);
+
+    // 14. Plafonner le capital amorti au montant de l'échéance si anomalie
+    const excessAmortStmt = db.prepare(`
+      UPDATE transactions 
+      SET amortizedCapital = amount 
+      WHERE type = 'loan_payment' 
+        AND amortizedCapital IS NOT NULL 
+        AND amortizedCapital > amount
+    `);
+    const excessAmortChanges = excessAmortStmt.run();
+    repaired += Number(excessAmortChanges.changes || 0);
+
+    // 15. Purger les sessions expirées
+    const expSessionStmt = db.prepare(`
+      DELETE FROM sessions 
+      WHERE expires_at < datetime('now')
+    `);
+    const expSessionChanges = expSessionStmt.run();
+    repaired += Number(expSessionChanges.changes || 0);
 
     db.exec('COMMIT;');
     return {

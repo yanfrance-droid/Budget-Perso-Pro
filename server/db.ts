@@ -2,6 +2,8 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { repairOrphans } from './services/maintenanceService.ts';
+import { writeTechnicalLog } from './services/loggerService.ts';
 
 export interface ServerConfig {
   dbPath?: string;
@@ -28,7 +30,30 @@ export function initDatabase(dbPath = process.env.DB_PATH || './data/budget.db')
   createSchema(db);
   runMigrations(db);
   seedDefaultAccount(db);
+  runStartupMaintenance(db);
   return db;
+}
+
+/**
+ * Routine d'auto-maintenance silencieuse et idempotente exécutée à chaque démarrage du serveur :
+ * Purge des sessions expirées, correction des liaisons orphelines et intégrité relationnelle.
+ */
+export function runStartupMaintenance(db: DatabaseSync): { repaired: number } {
+  try {
+    const repairResult = repairOrphans(db);
+    if (repairResult.repaired > 0) {
+      writeTechnicalLog(
+        'INFO',
+        `Maintenance au démarrage : ${repairResult.repaired} anomalie(s) d'intégrité réparée(s).`
+      );
+    } else {
+      writeTechnicalLog('INFO', 'Maintenance au démarrage : base de données vérifiée et intègre.');
+    }
+    return { repaired: repairResult.repaired };
+  } catch (err: any) {
+    writeTechnicalLog('WARN', `Avertissement maintenance au démarrage : ${err.message}`);
+    return { repaired: 0 };
+  }
 }
 
 function runMigrations(db: DatabaseSync) {

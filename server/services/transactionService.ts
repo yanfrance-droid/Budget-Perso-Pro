@@ -222,6 +222,10 @@ export function deleteTransaction(db: DatabaseSync, id: string): void {
     if (existing) {
       syncLoanCapitalForTransaction(db, existing, null);
     }
+
+    // Sécurisation relationnelle : détacher automatiquement les transactions associées (ex: remboursements de soins liés)
+    db.prepare('UPDATE transactions SET linkedId = NULL WHERE linkedId = ?').run(id);
+
     const stmt = db.prepare('DELETE FROM transactions WHERE id = ?');
     stmt.run(id);
   });
