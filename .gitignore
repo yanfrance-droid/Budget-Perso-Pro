@@ -13,6 +13,10 @@ dist-ssr
 *.local
 
 # Bases de données SQLite et sauvegardes
+*.db
+*.sqlite
+*.db-wal
+*.db-shm
 data/*.db
 data/*.db-wal
 data/*.db-shm
@@ -31,10 +35,12 @@ dom_revenus.html
 !src/assets/*.png
 !public/*.png
 
-# Variables d'environnement locales
+# Variables d'environnement locales et secrets
 .env
+.env.*
 .env.production
 .env.local
+!.env.example
 
 # Editor directories and files
 .vscode/*
