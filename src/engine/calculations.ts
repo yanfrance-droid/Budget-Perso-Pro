@@ -279,7 +279,9 @@ export function calculateAmortizedCapital(
     return 0;
   }
 
-  return Math.round(capitalPart * 100) / 100;
+  // Plafonnement au capital restant dû : le capital amorti ne peut excéder le solde restant du prêt
+  const cappedCapital = Math.min(capitalPart, remaining);
+  return Math.round(cappedCapital * 100) / 100;
 }
 
 import { getCurrentMonth } from '../utils/dateUtils';

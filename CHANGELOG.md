@@ -6,6 +6,30 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.2.2] - 2026-11-07
+
+### Sécurité, Robustesse Transactionnelle & Performance (Fixed & Optimized)
+- **Neutralisation du double-amortissement lors de l'import (`migrationService.ts`) :**
+  - Insertion directe et optimisée des transactions dans `importBackupData` pour respecter scrupuleusement le capital restant dû exporté dans le snapshot sans le déduire une seconde fois.
+- **Blindage des transactions atomiques (`withTransaction`) :**
+  - Encapsulation intégrale de `saveLoan` (création de prêt et palier initial de mensualité).
+  - Encapsulation intégrale de `saveRecurrenceTemplate`, `deleteRecurrenceTemplate` et `generateMonthlyOccurrences` dans des transactions atomiques SQLite (`SAVEPOINT`).
+- **Plafonnement au capital restant dû (`calculateAmortizedCapital`) :**
+  - Limitation de la part amortie d'une échéance au capital restant dû réel du prêt (`Math.min(capitalPart, remaining)`), empêchant les amortissements fictifs supérieurs au solde lors de la dernière mensualité.
+- **Protection anti-DoS sur les payloads HTTP (`readBody`) :**
+  - Limitation stricte de la taille des requêtes entrantes (15 Mo max) avec rejet HTTP 413 (*Payload Too Large*) pour préserver la mémoire du serveur Node.
+- **Indexation et Performance SQLite (`server/db.ts`) :**
+  - Ajout des index de performance cruciaux : `idx_transactions_linked` (`linkedId`), `idx_transactions_dest_account` (`destinationAccountId`), `idx_transactions_payer` (`payerId`), `idx_transactions_account_date` (`accountId, date`), `idx_loans_account` (`accountId`), `idx_recurrence_account` (`accountId`), `idx_planned_expenses_category` (`categoryId`).
+  - Suppression de l'index redondant sur clé primaire `idx_loan_capital_history_month`.
+  - Configuration optimisée des PRAGMAs : `PRAGMA synchronous = NORMAL;`, `PRAGMA temp_store = MEMORY;`, `PRAGMA cache_size = -16000;`.
+- **Intégrité des Catégories (`categoryService.ts`) :**
+  - `deleteCategory` vérifie désormais `planned_expenses` et `recurrence_templates` en plus de `transactions` avant suppression, avec bascule automatique en archivage.
+- **Résilience Frontend & UX (`ErrorBoundary.tsx` & `ServerDataContext.tsx`) :**
+  - Refonte complète de `ErrorBoundary` : retrait de l'appel dev hardcodé (`localhost:5173`), écran de secours soigné en français avec boutons "Recharger" et "Tableau de bord".
+  - Synchronisation réactive immédiate de `deleteTransaction` dans le contexte React pour détacher les transactions enfants en mémoire.
+
+---
+
 ## [1.2.1] - 2026-11-07
 
 ### Sécurité & Intégrité des Données (Fixed & Hardened)

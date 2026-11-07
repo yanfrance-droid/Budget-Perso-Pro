@@ -230,7 +230,11 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const deleteTransaction = async (id: string): Promise<void> => {
     const target = transactions.find(t => t.id === id);
     await apiClient.transactions.delete(id);
-    setTransactions(prev => prev.filter(t => t.id !== id));
+    // Détacher aussi en mémoire les transactions enfants dont linkedId pointait vers id (ex: remboursements de soin)
+    setTransactions(prev => prev
+      .filter(t => t.id !== id)
+      .map(t => t.linkedId === id ? { ...t, linkedId: undefined } : t)
+    );
     if (target?.type === 'loan_payment') {
       try {
         const freshLoans = await apiClient.loans.getAll();

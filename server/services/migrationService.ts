@@ -392,9 +392,40 @@ export function importBackupData(
       saveRecurrenceTemplate(db, tmpl);
     }
 
-    // 5. Transactions
+    // 5. Transactions (insertion directe pour préserver fidèlement l'état du snapshot sans double-amortissement des crédits)
+    const txInsertStmt = db.prepare(`
+      INSERT INTO transactions (
+        id, date, expectedDate, recurrenceDay, type, amount, status,
+        accountId, destinationAccountId, categoryId, linkedId, label,
+        notes, paymentMethod, checkNumber, amortizedCapital, templateId,
+        isCustomized, isReconstituted, payerId
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
     for (const tx of transactions) {
-      saveTransaction(db, tx);
+      txInsertStmt.run(
+        tx.id || crypto.randomUUID(),
+        tx.date,
+        tx.expectedDate || null,
+        tx.recurrenceDay !== undefined && tx.recurrenceDay !== null ? Number(tx.recurrenceDay) : null,
+        tx.type || 'variable_expense',
+        Number(tx.amount) || 0,
+        tx.status || 'planned',
+        tx.accountId,
+        tx.destinationAccountId || null,
+        tx.categoryId || null,
+        tx.linkedId || tx.loanId || null,
+        tx.label || null,
+        tx.notes || null,
+        tx.paymentMethod || null,
+        tx.checkNumber || null,
+        tx.amortizedCapital !== undefined && tx.amortizedCapital !== null ? Number(tx.amortizedCapital) : null,
+        tx.templateId || null,
+        tx.isCustomized ? 1 : 0,
+        tx.isReconstituted ? 1 : 0,
+        tx.payerId || null
+      );
     }
 
     // 5b. Dépenses prévisionnelles

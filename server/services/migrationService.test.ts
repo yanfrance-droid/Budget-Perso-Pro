@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { importBackupData, exportBackupData, validateBackupPayload } from './migrationService.ts';
 import { resetDatabaseData } from './maintenanceService.ts';
 import { saveLoanCapitalRecord, getAllLoanCapitalHistory } from './loanCapitalHistoryService.ts';
+import { getLoanById } from './loanService.ts';
 import { initDatabase } from '../db.ts';
 
 describe('Migration & Maintenance Security (loan_capital_history)', () => {
@@ -225,5 +226,41 @@ describe('Migration & Maintenance Security (loan_capital_history)', () => {
     // L'historique des crédits est désormais purgé
     const historyAfter = getAllLoanCapitalHistory(db);
     expect(historyAfter.length).toBe(0);
+  });
+
+  test('8. Restauration JSON : ne redéduit pas le capital déjà amorti sur les crédits (pas de double-amortissement)', () => {
+    const backupWithClearedLoanPayments = {
+      version: '2.0',
+      appName: 'PersonalBudgetPro',
+      exportDate: '2026-11-01T00:00:00.000Z',
+      tables: {
+        accounts: [{ id: 'acc_main', name: 'Compte Principal', type: 'checking', referenceDate: '2024-01-01' }],
+        categories: [{ id: 'cat_loan', name: 'Crédit', type: 'fixed_expense' }],
+        loans: [{
+          id: 'loan_1',
+          name: 'Prêt Auto',
+          lender: 'Banque',
+          initialAmount: 10000,
+          remainingCapital: 5000, // Déjà amorti de 5000 € dans le snapshot
+          monthlyPayment: 250,
+          startDate: '2024-01-01',
+          durationMonths: 48,
+          accountId: 'acc_main'
+        }],
+        transactions: [
+          // 2 mensualités passées réglées (amorti 250 € chacune)
+          { id: 'tx_p1', date: '2024-02-05', type: 'loan_payment', amount: 250, amortizedCapital: 250, status: 'cleared', accountId: 'acc_main', linkedId: 'loan_1' },
+          { id: 'tx_p2', date: '2024-03-05', type: 'loan_payment', amount: 250, amortizedCapital: 250, status: 'cleared', accountId: 'acc_main', linkedId: 'loan_1' }
+        ]
+      }
+    };
+
+    const res = importBackupData(db, backupWithClearedLoanPayments, { skipSafetyBackup: true });
+    expect(res.success).toBe(true);
+
+    // Le capital restant dû doit être STRICTEMENT 5000 € (et non 4500 €)
+    const loan = getLoanById(db, 'loan_1');
+    expect(loan).not.toBeNull();
+    expect(loan!.remainingCapital).toBe(5000);
   });
 });

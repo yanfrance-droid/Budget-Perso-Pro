@@ -214,6 +214,9 @@ describe('Financial Calculations', () => {
       expect(calculateAmortizedCapital(-500, 10000, 2.0, 10)).toBe(0);
       expect(calculateAmortizedCapital(500, -10000, 2.0, 10)).toBe(0);
       expect(calculateAmortizedCapital(NaN, 10000, 2.0, 10)).toBe(0);
+
+      // Plafonnement au capital restant dû (dernière mensualité)
+      expect(calculateAmortizedCapital(500, 42.50, 0, 0)).toBe(42.50);
     });
   });
 

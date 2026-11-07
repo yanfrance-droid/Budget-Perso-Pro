@@ -67,103 +67,105 @@ export function getLoanById(db: DatabaseSync, id: string): LoanData | null {
 }
 
 export function saveLoan(db: DatabaseSync, data: LoanData): LoanData {
-  let toSave = { ...data };
-  if (data.id) {
-    const existing = getLoanById(db, data.id);
-    if (existing) {
-      toSave = { ...existing, ...data };
+  return withTransaction(db, () => {
+    let toSave = { ...data };
+    if (data.id) {
+      const existing = getLoanById(db, data.id);
+      if (existing) {
+        toSave = { ...existing, ...data };
+      }
     }
-  }
 
-  if (!toSave.name || toSave.name.trim().length === 0) {
-    throw new Error('Le nom du crédit est obligatoire.');
-  }
-  if (!toSave.lender || toSave.lender.trim().length === 0) {
-    throw new Error('Le prêteur / organisme est obligatoire.');
-  }
-  if (toSave.initialAmount === undefined || isNaN(Number(toSave.initialAmount)) || Number(toSave.initialAmount) <= 0) {
-    throw new Error('Le montant initial doit être supérieur à 0.');
-  }
-  if (toSave.monthlyPayment === undefined || isNaN(Number(toSave.monthlyPayment)) || Number(toSave.monthlyPayment) <= 0) {
-    throw new Error('La mensualité doit être supérieure à 0.');
-  }
-
-  const id = toSave.id || crypto.randomUUID();
-  const existing = getLoanById(db, id);
-  const initialAmount = Number(toSave.initialAmount);
-  const remainingCapital = toSave.remainingCapital !== undefined ? Number(toSave.remainingCapital) : initialAmount;
-  const monthlyPayment = Number(toSave.monthlyPayment);
-  const isArchived = toSave.isArchived ? 1 : 0;
-  const isPaused = toSave.isPaused ? 1 : 0;
-
-  const stmt = db.prepare(`
-    INSERT INTO loans (
-      id, name, lender, initialAmount, remainingCapital, monthlyPayment,
-      interestRate, insurancePart, startDate, durationMonths, endDate,
-      debitDay, prepaidInstallments, monthsAdjustment, accountId, notes,
-      isArchived, isPaused, loanType
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      lender = excluded.lender,
-      initialAmount = excluded.initialAmount,
-      remainingCapital = excluded.remainingCapital,
-      monthlyPayment = excluded.monthlyPayment,
-      interestRate = excluded.interestRate,
-      insurancePart = excluded.insurancePart,
-      startDate = excluded.startDate,
-      durationMonths = excluded.durationMonths,
-      endDate = excluded.endDate,
-      debitDay = excluded.debitDay,
-      prepaidInstallments = excluded.prepaidInstallments,
-      monthsAdjustment = excluded.monthsAdjustment,
-      accountId = excluded.accountId,
-      notes = excluded.notes,
-      isArchived = excluded.isArchived,
-      isPaused = excluded.isPaused,
-      loanType = excluded.loanType
-  `);
-
-  stmt.run(
-    id,
-    toSave.name.trim(),
-    toSave.lender.trim(),
-    initialAmount,
-    remainingCapital,
-    monthlyPayment,
-    toSave.interestRate !== undefined ? Number(toSave.interestRate) : 0,
-    toSave.insurancePart !== undefined ? Number(toSave.insurancePart) : 0,
-    toSave.startDate,
-    Number(toSave.durationMonths) || 12,
-    toSave.endDate || null,
-    toSave.debitDay !== undefined ? Number(toSave.debitDay) : null,
-    toSave.prepaidInstallments !== undefined ? Number(toSave.prepaidInstallments) : 0,
-    toSave.monthsAdjustment !== undefined ? Number(toSave.monthsAdjustment) : 0,
-    toSave.accountId,
-    toSave.notes || null,
-    isArchived,
-    isPaused,
-    toSave.loanType || 'consumer'
-  );
-
-  // Pour un nouveau prêt, initialiser immédiatement le palier initial d'historique de mensualité
-  if (!existing) {
-    const now = new Date().toISOString();
-    const baselineMonth = toSave.startDate && /^\d{4}-\d{2}/.test(toSave.startDate)
-      ? toSave.startDate.slice(0, 7)
-      : now.slice(0, 7);
-    try {
-      db.prepare(`
-        INSERT INTO loan_payment_history (id, loanId, effectiveMonth, monthlyPayment, previousPayment, notes, createdAt)
-        VALUES (?, ?, ?, ?, NULL, ?, ?)
-      `).run(crypto.randomUUID(), id, baselineMonth, monthlyPayment, 'Mensualité contractuelle initiale', now);
-    } catch {
-      // Ignorer si la table n'est pas encore créée dans un contexte de test isolé
+    if (!toSave.name || toSave.name.trim().length === 0) {
+      throw new Error('Le nom du crédit est obligatoire.');
     }
-  }
+    if (!toSave.lender || toSave.lender.trim().length === 0) {
+      throw new Error('Le prêteur / organisme est obligatoire.');
+    }
+    if (toSave.initialAmount === undefined || isNaN(Number(toSave.initialAmount)) || Number(toSave.initialAmount) <= 0) {
+      throw new Error('Le montant initial doit être supérieur à 0.');
+    }
+    if (toSave.monthlyPayment === undefined || isNaN(Number(toSave.monthlyPayment)) || Number(toSave.monthlyPayment) <= 0) {
+      throw new Error('La mensualité doit être supérieure à 0.');
+    }
 
-  return getLoanById(db, id)!;
+    const id = toSave.id || crypto.randomUUID();
+    const existing = getLoanById(db, id);
+    const initialAmount = Number(toSave.initialAmount);
+    const remainingCapital = toSave.remainingCapital !== undefined ? Number(toSave.remainingCapital) : initialAmount;
+    const monthlyPayment = Number(toSave.monthlyPayment);
+    const isArchived = toSave.isArchived ? 1 : 0;
+    const isPaused = toSave.isPaused ? 1 : 0;
+
+    const stmt = db.prepare(`
+      INSERT INTO loans (
+        id, name, lender, initialAmount, remainingCapital, monthlyPayment,
+        interestRate, insurancePart, startDate, durationMonths, endDate,
+        debitDay, prepaidInstallments, monthsAdjustment, accountId, notes,
+        isArchived, isPaused, loanType
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        lender = excluded.lender,
+        initialAmount = excluded.initialAmount,
+        remainingCapital = excluded.remainingCapital,
+        monthlyPayment = excluded.monthlyPayment,
+        interestRate = excluded.interestRate,
+        insurancePart = excluded.insurancePart,
+        startDate = excluded.startDate,
+        durationMonths = excluded.durationMonths,
+        endDate = excluded.endDate,
+        debitDay = excluded.debitDay,
+        prepaidInstallments = excluded.prepaidInstallments,
+        monthsAdjustment = excluded.monthsAdjustment,
+        accountId = excluded.accountId,
+        notes = excluded.notes,
+        isArchived = excluded.isArchived,
+        isPaused = excluded.isPaused,
+        loanType = excluded.loanType
+    `);
+
+    stmt.run(
+      id,
+      toSave.name.trim(),
+      toSave.lender.trim(),
+      initialAmount,
+      remainingCapital,
+      monthlyPayment,
+      toSave.interestRate !== undefined ? Number(toSave.interestRate) : 0,
+      toSave.insurancePart !== undefined ? Number(toSave.insurancePart) : 0,
+      toSave.startDate,
+      Number(toSave.durationMonths) || 12,
+      toSave.endDate || null,
+      toSave.debitDay !== undefined ? Number(toSave.debitDay) : null,
+      toSave.prepaidInstallments !== undefined ? Number(toSave.prepaidInstallments) : 0,
+      toSave.monthsAdjustment !== undefined ? Number(toSave.monthsAdjustment) : 0,
+      toSave.accountId,
+      toSave.notes || null,
+      isArchived,
+      isPaused,
+      toSave.loanType || 'consumer'
+    );
+
+    // Pour un nouveau prêt, initialiser immédiatement le palier initial d'historique de mensualité
+    if (!existing) {
+      const now = new Date().toISOString();
+      const baselineMonth = toSave.startDate && /^\d{4}-\d{2}/.test(toSave.startDate)
+        ? toSave.startDate.slice(0, 7)
+        : now.slice(0, 7);
+      try {
+        db.prepare(`
+          INSERT INTO loan_payment_history (id, loanId, effectiveMonth, monthlyPayment, previousPayment, notes, createdAt)
+          VALUES (?, ?, ?, ?, NULL, ?, ?)
+        `).run(crypto.randomUUID(), id, baselineMonth, monthlyPayment, 'Mensualité contractuelle initiale', now);
+      } catch {
+        // Ignorer si la table n'est pas encore créée dans un contexte de test isolé
+      }
+    }
+
+    return getLoanById(db, id)!;
+  });
 }
 
 export function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
@@ -207,7 +209,9 @@ export function calculateAmortizedCapitalServer(
     return 0;
   }
 
-  return Math.round(capitalPart * 100) / 100;
+  // Plafonnement au capital restant dû : le capital amorti ne peut excéder le solde restant du prêt
+  const cappedCapital = Math.min(capitalPart, remaining);
+  return Math.round(cappedCapital * 100) / 100;
 }
 
 /**

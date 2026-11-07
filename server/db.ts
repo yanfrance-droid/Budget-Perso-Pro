@@ -25,7 +25,10 @@ export function initDatabase(dbPath = process.env.DB_PATH || './data/budget.db')
   db.exec('PRAGMA busy_timeout = 5000;');
   if (dbPath !== ':memory:') {
     db.exec('PRAGMA journal_mode = WAL;');
+    db.exec('PRAGMA synchronous = NORMAL;');
   }
+  db.exec('PRAGMA temp_store = MEMORY;');
+  db.exec('PRAGMA cache_size = -16000;');
 
   createSchema(db);
   runMigrations(db);
@@ -178,6 +181,22 @@ function runMigrations(db: DatabaseSync) {
     initPreExistingFutureExpenses(db);
   } catch (e) {
     console.error("Migration initPreExistingFutureExpenses error:", e);
+  }
+
+  // Migration des index de performance pour filtres fréquents et intégrité
+  try {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_transactions_linked ON transactions(linkedId);
+      CREATE INDEX IF NOT EXISTS idx_transactions_dest_account ON transactions(destinationAccountId);
+      CREATE INDEX IF NOT EXISTS idx_transactions_payer ON transactions(payerId);
+      CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(accountId, date);
+      CREATE INDEX IF NOT EXISTS idx_loans_account ON loans(accountId);
+      CREATE INDEX IF NOT EXISTS idx_recurrence_account ON recurrence_templates(accountId);
+      CREATE INDEX IF NOT EXISTS idx_planned_expenses_category ON planned_expenses(categoryId);
+      DROP INDEX IF EXISTS idx_loan_capital_history_month;
+    `);
+  } catch (e) {
+    console.error("Migration indexes error:", e);
   }
 }
 
@@ -436,13 +455,19 @@ function createSchema(db: DatabaseSync) {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Index de performance pour les filtres par mois, type et compte
-    CREATE INDEX IF NOT EXISTS idx_loan_capital_history_month ON loan_capital_history(month);
+    -- Index de performance pour les filtres par date, compte, type, liens et échéances
     CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
     CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(accountId);
     CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
     CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
     CREATE INDEX IF NOT EXISTS idx_transactions_template ON transactions(templateId);
+    CREATE INDEX IF NOT EXISTS idx_transactions_linked ON transactions(linkedId);
+    CREATE INDEX IF NOT EXISTS idx_transactions_dest_account ON transactions(destinationAccountId);
+    CREATE INDEX IF NOT EXISTS idx_transactions_payer ON transactions(payerId);
+    CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(accountId, date);
+    CREATE INDEX IF NOT EXISTS idx_loans_account ON loans(accountId);
+    CREATE INDEX IF NOT EXISTS idx_recurrence_account ON recurrence_templates(accountId);
+    CREATE INDEX IF NOT EXISTS idx_planned_expenses_category ON planned_expenses(categoryId);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
   `);
 }

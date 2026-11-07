@@ -60,8 +60,15 @@ export function saveCategory(db: DatabaseSync, data: CategoryData): CategoryData
 export function deleteCategory(db: DatabaseSync, id: string): void {
   const txCheck = db.prepare('SELECT COUNT(*) as count FROM transactions WHERE categoryId = ?');
   const txCount = (txCheck.get(id) as any).count;
-  if (txCount > 0) {
-    // Si des transactions l'utilisent, on archive au lieu de supprimer pour préserver l'historique
+
+  const plannedCheck = db.prepare('SELECT COUNT(*) as count FROM planned_expenses WHERE categoryId = ?');
+  const plannedCount = (plannedCheck.get(id) as any).count;
+
+  const recCheck = db.prepare('SELECT COUNT(*) as count FROM recurrence_templates WHERE categoryId = ?');
+  const recCount = (recCheck.get(id) as any).count;
+
+  if (txCount > 0 || plannedCount > 0 || recCount > 0) {
+    // Si des transactions, dépenses prévisionnelles ou modèles l'utilisent, on archive au lieu de supprimer pour préserver l'historique
     const archiveStmt = db.prepare('UPDATE categories SET isArchived = 1 WHERE id = ?');
     archiveStmt.run(id);
     return;

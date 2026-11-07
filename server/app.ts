@@ -130,17 +130,36 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
     res.on('finish', finishRequest);
     res.on('close', finishRequest);
 
-    // Helper pour lire le corps JSON
-    const readBody = async (): Promise<any> => {
+    // Helper pour lire le corps JSON avec protection contre la saturation mémoire (DoS)
+    const MAX_PAYLOAD_BYTES = 15 * 1024 * 1024; // 15 Mo max pour les imports de sauvegardes
+    const readBody = async (maxBytes = MAX_PAYLOAD_BYTES): Promise<any> => {
       return new Promise((resolve, reject) => {
         let body = '';
-        req.on('data', chunk => { body += chunk; });
+        let receivedBytes = 0;
+        let isAborted = false;
+
+        req.on('data', chunk => {
+          if (isAborted) return;
+          receivedBytes += chunk.length;
+          if (receivedBytes > maxBytes) {
+            isAborted = true;
+            const err: any = new Error('Corps de requête trop volumineux (dépassement de la taille maximale autorisée).');
+            err.statusCode = 413;
+            reject(err);
+            return;
+          }
+          body += chunk;
+        });
+
         req.on('end', () => {
+          if (isAborted) return;
           if (!body) return resolve({});
           try {
             resolve(JSON.parse(body));
           } catch (e) {
-            reject(new Error('Corps de requête JSON invalide.'));
+            const err: any = new Error('Corps de requête JSON invalide.');
+            err.statusCode = 400;
+            reject(err);
           }
         });
         req.on('error', reject);
@@ -910,7 +929,7 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
 
       sendJson(404, { error: 'Page introuvable.' });
     } catch (err: any) {
-      sendJson(500, { error: err.message || 'Erreur interne du serveur.' });
+      sendJson(err.statusCode || 500, { error: err.message || 'Erreur interne du serveur.' });
     }
   });
 }

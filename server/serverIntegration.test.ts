@@ -742,5 +742,29 @@ describe('Server & API Integration - SQLite Centralized Backend', () => {
       expect(restartRes.success).toBe(true);
       expect(restartRes.message).toContain('Signal de redémarrage reçu');
     });
+
+    it('rejette avec HTTP 413 les requêtes dont le corps dépasse la limite de sécurité', async () => {
+      apiClient.setToken(token);
+      // Générer un payload dépassant 15 Mo
+      const chunk1Mb = 'x'.repeat(1024 * 1024);
+      const parts: string[] = [];
+      for (let i = 0; i < 16; i++) {
+        parts.push(chunk1Mb);
+      }
+      const oversizedPayload = parts.join('');
+
+      const res = await fetch(`${baseUrl}/api/settings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ huge: oversizedPayload })
+      });
+
+      expect(res.status).toBe(413);
+      const data = await res.json();
+      expect(data.error).toContain('trop volumineux');
+    });
   });
 });

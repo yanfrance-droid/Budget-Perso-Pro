@@ -143,4 +143,31 @@ describe('recurrenceService - Propagation et Suppression sécurisée (CRITIQUE-0
     // Le modèle est bien supprimé
     expect(getAllRecurrenceTemplates(db).length).toBe(0);
   });
+
+  it('garantit l\'atomicité transactionnelle lors de la génération mensuelle des occurrences', () => {
+    // Création de 2 modèles
+    saveRecurrenceTemplate(db, {
+      label: 'Loyer',
+      type: 'fixed_expense',
+      amount: 800,
+      recurrenceDay: 5,
+      startDate: '2026-05',
+      accountId: 'acc1'
+    });
+
+    saveRecurrenceTemplate(db, {
+      label: 'Electricite',
+      type: 'fixed_expense',
+      amount: 75,
+      recurrenceDay: 12,
+      startDate: '2026-05',
+      accountId: 'acc1'
+    });
+
+    const count = generateMonthlyOccurrences(db, '2026-05');
+    expect(count).toBe(2);
+
+    const txs = getTransactions(db, { month: '2026-05' });
+    expect(txs.length).toBe(2);
+  });
 });
