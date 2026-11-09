@@ -12,7 +12,7 @@ const FIXED_EXPENSE_STATUS_OPTIONS = [
 ];
 
 import { useServerDataOptional } from '../contexts/ServerDataContext';
-import { getCurrentMonth, getCurrentDate } from '../utils/dateUtils';
+import { getCurrentMonth, getCurrentDate, formatDateFr } from '../utils/dateUtils';
 
 export default function FixedExpenses() {
   const serverData = useServerDataOptional();
@@ -53,6 +53,96 @@ export default function FixedExpenses() {
       ...prev,
       [catId]: !prev[catId]
     }));
+  };
+
+  const todayStr = useMemo(() => getCurrentDate(), []);
+  const templateMap = useMemo(() => {
+    return new Map((serverData?.recurrenceTemplates || []).map(t => [t.id, t]));
+  }, [serverData?.recurrenceTemplates]);
+
+  const renderContractBadge = (endDateStr?: string | null) => {
+    if (!endDateStr) return null;
+    const [curY, curM, curD] = todayStr.split('-').map(Number);
+    const currentTs = Date.UTC(curY, curM - 1, curD);
+    const [ey, em, ed] = endDateStr.split('-').map(Number);
+    const endTs = Date.UTC(ey, em - 1, ed);
+    if (isNaN(endTs)) return null;
+
+    const diffDays = Math.round((endTs - currentTs) / (1000 * 60 * 60 * 24));
+    const formatted = formatDateFr(endDateStr);
+
+    if (diffDays < 0) {
+      return (
+        <div style={{ marginTop: '0.25rem' }}>
+          <span 
+            title={`Contrat expiré depuis ${Math.abs(diffDays)} jour(s)`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              fontSize: '0.75rem',
+              padding: '0.15rem 0.45rem',
+              borderRadius: '4px',
+              backgroundColor: '#fef2f2',
+              color: '#b91c1c',
+              border: '1px solid #fecaca',
+              fontWeight: 600
+            }}
+          >
+            <AlertTriangle size={11} />
+            Expiré ({formatted})
+          </span>
+        </div>
+      );
+    }
+
+    if (diffDays <= 30) {
+      const isUrgent = diffDays <= 15;
+      return (
+        <div style={{ marginTop: '0.25rem' }}>
+          <span 
+            title={`Contrat expire dans ${diffDays} jour(s)`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              fontSize: '0.75rem',
+              padding: '0.15rem 0.45rem',
+              borderRadius: '4px',
+              backgroundColor: isUrgent ? '#fff7ed' : '#fefce8',
+              color: isUrgent ? '#c2410c' : '#854d0e',
+              border: isUrgent ? '1px solid #fed7aa' : '1px solid #fef08a',
+              fontWeight: 600
+            }}
+          >
+            <AlertTriangle size={11} />
+            Fin : {formatted} (J-{diffDays})
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ marginTop: '0.25rem' }}>
+        <span 
+          title={`Fin de contrat : ${formatted}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+            fontSize: '0.75rem',
+            padding: '0.15rem 0.45rem',
+            borderRadius: '4px',
+            backgroundColor: '#f1f5f9',
+            color: '#475569',
+            border: '1px solid #e2e8f0',
+            fontWeight: 500
+          }}
+        >
+          Fin : {formatted}
+        </span>
+      </div>
+    );
   };
 
   // Génération automatique des échéances pour le mois sélectionné
@@ -283,7 +373,11 @@ export default function FixedExpenses() {
     setIsAnnual(false); // reset
     if (expense) {
       setEditingId(expense.id);
-      setFormData(expense);
+      const tpl = expense.templateId ? serverData?.recurrenceTemplates.find(t => t.id === expense.templateId) : undefined;
+      setFormData({
+        ...expense,
+        contract_end_date: tpl?.contract_end_date || expense.contract_end_date || ''
+      });
     } else {
       setEditingId(null);
       setFormData({
@@ -295,7 +389,8 @@ export default function FixedExpenses() {
         notes: '',
         categoryId: categories?.[0]?.id || '',
         accountId: accounts?.[0]?.id || '',
-        type: 'fixed_expense'
+        type: 'fixed_expense',
+        contract_end_date: ''
       });
     }
     setIsModalOpen(true);
@@ -383,11 +478,11 @@ export default function FixedExpenses() {
           );
 
           if (serverData) {
-            if (updateFutureMonths) {
-              const tpl = serverData.recurrenceTemplates.find(t => t.id === formData.templateId);
-              if (tpl) {
-                await serverData.saveRecurrenceTemplate({
-                  ...tpl,
+            const tpl = serverData.recurrenceTemplates.find(t => t.id === formData.templateId);
+            if (tpl) {
+              await serverData.saveRecurrenceTemplate({
+                ...tpl,
+                ...(updateFutureMonths ? {
                   amount: finalAmount,
                   label: formData.label || tpl.label,
                   accountId: formData.accountId || tpl.accountId,
@@ -395,8 +490,9 @@ export default function FixedExpenses() {
                   notes: formData.notes !== undefined ? formData.notes : tpl.notes,
                   recurrenceDay: safeDay,
                   updateFutureOccurrencesFromDate: realDate
-                });
-              }
+                } : {}),
+                contract_end_date: formData.contract_end_date || null
+              });
             }
 
             await serverData.saveTransaction({
@@ -424,7 +520,8 @@ export default function FixedExpenses() {
             label: formData.label,
             notes: formData.notes,
             startDate: selectedMonth,
-            isActive: true
+            isActive: true,
+            contract_end_date: formData.contract_end_date || null
           });
           await serverData.saveTransaction({
             ...formData,
@@ -458,7 +555,8 @@ export default function FixedExpenses() {
           label: formData.label || '',
           notes: formData.notes || '',
           startDate: selectedMonth,
-          isActive: true
+          isActive: true,
+          contract_end_date: formData.contract_end_date || null
         });
         const occId = `${tpl.id}_${selectedMonth}`;
         await serverData.saveTransaction({
@@ -736,7 +834,13 @@ export default function FixedExpenses() {
                     return (
                       <tr key={expense.id} style={{ opacity: expense.status === 'disabled' ? 0.5 : 1 }}>
                         <td>{displayDate}</td>
-                        <td>{expense.label}</td>
+                        <td>
+                          <div>{expense.label}</div>
+                          {renderContractBadge(
+                            (expense.templateId ? templateMap.get(expense.templateId)?.contract_end_date : null) ||
+                            expense.contract_end_date
+                          )}
+                        </td>
                         <td style={{ color: 'var(--danger-color)', fontWeight: 'bold' }}>-{(Number(expense.amount) || 0).toLocaleString('fr-FR', {minimumFractionDigits: 2})} €</td>
                         <td>
                           <StatusBadgeSelect
@@ -829,6 +933,18 @@ export default function FixedExpenses() {
               <option value="planned">Prévu</option>
               <option value="disabled">Désactivé</option>
             </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Fin de contrat (optionnel)</span>
+              <small style={{ color: 'var(--text-light)', fontWeight: 'normal' }}>Alerte proactive avant reconduction</small>
+            </label>
+            <input 
+              type="date" 
+              className="form-control" 
+              value={formData.contract_end_date || ''} 
+              onChange={e => setFormData({ ...formData, contract_end_date: e.target.value })} 
+            />
           </div>
           <div className="form-group">
             <label className="form-label">Note</label>

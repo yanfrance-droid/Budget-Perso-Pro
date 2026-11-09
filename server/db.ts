@@ -99,6 +99,9 @@ export function runMigrations(db: DatabaseSync) {
     if (!recCols.some(c => c.name === 'notice_period_days')) {
       db.exec("ALTER TABLE recurrence_templates ADD COLUMN notice_period_days INTEGER DEFAULT 30;");
     }
+    if (!recCols.some(c => c.name === 'contract_end_date')) {
+      db.exec("ALTER TABLE recurrence_templates ADD COLUMN contract_end_date TEXT DEFAULT NULL;");
+    }
   } catch (e) {
     console.error("Migration recurrence_templates commitment error:", e);
   }
@@ -453,7 +456,8 @@ function createSchema(db: DatabaseSync) {
       payerId TEXT,
       commitment_end_date TEXT DEFAULT NULL,
       price_after_promo REAL DEFAULT NULL,
-      notice_period_days INTEGER DEFAULT 30
+      notice_period_days INTEGER DEFAULT 30,
+      contract_end_date TEXT DEFAULT NULL
     );
 
     -- 9. Table Clés de configuration et état Dashboard (manualBalance, card1, card2)

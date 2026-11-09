@@ -6,6 +6,32 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.3.9] - 2026-11-09
+
+### Suivi des Fins de Contrat, Anticipation des Tacites Reconductions & Alertes Dashboard (Feature & Backend)
+- **Modèle de données & Persistance SQLite (`server/db.ts`, `recurrenceService.ts`) :**
+  - Ajout de la colonne optionnelle `contract_end_date TEXT DEFAULT NULL` (format `YYYY-MM-DD`) dans la table des récurrences / charges fixes (`recurrence_templates`).
+  - Migration idempotente centralisée (`runMigrations`) ajoutant automatiquement la colonne sans perte de données sur les bases SQLite existantes.
+  - Prise en compte intégrale du champ dans les fonctions CRUD, l'export/import JSON de sauvegarde et la synchronisation avec le frontend.
+- **Interface Utilisateur (`src/pages/FixedExpenses.tsx`) :**
+  - Saisie de la date d'expiration de contrat dans la modale d'ajout et d'édition des charges fixes avec libellé explicatif anti-reconduction tacite.
+  - Affichage d'un indicateur visuel adaptatif et d'un compte à rebours sous le libellé dans le tableau des charges fixes :
+    - Badge rouge d'urgence si le contrat est expiré (`Expiré (date)`).
+    - Badge orange d'imminence si l'échéance arrive dans les 30 jours avec compte à rebours (`Fin : date (J-X)`).
+    - Badge gris discret si l'échéance est lointaine (`Fin : date`).
+- **Moteur d'Insights & Conseiller Financier (`src/engine/insightsEngine.ts`, `Dashboard.tsx`) :**
+  - Ajout de la sentinelle `auditContractExpirations()` scannant les charges fixes actives possédant un `contract_end_date`.
+  - Déclenchement automatique d'alertes hiérarchisées sur le Dashboard :
+    - Niveau **Critique** si le contrat est déjà échu ou si l'échéance intervient sous 15 jours.
+    - Niveau **Attention (Warning)** si l'échéance intervient entre 16 et 30 jours.
+    - Redirection en un clic vers la gestion des charges fixes (`/charges-fixes`).
+  - Intégration des modèles de récurrence dans le contexte central du conseiller financier (`insightsContext.templates`).
+- **Couverture de tests Vitest (62 suites, 599 tests au vert) :**
+  - Création de `server/contractExpiration.test.ts` validant la persistance SQLite, les migrations idempotentes et la résilience du snapshot export/import.
+  - Ajout de 6 tests unitaires dans `src/engine/insightsEngine.test.ts` validant les seuils d'alertes J-X, contrats échus et l'intégration dans `generateInsights`.
+
+---
+
 ## [1.3.8] - 2026-11-09
 
 ### Correction de l'Assiette du Matelas de Sécurité & Élimination de la Boucle Infinie (Bug Fix & Engine)

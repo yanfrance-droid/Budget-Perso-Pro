@@ -1,8 +1,8 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-09 (Version 1.3.8)  
-> **Statut QA :** 61 suites de tests Vitest, 589 tests au vert (100 % passants).
+> **Dernière mise à jour :** 2026-11-09 (Version 1.3.9)  
+> **Statut QA :** 62 suites de tests Vitest, 599 tests au vert (100 % passants).
 
 ---
 
@@ -91,7 +91,7 @@ La base SQLite contient 12 tables relationnelles initialisées et migrées dans 
 7. `loans` : Prêts et emprunts (taux annuel, assurance, capital initial, capital restant dû, mensualité en cours, statut pause/archive).
 8. `loan_payment_history` : Historique des changements de mensualités (crédits à paliers/modulables).
 9. `loan_capital_history` : Relevés périodiques du capital restant dû pour le suivi patrimonial et l'export Excel.
-10. `recurrence_templates` : Modèles d'échéances récurrentes (charges fixes, abonnements, préavis, dates de fin d'engagement / fin de promo).
+10. `recurrence_templates` : Modèles d'échéances récurrentes (charges fixes, abonnements, préavis, dates de fin d'engagement / fin de promo, dates de fin de contrat `contract_end_date`).
 11. `planned_expenses` : Dépenses prévisionnelles / Wishlist isolées du livre des comptes actifs.
 12. `app_settings` : Paramètres centralisés du tableau de bord (clé/valeur : solde bancaire manuel, encours cartes).
 
@@ -154,11 +154,13 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 > 5. **Projection temporelle des charges :** Ne jamais réintroduire de logique projetant automatiquement des charges sans template sur les mois futurs (`if (exp.recurrenceDay && !exp.templateId)` est banni).
 > 6. **Undo de suppression :** Toujours injecter le snapshot complet de la transaction (`targetCopy`) dans l'action Undo pour permettre sa recréation en cas de purge physique en base.
 > 7. **Assiette du matelas de sécurité / précaution :** L'assiette mensuelle pour calculer le nombre de mois de couverture en épargne de précaution ne doit en aucun cas inclure les flux d'épargne volontaire (virements vers l'épargne). Elle repose exclusivement sur les dépenses contraintes pures (fixes, variables de subsistance, crédits).
+> 8. **Suivi des fins de contrat et tacite reconduction :** La date d'échéance `contract_end_date` est stockée sur `recurrence_templates`. La sentinelle `auditContractExpirations` surveille les 30 jours précédant l'expiration (et les contrats déjà échus) pour éviter les reconductions tacites automatiques.
 
 ---
 
 ## 7. Historique Récent des Versions Majeures
 
+- **v1.3.9 :** Ajout du suivi des fins de contrat (`contract_end_date`), compte à rebours visuel dans les charges fixes, sentinelle Dashboard d'anticipation des tacites reconductions (`auditContractExpirations`), persistance SQLite et export JSON (599 tests).
 - **v1.3.8 :** Correction de l'assiette de calcul du matelas de sécurité dans `insightsEngine.ts` et `Dashboard.tsx`, exclusion stricte des flux d'épargne volontaire (`transfer`) pour supprimer la boucle infinie, fiabilisation du KPI « Charges obligatoires » (589 tests).
 - **v1.2.2 :** Sécurité transactionnelle atomique (`withTransaction` / `SAVEPOINT`), limitation DoS payload 15 Mo, index SQLite pour accélérer les requêtes relationnelles.
 - **v1.3.3 :** Résilience Undo/Redo face aux erreurs HTTP 400, suppression directe des charges fixes et variables sans bascule en statut "débité", nettoyage du filtre mensuel strict, calcul rigoureux des impayés antérieurs sur les mois futurs.

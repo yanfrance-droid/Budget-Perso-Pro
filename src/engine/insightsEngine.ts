@@ -10,7 +10,8 @@ export type InsightCategory =
   | 'emergency_fund' 
   | 'stalled_health' 
   | 'loan_prepayment'
-  | 'commitment_deadline';
+  | 'commitment_deadline'
+  | 'contract_expiration';
 
 export interface FinancialInsight {
   id: string;
@@ -618,6 +619,160 @@ export function auditCommitmentDeadlines(
 }
 
 /**
+ * 8. SENTINELLE : VEILLE SUR LES FINS DE CONTRAT & ÉCHÉANCES D'EXPIRATION (v1.3.9)
+ * Scanne l'ensemble des charges fixes possédant un contract_end_date.
+ * Si la date de fin arrive à échéance dans les 30 prochains jours (ou est déjà passée),
+ * génère une alerte critique/avertissement sur le Dashboard pour anticiper la résiliation ou renégociation.
+ */
+export function auditContractExpirations(
+  templates: RecurrenceTemplate[],
+  currentDate: string,
+  transactions?: Transaction[]
+): FinancialInsight[] {
+  const insights: FinancialInsight[] = [];
+  const [curY, curM, curD] = currentDate.split('-').map(Number);
+  const currentTs = Date.UTC(curY, curM - 1, curD);
+  if (isNaN(currentTs)) return insights;
+
+  const handledIds = new Set<string>();
+
+  // 1. Scan des modèles de récurrence (charges fixes récurrentes)
+  const activeTemplates = (templates || []).filter(t => t.isActive !== false && t.contract_end_date);
+
+  for (const t of activeTemplates) {
+    const rawEndDate = t.contract_end_date!.trim();
+    let endIso = rawEndDate;
+    if (rawEndDate.length === 7) {
+      const [y, m] = rawEndDate.split('-').map(Number);
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      endIso = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    }
+
+    const [ey, em, ed] = endIso.split('-').map(Number);
+    const endTs = Date.UTC(ey, em - 1, ed);
+    if (isNaN(endTs)) continue;
+
+    const diffDays = Math.round((endTs - currentTs) / (1000 * 60 * 60 * 24));
+    const contractLabel = t.label || 'Contrat / Abonnement';
+    const endFormatted = formatDateFr(endIso);
+
+    // Si expiration dans les 30 jours ou déjà expirée
+    if (diffDays <= 30) {
+      handledIds.add(t.id);
+      const isExpired = diffDays < 0;
+      const isUrgent = diffDays <= 15;
+      const severity: InsightSeverity = isExpired || isUrgent ? 'critical' : 'warning';
+
+      let title: string;
+      let message: string;
+
+      if (isExpired) {
+        const daysAgo = Math.abs(diffDays);
+        title = `Contrat expiré : « ${contractLabel} »`;
+        message = `Attention, votre contrat « ${contractLabel} » est arrivé à échéance le ${endFormatted} (expiré depuis ${daysAgo} jour${daysAgo > 1 ? 's' : ''}). Pensez à résilier, renégocier ou actualiser cette charge fixe pour éviter toute reconduction tacite non désirée.`;
+      } else if (diffDays === 0) {
+        title = `Échéance aujourd'hui : « ${contractLabel} »`;
+        message = `Attention, votre contrat « ${contractLabel} » expire aujourd'hui (${endFormatted}). Résiliez ou renégociez sans attendre avant reconduction tacite.`;
+      } else if (isUrgent) {
+        title = `Fin de contrat imminente (J-${diffDays}) : « ${contractLabel} »`;
+        message = `Attention, votre contrat « ${contractLabel} » expire dans ${diffDays} jour${diffDays > 1 ? 's' : ''} (le ${endFormatted}). Pensez à résilier ou renégocier avant tacite reconduction.`;
+      } else {
+        title = `Fin de contrat proche : « ${contractLabel} »`;
+        message = `Votre contrat « ${contractLabel} » arrive à expiration le ${endFormatted} (dans ${diffDays} jours). Anticipez dès maintenant sa résiliation ou renégociation.`;
+      }
+
+      insights.push({
+        id: `contract_expiration_${t.id}`,
+        category: 'contract_expiration',
+        severity,
+        title,
+        message,
+        actionLabel: 'Gérer mes charges fixes',
+        actionTarget: '/charges-fixes',
+        metadata: {
+          templateId: t.id,
+          contractName: contractLabel,
+          contractEndDate: endIso,
+          diffDays,
+          isExpired
+        }
+      });
+    }
+  }
+
+  // 2. Scan des transactions directes possédant un contract_end_date
+  if (transactions) {
+    const candidateTx = transactions.filter(t => 
+      t.status !== 'disabled' && 
+      (t as any).contract_end_date && 
+      (!t.templateId || !handledIds.has(t.templateId))
+    );
+
+    for (const tx of candidateTx) {
+      const rawEndDate = (tx as any).contract_end_date.trim();
+      let endIso = rawEndDate;
+      if (rawEndDate.length === 7) {
+        const [y, m] = rawEndDate.split('-').map(Number);
+        const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+        endIso = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      }
+
+      const [ey, em, ed] = endIso.split('-').map(Number);
+      const endTs = Date.UTC(ey, em - 1, ed);
+      if (isNaN(endTs)) continue;
+
+      const diffDays = Math.round((endTs - currentTs) / (1000 * 60 * 60 * 24));
+      const contractLabel = tx.label || 'Charge fixe';
+      const endFormatted = formatDateFr(endIso);
+
+      if (diffDays <= 30) {
+        handledIds.add(tx.id);
+        const isExpired = diffDays < 0;
+        const isUrgent = diffDays <= 15;
+        const severity: InsightSeverity = isExpired || isUrgent ? 'critical' : 'warning';
+
+        let title: string;
+        let message: string;
+
+        if (isExpired) {
+          const daysAgo = Math.abs(diffDays);
+          title = `Contrat expiré : « ${contractLabel} »`;
+          message = `Attention, votre contrat « ${contractLabel} » est arrivé à échéance le ${endFormatted} (expiré depuis ${daysAgo} jour${daysAgo > 1 ? 's' : ''}). Pensez à résilier, renégocier ou actualiser cette charge fixe.`;
+        } else if (diffDays === 0) {
+          title = `Échéance aujourd'hui : « ${contractLabel} »`;
+          message = `Attention, votre contrat « ${contractLabel} » expire aujourd'hui (${endFormatted}). Résiliez ou renégociez sans attendre.`;
+        } else if (isUrgent) {
+          title = `Fin de contrat imminente (J-${diffDays}) : « ${contractLabel} »`;
+          message = `Attention, votre contrat « ${contractLabel} » expire dans ${diffDays} jour${diffDays > 1 ? 's' : ''} (le ${endFormatted}). Pensez à résilier ou renégocier avant tacite reconduction.`;
+        } else {
+          title = `Fin de contrat proche : « ${contractLabel} »`;
+          message = `Votre contrat « ${contractLabel} » arrive à expiration le ${endFormatted} (dans ${diffDays} jours). Anticipez dès maintenant sa résiliation ou renégociation.`;
+        }
+
+        insights.push({
+          id: `contract_expiration_tx_${tx.id}`,
+          category: 'contract_expiration',
+          severity,
+          title,
+          message,
+          actionLabel: 'Gérer mes charges fixes',
+          actionTarget: '/charges-fixes',
+          metadata: {
+            transactionId: tx.id,
+            contractName: contractLabel,
+            contractEndDate: endIso,
+            diffDays,
+            isExpired
+          }
+        });
+      }
+    }
+  }
+
+  return insights;
+}
+
+/**
  * ORCHESTRATION CENTRALE DU CONSEILLER FINANCIER
  * Évalue l'ensemble des sentinelles et retourne la liste des insights
  * triée par niveau de sévérité / priorité d'urgence décroissante.
@@ -677,6 +832,15 @@ export function generateInsights(context: InsightsContext): FinancialInsight[] {
   );
   if (commitmentInsights.length > 0) {
     insights.push(...commitmentInsights);
+  }
+
+  const contractInsights = auditContractExpirations(
+    context.templates || [],
+    context.currentDate,
+    context.pendingTransactions
+  );
+  if (contractInsights.length > 0) {
+    insights.push(...contractInsights);
   }
 
   // Tri par priorité décroissante : critical (4) > warning (3) > info (2) > success (1)

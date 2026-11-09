@@ -6,6 +6,7 @@ import {
   auditDailyExpenseCadence,
   auditEmergencyFund,
   calculateEmergencyFundBaseline,
+  auditContractExpirations,
   auditStalledHealth,
   auditLoanPrepayment,
   generateInsights,
@@ -584,6 +585,150 @@ describe('insightsEngine - Conseiller Financier & Anticipation', () => {
       expect(formatCurrencyFr(1500.5)).toContain('500,50');
       expect(formatCurrencyFr(1500.5)).toContain('€');
       expect(formatCurrencyFr(-0)).toBe('0,00 €');
+    });
+  });
+
+  describe('9. auditContractExpirations (Fins de contrat & alertes Dashboard v1.3.9)', () => {
+    it('génère une alerte critique si un contrat est déjà expiré', () => {
+      const templates = [
+        {
+          id: 'tmpl-assurance',
+          type: 'fixed_expense' as const,
+          amount: 45,
+          recurrenceDay: 10,
+          accountId: 'acc-1',
+          label: 'Assurance Habitation',
+          startDate: '2025-01',
+          isActive: true,
+          contract_end_date: '2026-11-04' // Expiré il y a 6 jours
+        }
+      ];
+
+      const insights = auditContractExpirations(templates, '2026-11-10');
+      expect(insights.length).toBe(1);
+      expect(insights[0].severity).toBe('critical');
+      expect(insights[0].category).toBe('contract_expiration');
+      expect(insights[0].title).toContain('Contrat expiré');
+      expect(insights[0].title).toContain('Assurance Habitation');
+      expect(insights[0].message).toContain('04/11/2026');
+      expect(insights[0].message).toContain('6 jours');
+      expect(insights[0].actionTarget).toBe('/charges-fixes');
+    });
+
+    it('génère une alerte critique si l\'échéance du contrat est imminente (<= 15 jours)', () => {
+      const templates = [
+        {
+          id: 'tmpl-salle',
+          type: 'fixed_expense' as const,
+          amount: 30,
+          recurrenceDay: 1,
+          accountId: 'acc-1',
+          label: 'Abonnement Salle de Sport',
+          startDate: '2025-01',
+          isActive: true,
+          contract_end_date: '2026-11-20' // Expire dans 10 jours
+        }
+      ];
+
+      const insights = auditContractExpirations(templates, '2026-11-10');
+      expect(insights.length).toBe(1);
+      expect(insights[0].severity).toBe('critical');
+      expect(insights[0].title).toContain('Fin de contrat imminente (J-10)');
+      expect(insights[0].message).toContain('20/11/2026');
+      expect(insights[0].actionTarget).toBe('/charges-fixes');
+    });
+
+    it('génère un avertissement (warning) si l\'échéance est entre 16 et 30 jours', () => {
+      const templates = [
+        {
+          id: 'tmpl-box',
+          type: 'fixed_expense' as const,
+          amount: 29.99,
+          recurrenceDay: 15,
+          accountId: 'acc-1',
+          label: 'Box Internet',
+          startDate: '2025-01',
+          isActive: true,
+          contract_end_date: '2026-12-05' // Expire dans 25 jours
+        }
+      ];
+
+      const insights = auditContractExpirations(templates, '2026-11-10');
+      expect(insights.length).toBe(1);
+      expect(insights[0].severity).toBe('warning');
+      expect(insights[0].title).toContain('Fin de contrat proche');
+      expect(insights[0].message).toContain('05/12/2026');
+      expect(insights[0].message).toContain('25 jours');
+    });
+
+    it('ne génère aucune alerte si l\'échéance est lointaine (> 30 jours)', () => {
+      const templates = [
+        {
+          id: 'tmpl-future',
+          type: 'fixed_expense' as const,
+          amount: 50,
+          recurrenceDay: 5,
+          accountId: 'acc-1',
+          label: 'Contrat Énergie',
+          startDate: '2025-01',
+          isActive: true,
+          contract_end_date: '2027-06-30'
+        }
+      ];
+
+      const insights = auditContractExpirations(templates, '2026-11-10');
+      expect(insights.length).toBe(0);
+    });
+
+    it('ignore les contrats désactivés (isActive: false)', () => {
+      const templates = [
+        {
+          id: 'tmpl-disabled',
+          type: 'fixed_expense' as const,
+          amount: 50,
+          recurrenceDay: 5,
+          accountId: 'acc-1',
+          label: 'Ancien Contrat',
+          startDate: '2025-01',
+          isActive: false,
+          contract_end_date: '2026-11-05'
+        }
+      ];
+
+      const insights = auditContractExpirations(templates, '2026-11-10');
+      expect(insights.length).toBe(0);
+    });
+
+    it('s\'intègre dans generateInsights et déclenche une alerte sur le Dashboard', () => {
+      const context = {
+        currentDate: '2026-11-10',
+        manualBalance: 2000,
+        soldePrevisionnel: 1500,
+        pendingTransactions: [],
+        liquidSavingsTotal: 5000,
+        totalObligatoires: 1000,
+        templates: [
+          {
+            id: 'tmpl-gaz',
+            type: 'fixed_expense' as const,
+            amount: 80,
+            recurrenceDay: 5,
+            accountId: 'acc-1',
+            label: 'Contrat Gaz Promo',
+            startDate: '2025-01',
+            isActive: true,
+            contract_end_date: '2026-11-18' // Dans 8 jours -> Critical
+          }
+        ]
+      };
+
+      const insights = generateInsights(context);
+      const contractAlert = insights.find(i => i.category === 'contract_expiration');
+      expect(contractAlert).toBeDefined();
+      expect(contractAlert?.severity).toBe('critical');
+      expect(contractAlert?.title).toContain('Fin de contrat imminente');
+      expect(contractAlert?.message).toContain('18/11/2026');
+      expect(contractAlert?.actionTarget).toBe('/charges-fixes');
     });
   });
 });

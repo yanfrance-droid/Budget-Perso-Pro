@@ -773,7 +773,8 @@ export default function Dashboard() {
     chargesBreakdown: chargesMois,
     healthExpenses,
     healthReimbursements,
-    loans
+    loans,
+    templates: serverData?.recurrenceTemplates || []
   }), [
     todayStr,
     parsedManualBalance,
@@ -788,7 +789,8 @@ export default function Dashboard() {
     chargesMois,
     healthExpenses,
     healthReimbursements,
-    loans
+    loans,
+    serverData?.recurrenceTemplates
   ]);
 
   const currentMonthLabel = formatMonthLabel(currentMonth);

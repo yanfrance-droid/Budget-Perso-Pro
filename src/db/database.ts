@@ -56,6 +56,7 @@ export interface Transaction {
   isReconstituted?: boolean; // Vrai si l'occurrence a été reconstituée historiquement sans pointage
   payerId?: string; // Référence vers l'organisme verseur IncomePayer
   deleted_at?: number | null; // Timestamp Unix ms de suppression logique (soft-delete)
+  contract_end_date?: string | null; // YYYY-MM-DD (Date d'expiration / fin de contrat)
 }
 
 export interface RecurrenceTemplate {
@@ -79,6 +80,7 @@ export interface RecurrenceTemplate {
   commitment_end_date?: string | null; // YYYY-MM ou YYYY-MM-DD
   price_after_promo?: number | null; // Tarif appliqué post-promo
   notice_period_days?: number | null; // Délai de préavis en jours (défaut 30)
+  contract_end_date?: string | null; // YYYY-MM-DD (Date d'expiration / fin de contrat pour alertes reconduction)
 }
 
 export interface Loan {

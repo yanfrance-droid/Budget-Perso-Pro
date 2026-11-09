@@ -24,6 +24,7 @@ export interface RecurrenceTemplateData {
   commitment_end_date?: string | null;
   price_after_promo?: number | null;
   notice_period_days?: number | null;
+  contract_end_date?: string | null;
 }
 
 export function getAllRecurrenceTemplates(db: DatabaseSync): RecurrenceTemplateData[] {
@@ -36,7 +37,8 @@ export function getAllRecurrenceTemplates(db: DatabaseSync): RecurrenceTemplateD
     isActive: Boolean(r.isActive),
     commitment_end_date: r.commitment_end_date || null,
     price_after_promo: r.price_after_promo !== null && r.price_after_promo !== undefined ? Number(r.price_after_promo) : null,
-    notice_period_days: r.notice_period_days !== null && r.notice_period_days !== undefined ? Number(r.notice_period_days) : 30
+    notice_period_days: r.notice_period_days !== null && r.notice_period_days !== undefined ? Number(r.notice_period_days) : 30,
+    contract_end_date: r.contract_end_date || null
   }));
 }
 
@@ -100,15 +102,17 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
     const notice_period_days = data.notice_period_days !== undefined
       ? (data.notice_period_days !== null && !isNaN(Number(data.notice_period_days)) ? Number(data.notice_period_days) : 30)
       : (existing?.notice_period_days !== undefined && existing?.notice_period_days !== null ? Number(existing.notice_period_days) : 30);
+    const contract_end_date = data.contract_end_date !== undefined ? (data.contract_end_date || null) : (existing?.contract_end_date ?? null);
 
     const stmt = db.prepare(`
       INSERT INTO recurrence_templates (
         id, type, amount, recurrenceDay, accountId, destinationAccountId,
         categoryId, label, notes, startDate, endDate, isActive,
         disabledFromMonth, createdAt, updatedAt, payerId,
-        commitment_end_date, price_after_promo, notice_period_days
+        commitment_end_date, price_after_promo, notice_period_days,
+        contract_end_date
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         amount = excluded.amount,
@@ -126,7 +130,8 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
         payerId = excluded.payerId,
         commitment_end_date = excluded.commitment_end_date,
         price_after_promo = excluded.price_after_promo,
-        notice_period_days = excluded.notice_period_days
+        notice_period_days = excluded.notice_period_days,
+        contract_end_date = excluded.contract_end_date
     `);
 
     stmt.run(
@@ -148,7 +153,8 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
       payerId,
       commitment_end_date,
       price_after_promo,
-      notice_period_days
+      notice_period_days,
+      contract_end_date
     );
 
     // Si le modèle a été désactivé durablement à partir d'un mois précis (disabledFromMonth) :
@@ -235,7 +241,8 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
       isActive: Boolean(r.isActive),
       commitment_end_date: r.commitment_end_date || null,
       price_after_promo: r.price_after_promo !== null && r.price_after_promo !== undefined ? Number(r.price_after_promo) : null,
-      notice_period_days: r.notice_period_days !== null && r.notice_period_days !== undefined ? Number(r.notice_period_days) : 30
+      notice_period_days: r.notice_period_days !== null && r.notice_period_days !== undefined ? Number(r.notice_period_days) : 30,
+      contract_end_date: r.contract_end_date || null
     };
   });
 }
