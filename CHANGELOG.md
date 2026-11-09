@@ -6,6 +6,16 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.3.7] - 2026-11-09
+
+### Harmonisation Post-Contre-Audit (Docs, SQLite & Licence)
+- **Harmonisation de la table de configuration SQLite (`PROJECT_KNOWLEDGE.md`) :**
+  - Rectification de la désignation de la table `app_settings` pour correspondre exactement à son schéma physique en base SQLite (au lieu de la dénomination logique `settings`).
+- **Alignement de la licence (`package.json`) :**
+  - Mise à jour du champ `"license"` en `"MIT"` dans `package.json`, garantissant une cohérence parfaite à 100 % avec le fichier `LICENSE` et le `README.md`.
+
+---
+
 ## [1.3.6] - 2026-11-09
 
 ### Base de Connaissance Vivante & Règles d'Or d'Ingénierie (Docs & Governance)
