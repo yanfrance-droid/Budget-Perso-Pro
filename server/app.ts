@@ -78,10 +78,17 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
   };
 
   return http.createServer(async (req, res) => {
-    // 1. Headers CORS pour accès multi-appareils
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // 1. Headers CORS pour accès multi-appareils (Localhost, IP locale 192.168.x.x, VPN Proxmox)
+    const clientOrigin = req.headers.origin;
+    if (clientOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', clientOrigin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+    res.setHeader('Access-Control-Max-Age', '86400');
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);

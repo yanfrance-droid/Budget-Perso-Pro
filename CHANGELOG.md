@@ -6,6 +6,21 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.3.4] - 2026-11-09
+
+### Accès Réseau Local, Détection Dynamique d'Hôte & Sécurisation CORS (Fixed & Hardened)
+- **Détection dynamique d'hôte et URL relatives (`apiClient.ts`) :**
+  - Utilisation automatique de chemins relatifs (`/api/...`) lorsque l'application s'exécute sur la même origine, éliminant tout blocage lié aux IP en dur (`localhost` vs `192.168.0.59`).
+  - Détection dynamique de l'hôte via `window.location.origin` et purge automatique d'éventuelles clés locales obsolètes pointant sur `localhost`.
+- **CORS dynamique multi-appareils (`server/app.ts`) :**
+  - Réflexion automatique de l'en-tête `Origin` du client avec `Access-Control-Allow-Credentials: true` et headers étendus (`Content-Type, Authorization, X-Requested-With, Accept, Origin`).
+  - Prise en charge complète des requêtes preflight `OPTIONS` avec réponse 204 immédiate pour toutes les IP du réseau local.
+- **Résilience d'authentification et gestion du 401 (`AuthContext.tsx`) :**
+  - Émission et interception automatique de l'événement `auth:unauthorized` en cas de session expirée ou invalide, réaffichant proprement la modale de connexion plutôt que de bloquer l'application en mode "zombie".
+  - Sécurisation du démarrage : ne force plus `isAuthenticated` à vrai en cas d'erreur réseau si aucun jeton valide n'existe.
+
+---
+
 ## [1.3.3] - 2026-11-09
 
 ### Résilience Undo/Redo, Workflow de Suppression & Filtrage Mensuel (Fixed & Improved)

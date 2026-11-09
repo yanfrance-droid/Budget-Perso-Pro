@@ -11,9 +11,20 @@ let inMemoryApiUrl = 'http://localhost:3001';
 let inMemoryToken: string | null = null;
 
 export function getApiBaseUrl(): string {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    const customUrl = localStorage.getItem(API_URL_KEY);
-    if (customUrl) return customUrl.replace(/\/+$/, '');
+  if (typeof window !== 'undefined') {
+    const customUrl = window.localStorage ? window.localStorage.getItem(API_URL_KEY) : null;
+    if (customUrl) {
+      // Sécurité : si customUrl pointe sur localhost mais qu'on navigue sur une IP réseau (ex: 192.168.x.x),
+      // on ignore et purge le localhost obsolète pour éviter de court-circuiter le réseau local
+      const isRemoteHost = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      const isCustomLocalhost = customUrl.includes('localhost') || customUrl.includes('127.0.0.1');
+      if (isRemoteHost && isCustomLocalhost) {
+        window.localStorage?.removeItem(API_URL_KEY);
+        return window.location.origin;
+      }
+      return customUrl.replace(/\/+$/, '');
+    }
+    // Détection dynamique basée sur l'hôte et l'origine actuels (localhost, 192.168.0.59, etc.)
     return window.location.origin;
   }
   return inMemoryApiUrl;
@@ -63,7 +74,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   const timeoutSignal = typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(15000) : undefined;
 
-  const response = await fetch(`${baseUrl}${endpoint}`, {
+  // Si on est dans le navigateur et que l'URL de base correspond à l'origine courante,
+  // on utilise un chemin relatif (/api/...) pour éviter tout problème CORS ou d'IP en dur.
+  const isSameOrigin = typeof window !== 'undefined' && (baseUrl === '' || baseUrl === window.location.origin);
+  const targetUrl = isSameOrigin ? endpoint : (baseUrl ? `${baseUrl}${endpoint}` : endpoint);
+
+  const response = await fetch(targetUrl, {
     ...options,
     signal: options.signal || timeoutSignal,
     headers
@@ -79,6 +95,14 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
     const err: any = new Error(errorMsg);
     err.status = response.status;
+
+    // Détection automatique du 401 pour déclencher la ré-authentification
+    if (response.status === 401 && !endpoint.startsWith('/api/auth/login')) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { endpoint } }));
+      }
+    }
+
     throw err;
   }
 
@@ -305,7 +329,10 @@ export const apiClient = {
       if (options?.startDate) params.set('startDate', options.startDate);
       if (options?.endDate) params.set('endDate', options.endDate);
       const qs = params.toString();
-      const res = await fetch(`${baseUrl}/api/migration/export-excel${qs ? `?${qs}` : ''}`, {
+      const isSameOrigin = typeof window !== 'undefined' && (baseUrl === '' || baseUrl === window.location.origin);
+      const endpoint = `/api/migration/export-excel${qs ? `?${qs}` : ''}`;
+      const targetUrl = isSameOrigin ? endpoint : `${baseUrl}${endpoint}`;
+      const res = await fetch(targetUrl, {
         method: 'GET',
         headers: {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -453,7 +480,10 @@ export const apiClient = {
     restoreDbFile: async (file: File) => {
       const baseUrl = getApiBaseUrl();
       const token = getAuthToken();
-      const res = await fetch(`${baseUrl}/api/maintenance/restore-db`, {
+      const isSameOrigin = typeof window !== 'undefined' && (baseUrl === '' || baseUrl === window.location.origin);
+      const endpoint = '/api/maintenance/restore-db';
+      const targetUrl = isSameOrigin ? endpoint : `${baseUrl}${endpoint}`;
+      const res = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-sqlite3',

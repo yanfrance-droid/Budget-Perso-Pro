@@ -71,8 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err: any) {
       console.warn('Vérification serveur non disponible :', err.message);
-      // En mode développement déconnecté ou test local sans serveur actif, ne pas bloquer
-      setIsAuthenticated(true);
+      // Ne pas forcer une fausse authentification sans jeton valide
+      const token = getAuthToken();
+      if (!token) {
+        setIsAuthenticated(false);
+        setSession(null);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -81,6 +85,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     checkAuthStatus();
   }, [checkAuthStatus]);
+
+  // Réception de l'événement 401 Unauthorized pour réafficher immédiatement la modale de connexion
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setAuthToken(null);
+      setIsAuthenticated(false);
+      setSession(null);
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('auth:unauthorized', handleUnauthorized);
+      return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    }
+  }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
     setError(null);
