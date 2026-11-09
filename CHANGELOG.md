@@ -6,6 +6,18 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.3.6] - 2026-11-09
+
+### Base de Connaissance Vivante & Règles d'Or d'Ingénierie (Docs & Governance)
+- **Création de la Base de Connaissance Vivante (`PROJECT_KNOWLEDGE.md`) :**
+  - Fichier unique de référence documentant l'architecture globale (Frontend React 19, Backend natif Node.js sans Express, SQLite WAL).
+  - Détail des 12 tables relationnelles et des flux critiques (Soft-Delete, Moteur Undo/Redo avec résilience et fallbacks, gestion de la récurrence anti-zombie, calculs financiers et règle d'or bancaire).
+  - Documentation complète des gotchas / pièges à éviter (pas d'Express, isolation des origines localStorage, gestion du format des tags Git).
+- **Règles d'or de gouvernance et de continuité (`AGENTS.md`, `.gemini/rules/versioning.md`) :**
+  - Ajout des deux règles impératives imposant la lecture de `PROJECT_KNOWLEDGE.md` avant toute analyse ou modification de code, ainsi que sa mise à jour systématique à chaque commit ou release.
+
+---
+
 ## [1.3.5] - 2026-11-09
 
 ### Fiabilisation Undo/Rollback sur Suppression de Charges & Restauration Payload (Fixed & Hardened)
