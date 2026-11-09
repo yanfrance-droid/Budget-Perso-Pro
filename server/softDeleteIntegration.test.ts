@@ -191,6 +191,32 @@ describe('Lot 1 : Unification des Migrations & Système Soft-Delete / Undo', () 
       expect(res.id).toBe(tx.id);
       expect(res.deleted_at).toBeNull();
     });
+
+    it('restaure proprement une transaction via POST /api/transactions/:id/restore avec payload de secours si elle a été purgée physiquement', async () => {
+      const tx = await apiClient.transactions.save({
+        label: 'Abonnement Purge Test',
+        amount: 45.0,
+        type: 'fixed_expense',
+        status: 'planned',
+        date: '2026-11-05',
+        accountId
+      });
+
+      // Simulation d'une purge physique (DELETE réel)
+      db.prepare('DELETE FROM transactions WHERE id = ?').run(tx.id!);
+      expect(getTransactionById(db, tx.id!)).toBeNull();
+
+      // Restauration via route POST /api/transactions/:id/restore avec fallbackData
+      const restoreRes = await apiClient.transactions.restore(tx.id!, tx);
+      expect(restoreRes.success).toBe(true);
+      expect(restoreRes.transaction.id).toBe(tx.id);
+      expect(restoreRes.transaction.amount).toBe(45.0);
+      expect(restoreRes.transaction.label).toBe('Abonnement Purge Test');
+
+      const inDb = getTransactionById(db, tx.id!);
+      expect(inDb).not.toBeNull();
+      expect(inDb?.deleted_at).toBeNull();
+    });
   });
 
   describe('3. Anti-Zombie sur les Récurrences mensuelles', () => {

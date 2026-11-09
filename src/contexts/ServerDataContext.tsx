@@ -40,8 +40,8 @@ export interface ServerDataContextType {
   saveIncomePayer: (payer: Partial<IncomePayer>) => Promise<IncomePayer>;
   deleteIncomePayer: (id: string) => Promise<void>;
   saveTransaction: (transaction: Partial<Transaction>) => Promise<Transaction>;
-  deleteTransaction: (id: string) => Promise<void>;
-  restoreTransaction: (id: string) => Promise<Transaction>;
+  deleteTransaction: (idOrTx: string | Transaction) => Promise<void>;
+  restoreTransaction: (id: string, fallbackData?: Transaction) => Promise<Transaction>;
   updateTransactionStatus: (id: string, status: Transaction['status']) => Promise<Transaction>;
   saveLoan: (loan: Partial<Loan>) => Promise<Loan>;
   deleteLoan: (id: string) => Promise<void>;
@@ -486,7 +486,11 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           await refreshAll();
         },
         redo: async () => {
-          await apiClient.transactions.restore(savedCopy.id);
+          try {
+            await apiClient.transactions.restore(savedCopy.id, savedCopy);
+          } catch {
+            await apiClient.transactions.save(savedCopy);
+          }
           await refreshAll();
         }
       });
@@ -495,14 +499,19 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return saved;
   };
 
-  const deleteTransaction = async (id: string): Promise<void> => {
-    const target = transactionsRef.current.find(t => t.id === id);
+  const deleteTransaction = async (idOrTx: string | Transaction): Promise<void> => {
+    const id = typeof idOrTx === 'string' ? idOrTx : idOrTx.id;
+    const target = (typeof idOrTx === 'object' && idOrTx)
+      ? idOrTx
+      : transactionsRef.current.find(t => t.id === id);
+    const targetCopy = target ? { ...target } : null;
+
     await apiClient.transactions.delete(id);
     setTransactions(prev => prev
       .filter(t => t.id !== id)
       .map(t => t.linkedId === id ? { ...t, linkedId: undefined } : t)
     );
-    if (target?.type === 'loan_payment') {
+    if (targetCopy?.type === 'loan_payment') {
       try {
         const freshLoans = await apiClient.loans.getAll();
         setLoans(freshLoans);
@@ -511,12 +520,24 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     }
 
-    const displayLabel = target?.label ? `« ${target.label} »` : 'Opération';
-    const amtStr = target ? ` (${target.amount} €)` : '';
+    const displayLabel = targetCopy?.label ? `« ${targetCopy.label} »` : 'Opération';
+    const amtStr = targetCopy ? ` (${targetCopy.amount} €)` : '';
     recordHistoryAction({
       label: `Suppression ${displayLabel}${amtStr}`,
       undo: async () => {
-        await apiClient.transactions.restore(id);
+        try {
+          if (targetCopy) {
+            await apiClient.transactions.restore(id, targetCopy);
+          } else {
+            await apiClient.transactions.restore(id);
+          }
+        } catch (restoreErr) {
+          if (targetCopy) {
+            await apiClient.transactions.save({ ...targetCopy, deleted_at: null });
+          } else {
+            throw restoreErr;
+          }
+        }
         await refreshAll();
       },
       redo: async () => {
@@ -526,8 +547,10 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   };
 
-  const restoreTransaction = async (id: string): Promise<Transaction> => {
-    const res = await apiClient.transactions.restore(id);
+  const restoreTransaction = async (id: string, fallbackData?: Transaction): Promise<Transaction> => {
+    const res = fallbackData
+      ? await apiClient.transactions.restore(id, fallbackData)
+      : await apiClient.transactions.restore(id);
     const restored = res.transaction;
     await refreshAll();
     return restored;

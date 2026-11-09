@@ -290,7 +290,7 @@ describe('Moteur Undo/Redo Universel (Transactions + Comptes)', () => {
       await result.current.redo();
     });
 
-    expect(apiClient.transactions.restore).toHaveBeenCalledWith(createdId);
+    expect(apiClient.transactions.restore).toHaveBeenCalledWith(createdId, expect.anything());
     expect(result.current.transactions.some(t => t.id === createdId)).toBe(true);
   });
 
@@ -317,7 +317,11 @@ describe('Moteur Undo/Redo Universel (Transactions + Comptes)', () => {
       await result.current.undo();
     });
 
-    expect(apiClient.transactions.restore).toHaveBeenCalledWith('tx-1');
+    expect(apiClient.transactions.restore).toHaveBeenCalledWith('tx-1', expect.objectContaining({
+      id: 'tx-1',
+      label: 'Courses Alimentaires',
+      amount: 50
+    }));
     expect(result.current.transactions.some(t => t.id === 'tx-1')).toBe(true);
 
     // Redo -> Re-supprime
@@ -565,5 +569,55 @@ describe('Moteur Undo/Redo Universel (Transactions + Comptes)', () => {
     expect(result.current.undoStack).toHaveLength(0);
     // La dépense val-1 a bien été annulée (supprimée)
     expect(dbTransactions.find(t => t.id === 'val-1')?.deleted_at).toBeTruthy();
+  });
+
+  it('11. Scénario ciblé : Suppression d\'une charge existante -> Undo -> Restauration réussie en base', async () => {
+    const { result } = renderHook(() => useServerData(), { wrapper });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    const targetExpense: Transaction = {
+      id: 'tx-existing-charge',
+      label: 'Abonnement Internet Fibre',
+      amount: 39.99,
+      type: 'fixed_expense',
+      status: 'planned',
+      accountId: 'acc-1',
+      date: '2026-11-05'
+    };
+    dbTransactions.push(targetExpense);
+
+    await act(async () => {
+      await result.current.refreshAll();
+    });
+
+    expect(result.current.transactions.some(t => t.id === 'tx-existing-charge')).toBe(true);
+
+    // 1. Suppression de la charge
+    await act(async () => {
+      await result.current.deleteTransaction(targetExpense);
+    });
+
+    // La charge est masquée de l'affichage
+    expect(result.current.transactions.some(t => t.id === 'tx-existing-charge')).toBe(false);
+    expect(result.current.canUndo).toBe(true);
+
+    // 2. Undo -> Restauration réussie
+    await act(async () => {
+      await result.current.undo();
+    });
+
+    // La charge est restaurée et réapparaît dans la liste
+    expect(result.current.transactions.some(t => t.id === 'tx-existing-charge')).toBe(true);
+    const restored = result.current.transactions.find(t => t.id === 'tx-existing-charge');
+    expect(restored?.amount).toBe(39.99);
+    expect(restored?.label).toBe('Abonnement Internet Fibre');
+    expect(apiClient.transactions.restore).toHaveBeenCalledWith('tx-existing-charge', expect.objectContaining({
+      id: 'tx-existing-charge',
+      label: 'Abonnement Internet Fibre',
+      amount: 39.99
+    }));
   });
 });

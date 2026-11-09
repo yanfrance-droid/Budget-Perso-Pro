@@ -6,6 +6,22 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.3.5] - 2026-11-09
+
+### Fiabilisation Undo/Rollback sur Suppression de Charges & Restauration Payload (Fixed & Hardened)
+- **Préservation de l'objet complet de la charge supprimée (`ServerDataContext.tsx`) :**
+  - La fonction de suppression capture désormais l'objet complet de la transaction (`targetCopy`) dans la pile Undo plutôt que son simple identifiant.
+  - La méthode `deleteTransaction` accepte aussi bien un identifiant chaîne qu'un objet `Transaction` complet pour éviter les désynchronisations de références.
+- **Restauration bidirectionnelle & Fallback recréation (`ServerDataContext.tsx`, `server/app.ts`, `apiClient.ts`) :**
+  - La commande `Undo` transmet l'objet complet en second paramètre à l'API de restauration (`POST /api/transactions/:id/restore`).
+  - Côté serveur, si une charge a subi une purge physique préalable, l'API de restauration réinsère automatiquement et à l'identique la transaction avec son ID et ses attributs d'origine (`deleted_at: null`).
+  - Fallback côté client : si l'API `restore` échoue avec une erreur HTTP, le client bascule automatiquement sur `apiClient.transactions.save` avec l'objet complet pour recréer l'opération sans bloquer.
+- **Validation automatisée :**
+  - Ajout du test ciblé n°11 dans `UndoRedoEngine.test.tsx` validant la restauration complète d'une charge existante supprimée.
+  - Ajout du test d'intégration dans `softDeleteIntegration.test.ts` validant la recréation avec payload de secours lors d'un appel `/restore` sur une charge purgée physiquement.
+
+---
+
 ## [1.3.4] - 2026-11-09
 
 ### Accès Réseau Local, Détection Dynamique d'Hôte & Sécurisation CORS (Fixed & Hardened)

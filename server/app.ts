@@ -346,7 +346,20 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
         const parts = pathname.split('/');
         const id = parts[3];
         try {
-          const restored = restoreTransaction(db, id);
+          const body = await readBody().catch(() => ({}));
+          let restored: any;
+          try {
+            restored = restoreTransaction(db, id);
+          } catch (restoreErr: any) {
+            // Si la transaction n'existe plus en base (ex: purge physique),
+            // mais qu'un objet complet de secours est transmis, on la recrée avec son ID d'origine
+            if (body && (body.id || body.amount !== undefined)) {
+              const txToSave = { ...body, id, deleted_at: null };
+              restored = saveTransaction(db, txToSave);
+            } else {
+              throw restoreErr;
+            }
+          }
           return sendJson(200, { success: true, transaction: restored });
         } catch (err: any) {
           return sendJson(400, { error: err.message });

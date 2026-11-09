@@ -205,7 +205,11 @@ export const apiClient = {
     },
     save: (transaction: any) => request<any>('/api/transactions', { method: 'POST', body: JSON.stringify(transaction) }),
     delete: (id: string) => request<{ success: boolean }>(`/api/transactions/${id}`, { method: 'DELETE' }),
-    restore: (id: string) => request<{ success: boolean; transaction: any }>(`/api/transactions/${id}/restore`, { method: 'POST' }),
+    restore: (id: string, fallbackData?: any) => 
+      request<{ success: boolean; transaction: any }>(`/api/transactions/${id}/restore`, { 
+        method: 'POST',
+        body: fallbackData ? JSON.stringify(fallbackData) : undefined 
+      }),
     updateStatus: (id: string, status: string) => 
       request<any>(`/api/transactions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
   },

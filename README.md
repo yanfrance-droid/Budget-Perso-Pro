@@ -1,9 +1,9 @@
-# Personal Budget Pro (v1.3.4)
+# Personal Budget Pro (v1.3.5)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/Node.js-v24_Alpine-green.svg)](https://nodejs.org/)
 [![Database](https://img.shields.io/badge/SQLite-node:sqlite_WAL-blueviolet.svg)](https://sqlite.org/)
-[![Tests](https://img.shields.io/badge/Tests-585%20passing-brightgreen.svg)](package.json)
+[![Tests](https://img.shields.io/badge/Tests-587%20passing-brightgreen.svg)](package.json)
 [![RAM Footprint](https://img.shields.io/badge/RAM-%3C_60_Mo-success.svg)](#architecture-logicielle--efficience)
 
 **Personal Budget Pro** est une application web auto-hébergée (*self-hosted*), ultra-légère (< 60 Mo de RAM au repos) et de haute précision pour la gestion budgétaire, l'anticipation de trésorerie (*cash-flow*) et le pilotage patrimonial personnel.
@@ -52,7 +52,7 @@ Contrairement aux solutions généralistes anglo-saxonnes (YNAB, Actual Budget),
 * **Frontend :** React 19, TypeScript strict, Vite, Tailwind CSS, Lucide Icons, Recharts.
 * **Conteneurisation :** Image Docker optimisée multi-stage (< 150 Mo).
 * **Empreinte système :** Moins de 60 Mo de RAM au repos, consommation CPU négligeable (< 0.1 % sur conteneur LXC Proxmox).
-* **Assurance Qualité :** 61 fichiers de tests, 585 tests automatisés Vitest (100 % passants).
+* **Assurance Qualité :** 61 fichiers de tests, 587 tests automatisés Vitest (100 % passants).
 
 ---
 
