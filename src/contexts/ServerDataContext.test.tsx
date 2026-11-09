@@ -64,6 +64,10 @@ describe('ServerDataContext — Unification SQLite comme source unique', () => {
     vi.spyOn(apiClient.categories, 'delete').mockResolvedValue({ success: true });
     vi.spyOn(apiClient.transactions, 'save').mockImplementation(async (tx) => ({ ...tx, id: tx.id || 'tx-new' } as any));
     vi.spyOn(apiClient.transactions, 'delete').mockResolvedValue({ success: true });
+    vi.spyOn(apiClient.transactions, 'restore').mockImplementation(async (id) => ({
+      success: true,
+      transaction: { id, label: 'Courses', amount: 50, type: 'daily', status: 'cleared', date: '2026-10-15', accountId: 'acc-1', deleted_at: null } as any
+    }));
     vi.spyOn(apiClient.transactions, 'updateStatus').mockImplementation(async (id, status) => {
       const found = mockInitialTransactions.find(t => t.id === id) || { id, status };
       return { ...found, status } as any;
@@ -224,5 +228,30 @@ describe('ServerDataContext — Unification SQLite comme source unique', () => {
     expect(apiClient.settings.save).not.toHaveBeenCalled();
     // Les paramètres ne sont pas modifiés
     expect(result.current.dashboardSettings.manualBalance).toBe('0');
+  });
+
+  it('9. Suppression avec Soft-Delete et Restauration Undo (Toast & refresh)', async () => {
+    const { result } = renderHook(() => useServerData(), { wrapper });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    expect(result.current.transactions).toHaveLength(1);
+
+    // Suppression
+    await act(async () => {
+      await result.current.deleteTransaction('tx-1');
+    });
+
+    expect(apiClient.transactions.delete).toHaveBeenCalledWith('tx-1');
+    expect(result.current.transactions).toHaveLength(0);
+
+    // Restauration Undo
+    await act(async () => {
+      await result.current.restoreTransaction('tx-1');
+    });
+
+    expect(apiClient.transactions.restore).toHaveBeenCalledWith('tx-1');
   });
 });

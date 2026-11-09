@@ -80,27 +80,10 @@ export default function FixedExpenses() {
   const monthExpenses = useMemo(() => {
     if (!expenses) return [];
     
-    const [selYear, selMonth] = selectedMonth ? selectedMonth.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth() + 1];
-    
-    return expenses.filter(exp => {
-      if (exp.recurrenceDay && !exp.templateId) {
-        // Si la charge historique est désactivée, ne jamais la projeter sur un autre mois
-        if (exp.status === 'disabled') {
-          return exp.date.startsWith(selectedMonth);
-        }
-        return true;
-      }
-      return selectedMonth ? exp.date.startsWith(selectedMonth) : true;
-    }).map(exp => {
-      // Create a computed version for display/logic in this month
-      if (exp.recurrenceDay && !exp.templateId) {
-        const daysInMonth = new Date(selYear, selMonth, 0).getDate();
-        const safeDay = Math.min(exp.recurrenceDay, daysInMonth);
-        const computedDate = `${selYear}-${String(selMonth).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
-        return { ...exp, _computedDate: computedDate };
-      }
-      return { ...exp, _computedDate: exp.date };
-    }).sort((a, b) => a._computedDate.localeCompare(b._computedDate));
+    return expenses
+      .filter(exp => selectedMonth ? exp.date.startsWith(selectedMonth) : true)
+      .map(exp => ({ ...exp, _computedDate: exp.date }))
+      .sort((a, b) => (a._computedDate || a.date).localeCompare(b._computedDate || b.date));
   }, [expenses, selectedMonth]);
 
   const displayedExpenses = useMemo(() => {
@@ -307,7 +290,7 @@ export default function FixedExpenses() {
         date: getCurrentDate(),
         recurrenceDay: new Date().getDate(),
         amount: 0,
-        status: 'cleared',
+        status: 'planned',
         label: '',
         notes: '',
         categoryId: categories?.[0]?.id || '',
@@ -501,38 +484,34 @@ export default function FixedExpenses() {
   };
 
   const handleDelete = async (expense: Transaction) => {
-    // 1. Charge déjà débitée en banque (pointée) : interdiction pour préserver l'historique financier
-    if (expense.status === 'cleared') {
-      alert(
-        "Cette charge fixe a déjà été débitée en banque.\n\n" +
-        "Pour préserver la cohérence de vos relevés passés et de vos soldes réels, elle ne peut pas être supprimée.\n\n" +
-        "Si nécessaire, vous pouvez la dépointer au préalable (changer son statut en 'Prévu' ou 'En attente') en cas d'erreur de saisie."
-      );
+    // 1. Charge récurrente (avec templateId) : ouvrir la boîte de dialogue avec 2 choix explicites
+    if (expense.templateId) {
+      setDeleteModalState({
+        isOpen: true,
+        expense
+      });
       return;
     }
 
-    // 2. Charge ponctuelle (sans templateId) : confirmation puis suppression physique réelle
-    if (!expense.templateId) {
-      if (window.confirm("Voulez-vous supprimer définitivement cette charge ponctuelle ? Cela affectera vos calculs financiers.")) {
-        if (serverData) {
-          await serverData.deleteTransaction(expense.id);
-        }
+    // 2. Charge ponctuelle : confirmation puis suppression (soft-delete avec Undo)
+    const isCleared = expense.status === 'cleared';
+    const confirmMsg = isCleared
+      ? "Cette charge a déjà été pointée comme débitée.\n\nVoulez-vous vraiment la supprimer ? (Vous pourrez annuler l'action avec Ctrl+Z)"
+      : "Voulez-vous supprimer cette charge fixe ?";
+
+    if (window.confirm(confirmMsg)) {
+      if (serverData) {
+        await serverData.deleteTransaction(expense.id);
       }
-      return;
     }
-
-    // 3. Charge récurrente non pointée : ouvrir la boîte de dialogue avec 2 choix explicites
-    setDeleteModalState({
-      isOpen: true,
-      expense
-    });
   };
 
   const handleConfirmPermanentDelete = async () => {
     if (!deleteModalState.expense?.templateId) return;
     try {
       if (serverData) {
-        await serverData.deleteRecurrenceTemplate(deleteModalState.expense.templateId, `${selectedMonth}-01`);
+        // Suppression définitive absolue sur tous les mois et toutes les années
+        await serverData.deleteRecurrenceTemplate(deleteModalState.expense.templateId);
         await serverData.deleteTransaction(deleteModalState.expense.id);
       }
       setDeleteModalState({ isOpen: false });
@@ -544,10 +523,15 @@ export default function FixedExpenses() {
 
   const handleConfirmDeactivateMonthOnly = async () => {
     if (!deleteModalState.expense) return;
-    if (serverData) {
-      await serverData.updateTransactionStatus(deleteModalState.expense.id, 'disabled');
+    try {
+      if (serverData) {
+        await serverData.deleteTransaction(deleteModalState.expense.id);
+      }
+      setDeleteModalState({ isOpen: false });
+    } catch (err: any) {
+      console.error("Erreur lors de la suppression de l'échéance :", err);
+      alert(err.message || "Erreur lors de la suppression de l'échéance.");
     }
-    setDeleteModalState({ isOpen: false });
   };
 
   const handleAddCategory = async () => {
@@ -676,14 +660,23 @@ export default function FixedExpenses() {
                         />
                       </td>
                       <td>
-                        <Button 
-                          variant="outline"
-                          onClick={() => handleMarkCleared(exp)}
-                          icon={<CheckCircle size={14} color="#16a34a" />}
-                          style={{ color: '#16a34a', borderColor: '#86efac', fontWeight: 600, padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}
-                        >
-                          Marquer réglé
-                        </Button>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <Button 
+                            variant="outline"
+                            onClick={() => handleMarkCleared(exp)}
+                            icon={<CheckCircle size={14} color="#16a34a" />}
+                            style={{ color: '#16a34a', borderColor: '#86efac', fontWeight: 600, padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}
+                          >
+                            Marquer réglé
+                          </Button>
+                          <Button 
+                            variant="icon" 
+                            onClick={() => handleDelete(exp)}
+                            title="Supprimer cette charge"
+                          >
+                            <Trash2 size={16} color="var(--danger-color)" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -830,7 +823,7 @@ export default function FixedExpenses() {
           </div>
           <div className="form-group">
             <label className="form-label">Statut</label>
-            <select className="form-control" required value={formData.status || 'cleared'} onChange={e => setFormData({...formData, status: e.target.value as any})}>
+            <select className="form-control" required value={formData.status || 'planned'} onChange={e => setFormData({...formData, status: e.target.value as any})}>
               <option value="cleared">Débité</option>
               <option value="pending">En attente</option>
               <option value="planned">Prévu</option>
@@ -894,7 +887,7 @@ export default function FixedExpenses() {
       <Modal
         isOpen={deleteModalState.isOpen}
         onClose={() => setDeleteModalState({ isOpen: false })}
-        title="Supprimer ou désactiver la charge"
+        title="Supprimer la charge récurrente"
       >
         <div style={{ padding: '0.5rem 0' }}>
           <p style={{ marginBottom: '1rem' }}>
@@ -905,33 +898,33 @@ export default function FixedExpenses() {
             {/* Option 1 : Supprimer définitivement */}
             <div style={{ border: '1px solid #fee2e2', backgroundColor: '#fff5f5', borderRadius: '6px', padding: '0.75rem' }}>
               <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--danger-color)', marginBottom: '0.25rem' }}>
-                Option 1 — Supprimer définitivement la charge récurrente
+                Option 1 — Supprimer définitivement (sur tous les mois et toutes les années)
               </div>
               <div style={{ fontSize: '0.8rem', color: '#7f1d1d', marginBottom: '0.5rem' }}>
-                Supprime définitivement le modèle récurrent ainsi que les échéances courantes et futures non pointées. L'historique passé et les échéances déjà pointées sont intégralement préservés.
+                Supprime définitivement le modèle récurrent ainsi que toutes ses échéances sur tous les mois passés, présents et futurs.
               </div>
               <Button
                 variant="primary"
                 style={{ backgroundColor: 'var(--danger-color)' }}
                 onClick={handleConfirmPermanentDelete}
               >
-                Supprimer définitivement la récurrence
+                Supprimer définitivement sur tous les mois
               </Button>
             </div>
 
             {/* Option 2 : Désactiver uniquement ce mois */}
             <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '0.75rem' }}>
               <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                Option 2 — Désactiver cette échéance uniquement
+                Option 2 — Supprimer cette charge pour ce mois uniquement
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                Désactive uniquement l'échéance de {selectedMonth}. La récurrence reste active pour les autres mois.
+                Supprime cette échéance de {selectedMonth}. La charge disparaît complètement de ce mois.
               </div>
               <Button
                 variant="outline"
                 onClick={handleConfirmDeactivateMonthOnly}
               >
-                Désactiver uniquement ce mois ({selectedMonth})
+                Supprimer uniquement ce mois ({selectedMonth})
               </Button>
             </div>
 

@@ -387,8 +387,37 @@ body {
   justify-content: center;
 }
 
+/* Barre d'action superieure Desktop */
+.desktop-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 2rem;
+  background-color: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 50;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+  .desktop-top-bar {
+    display: none !important;
+  }
+  .main-area {
+    height: auto !important;
+    overflow: visible !important;
+  }
   /* Header mobile fixe en haut */
   .mobile-header {
     display: flex;

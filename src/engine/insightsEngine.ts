@@ -1,4 +1,4 @@
-import type { Transaction, Loan } from '../db/database';
+import type { Transaction, Loan, RecurrenceTemplate } from '../db/database';
 import { roundCurrency, estimateLoanPayoffClient, getTransactionImpact } from './calculations';
 
 export type InsightSeverity = 'critical' | 'warning' | 'info' | 'success';
@@ -9,7 +9,8 @@ export type InsightCategory =
   | 'daily_cadence' 
   | 'emergency_fund' 
   | 'stalled_health' 
-  | 'loan_prepayment';
+  | 'loan_prepayment'
+  | 'commitment_deadline';
 
 export interface FinancialInsight {
   id: string;
@@ -38,6 +39,7 @@ export interface InsightsContext {
   healthReimbursements?: Transaction[];
   healthDaysThreshold?: number;
   loans?: Loan[];
+  templates?: RecurrenceTemplate[];
 }
 
 const SEVERITY_WEIGHTS: Record<InsightSeverity, number> = {
@@ -485,6 +487,104 @@ export function auditLoanPrepayment(
   return null;
 }
 
+function formatDateFr(isoDate: string): string {
+  const parts = isoDate.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return isoDate;
+}
+
+/**
+ * SENTINELLE : VEILLE SUR LES ÉCHÉANCES D'ENGAGEMENT & FINS DE PROMOTION
+ * Déclenche une alerte prioritaire quand la date actuelle entre dans la fenêtre de préavis
+ * ou lorsqu'une hausse tarifaire post-promo prend effet prochainement.
+ */
+export function auditCommitmentDeadlines(
+  templates: RecurrenceTemplate[],
+  currentDate: string
+): FinancialInsight[] {
+  const insights: FinancialInsight[] = [];
+  const currentTs = new Date(`${currentDate}T00:00:00`).getTime();
+  if (isNaN(currentTs)) return insights;
+
+  const activeTemplates = templates.filter(t => t.isActive !== false && t.commitment_end_date);
+
+  for (const t of activeTemplates) {
+    const commitmentEndDate = t.commitment_end_date!;
+    const noticePeriodDays = t.notice_period_days !== undefined && t.notice_period_days !== null ? Number(t.notice_period_days) : 30;
+    const currentAmount = Number(t.amount) || 0;
+    const priceAfter = t.price_after_promo !== undefined && t.price_after_promo !== null ? Number(t.price_after_promo) : null;
+    const annualIncrease = priceAfter !== null && priceAfter > currentAmount 
+      ? roundCurrency((priceAfter - currentAmount) * 12) 
+      : 0;
+
+    let fullEndDate = commitmentEndDate;
+    if (commitmentEndDate.length === 7) {
+      const [y, m] = commitmentEndDate.split('-').map(Number);
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      fullEndDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    }
+
+    const [ey, em, ed] = fullEndDate.split('-').map(Number);
+    const deadlineDate = new Date(Date.UTC(ey, em - 1, ed - noticePeriodDays));
+    const noticeDeadlineStr = deadlineDate.toISOString().slice(0, 10);
+    // Fenêtre critique : de (noticeDeadline - 15 jours) à commitmentEndDate
+    const criticalStartDate = new Date(Date.UTC(ey, em - 1, ed - noticePeriodDays - 15));
+    const criticalWindowStartStr = criticalStartDate.toISOString().slice(0, 10);
+
+    const [curY, curM] = currentDate.split('-').map(Number);
+    const [endY, endM] = fullEndDate.split('-').map(Number);
+    const monthsDiff = (endY - curY) * 12 + (endM - curM);
+    const isIncreasingNextMonth = monthsDiff === 1 && annualIncrease > 0;
+
+    const inCriticalWindow = currentDate >= criticalWindowStartStr && currentDate <= fullEndDate;
+
+    if (inCriticalWindow || isIncreasingNextMonth) {
+      const isUrgent = currentDate >= noticeDeadlineStr;
+      const severity: InsightSeverity = isUrgent ? 'critical' : 'warning';
+      const contractLabel = t.label || 'Contrat / Abonnement';
+
+      const deadlineFr = formatDateFr(noticeDeadlineStr);
+      const endFr = formatDateFr(fullEndDate);
+      const increaseInfo = annualIncrease > 0
+        ? ` (hausse prévue de +${formatCurrencyFr(roundCurrency(priceAfter! - currentAmount))}/mois, soit +${formatCurrencyFr(annualIncrease)}/an)`
+        : '';
+
+      const title = isUrgent
+        ? `Préavis urgent : résiliation de « ${contractLabel} » requise`
+        : `Fin d'engagement proche : « ${contractLabel} »`;
+
+      const message = isUrgent
+        ? `Votre engagement sur « ${contractLabel} » expire le ${endFr}. La date limite de préavis (${noticePeriodDays} j) est le ${deadlineFr}${increaseInfo}. Résiliez sans attendre pour éviter le renouvellement.`
+        : `Votre engagement sur « ${contractLabel} » prend fin le ${endFr}. Vous devez résilier avant le ${deadlineFr} (${noticePeriodDays} jours de préavis)${increaseInfo}.`;
+
+      insights.push({
+        id: `commitment_deadline_${t.id}`,
+        category: 'commitment_deadline',
+        severity,
+        title,
+        message,
+        actionLabel: 'Analyser mes charges fixes',
+        actionTarget: '/analyse-charges',
+        metadata: {
+          templateId: t.id,
+          contractName: contractLabel,
+          commitmentEndDate: fullEndDate,
+          noticeDeadline: noticeDeadlineStr,
+          noticePeriodDays,
+          currentAmount,
+          priceAfterPromo: priceAfter,
+          annualIncrease,
+          isUrgent
+        }
+      });
+    }
+  }
+
+  return insights;
+}
+
 /**
  * ORCHESTRATION CENTRALE DU CONSEILLER FINANCIER
  * Évalue l'ensemble des sentinelles et retourne la liste des insights
@@ -534,6 +634,14 @@ export function generateInsights(context: InsightsContext): FinancialInsight[] {
     context.seuilFondRoulement
   );
   if (loanPrepay) insights.push(loanPrepay);
+
+  const commitmentInsights = auditCommitmentDeadlines(
+    context.templates || [],
+    context.currentDate
+  );
+  if (commitmentInsights.length > 0) {
+    insights.push(...commitmentInsights);
+  }
 
   // Tri par priorité décroissante : critical (4) > warning (3) > info (2) > success (1)
   return insights.sort((a, b) => SEVERITY_WEIGHTS[b.severity] - SEVERITY_WEIGHTS[a.severity]);

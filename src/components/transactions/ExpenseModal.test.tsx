@@ -546,7 +546,7 @@ describe('ExpenseModal Component', () => {
   });
 
   it('supporte le mode standard (Dépenses) et le mode futur (Dépenses futures) avec les bons statuts par défaut', () => {
-    // 1. Mode Dépenses courantes (standard)
+    // 1. Mode Dépenses courantes (standard - défaut planned pour ne pas forcer cleared)
     const { unmount } = render(
       <ExpenseModal
         isOpen={true}
@@ -556,10 +556,24 @@ describe('ExpenseModal Component', () => {
         accounts={mockAccounts}
       />
     );
-    expect((screen.getByDisplayValue('Débité') as HTMLSelectElement).value).toBe('cleared');
+    expect((screen.getByDisplayValue('Prévu') as HTMLSelectElement).value).toBe('planned');
     unmount();
 
-    // 2. Mode Dépenses futures
+    // 2. Mode avec defaultStatus explicite débité
+    const { unmount: unmountCleared } = render(
+      <ExpenseModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        categories={mockCategories}
+        accounts={mockAccounts}
+        defaultStatus="cleared"
+      />
+    );
+    expect((screen.getByDisplayValue('Débité') as HTMLSelectElement).value).toBe('cleared');
+    unmountCleared();
+
+    // 3. Mode Dépenses futures
     render(
       <ExpenseModal
         isOpen={true}

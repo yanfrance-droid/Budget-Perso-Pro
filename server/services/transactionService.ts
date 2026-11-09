@@ -28,14 +28,19 @@ export interface TransactionData {
   isCustomized?: boolean;
   isReconstituted?: boolean;
   payerId?: string;
+  deleted_at?: number | null;
 }
 
 export function getTransactions(
   db: DatabaseSync,
-  filters: { month?: string; accountId?: string; type?: string; status?: string } = {}
+  filters: { month?: string; accountId?: string; type?: string; status?: string; includeDeleted?: boolean } = {}
 ): TransactionData[] {
   let query = 'SELECT * FROM transactions WHERE 1=1';
   const params: any[] = [];
+
+  if (!filters.includeDeleted) {
+    query += ' AND deleted_at IS NULL';
+  }
 
   if (filters.month) {
     query += ' AND date LIKE ?';
@@ -64,7 +69,8 @@ export function getTransactions(
     amount: Number(r.amount),
     amortizedCapital: r.amortizedCapital !== null && r.amortizedCapital !== undefined ? Number(r.amortizedCapital) : undefined,
     isCustomized: Boolean(r.isCustomized),
-    isReconstituted: Boolean(r.isReconstituted)
+    isReconstituted: Boolean(r.isReconstituted),
+    deleted_at: r.deleted_at !== null && r.deleted_at !== undefined ? Number(r.deleted_at) : null
   }));
 }
 
@@ -78,7 +84,8 @@ export function getTransactionById(db: DatabaseSync, id: string): TransactionDat
     amount: Number(row.amount),
     amortizedCapital: row.amortizedCapital !== null && row.amortizedCapital !== undefined ? Number(row.amortizedCapital) : undefined,
     isCustomized: Boolean(row.isCustomized),
-    isReconstituted: Boolean(row.isReconstituted)
+    isReconstituted: Boolean(row.isReconstituted),
+    deleted_at: row.deleted_at !== null && row.deleted_at !== undefined ? Number(row.deleted_at) : null
   };
 }
 
@@ -151,15 +158,16 @@ export function saveTransaction(db: DatabaseSync, data: Partial<TransactionData>
     const isCustomized = (data.isCustomized !== undefined ? data.isCustomized : existing?.isCustomized) ? 1 : 0;
     const isReconstituted = (data.isReconstituted !== undefined ? data.isReconstituted : existing?.isReconstituted) ? 1 : 0;
     const payerId = data.payerId !== undefined ? (data.payerId || null) : (existing?.payerId ?? null);
+    const deleted_at = data.deleted_at !== undefined ? (data.deleted_at || null) : (existing?.deleted_at ?? null);
 
     const stmt = db.prepare(`
       INSERT INTO transactions (
         id, date, expectedDate, recurrenceDay, type, amount, status,
         accountId, destinationAccountId, categoryId, linkedId, label,
         notes, paymentMethod, checkNumber, amortizedCapital, templateId,
-        isCustomized, isReconstituted, payerId
+        isCustomized, isReconstituted, payerId, deleted_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         date = excluded.date,
         expectedDate = excluded.expectedDate,
@@ -179,7 +187,8 @@ export function saveTransaction(db: DatabaseSync, data: Partial<TransactionData>
         templateId = excluded.templateId,
         isCustomized = excluded.isCustomized,
         isReconstituted = excluded.isReconstituted,
-        payerId = excluded.payerId
+        payerId = excluded.payerId,
+        deleted_at = excluded.deleted_at
     `);
 
     stmt.run(
@@ -202,7 +211,8 @@ export function saveTransaction(db: DatabaseSync, data: Partial<TransactionData>
       templateId,
       isCustomized,
       isReconstituted,
-      payerId
+      payerId,
+      deleted_at
     );
 
     const savedTx = getTransactionById(db, id)!;
@@ -219,15 +229,44 @@ export function saveTransaction(db: DatabaseSync, data: Partial<TransactionData>
 export function deleteTransaction(db: DatabaseSync, id: string): void {
   withTransaction(db, () => {
     const existing = getTransactionById(db, id);
-    if (existing) {
+    if (!existing || existing.deleted_at) {
+      return;
+    }
+
+    // 1. Synchronisation du capital si mensualité de prêt
+    if (existing.type === 'loan_payment') {
       syncLoanCapitalForTransaction(db, existing, null);
     }
 
-    // Sécurisation relationnelle : détacher automatiquement les transactions associées (ex: remboursements de soins liés)
+    // 2. Sécurisation relationnelle : détacher automatiquement les transactions associées (ex: remboursements de soins liés)
     db.prepare('UPDATE transactions SET linkedId = NULL WHERE linkedId = ?').run(id);
 
-    const stmt = db.prepare('DELETE FROM transactions WHERE id = ?');
-    stmt.run(id);
+    // 3. Soft-delete avec horodatage Unix
+    const now = Date.now();
+    db.prepare('UPDATE transactions SET deleted_at = ? WHERE id = ?').run(now, id);
+  });
+}
+
+export function restoreTransaction(db: DatabaseSync, id: string): TransactionData {
+  return withTransaction(db, () => {
+    const existing = getTransactionById(db, id);
+    if (!existing) {
+      throw new Error(`Transaction ${id} introuvable.`);
+    }
+    if (!existing.deleted_at) {
+      return existing; // Déjà active
+    }
+
+    // 1. Restaurer la transaction (remise à NULL de deleted_at)
+    db.prepare('UPDATE transactions SET deleted_at = NULL WHERE id = ?').run(id);
+    const restoredTx = getTransactionById(db, id)!;
+
+    // 2. Resynchroniser le capital du crédit si la mensualité était réglée
+    if (restoredTx.type === 'loan_payment' && restoredTx.status === 'cleared') {
+      syncLoanCapitalForTransaction(db, null, restoredTx);
+    }
+
+    return restoredTx;
   });
 }
 

@@ -398,9 +398,9 @@ export function importBackupData(
         id, date, expectedDate, recurrenceDay, type, amount, status,
         accountId, destinationAccountId, categoryId, linkedId, label,
         notes, paymentMethod, checkNumber, amortizedCapital, templateId,
-        isCustomized, isReconstituted, payerId
+        isCustomized, isReconstituted, payerId, deleted_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const tx of transactions) {
@@ -424,7 +424,8 @@ export function importBackupData(
         tx.templateId || null,
         tx.isCustomized ? 1 : 0,
         tx.isReconstituted ? 1 : 0,
-        tx.payerId || null
+        tx.payerId || null,
+        tx.deleted_at !== undefined && tx.deleted_at !== null ? Number(tx.deleted_at) : null
       );
     }
 
@@ -494,7 +495,7 @@ export function importBackupData(
 export function exportBackupData(db: DatabaseSync): BackupDataPayload {
   const accounts = getAllAccounts(db);
   const categories = getAllCategories(db);
-  const transactions = getTransactions(db);
+  const transactions = getTransactions(db, { includeDeleted: true });
   const loans = getAllLoans(db);
   const recurrenceTemplates = getAllRecurrenceTemplates(db);
   const incomePayers = getAllIncomePayers(db);

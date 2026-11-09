@@ -15,7 +15,7 @@ import {
 import { getAllAccounts, saveAccount, deleteAccount } from './services/accountService.ts';
 import { getAllCategories, saveCategory, deleteCategory } from './services/categoryService.ts';
 import { getAllIncomePayers, saveIncomePayer, deleteIncomePayer } from './services/incomePayerService.ts';
-import { getTransactions, saveTransaction, deleteTransaction, updateTransactionStatus } from './services/transactionService.ts';
+import { getTransactions, saveTransaction, deleteTransaction, restoreTransaction, updateTransactionStatus } from './services/transactionService.ts';
 import { 
   getAllLoans, 
   saveLoan, 
@@ -327,11 +327,22 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
           const accountId = parsedUrl.searchParams.get('accountId') || undefined;
           const type = parsedUrl.searchParams.get('type') || undefined;
           const status = parsedUrl.searchParams.get('status') || undefined;
-          return sendJson(200, getTransactions(db, { month, accountId, type, status }));
+          const includeDeleted = parsedUrl.searchParams.get('includeDeleted') === 'true';
+          return sendJson(200, getTransactions(db, { month, accountId, type, status, includeDeleted }));
         }
         if (req.method === 'POST') {
           const body = await readBody();
           return sendJson(200, saveTransaction(db, body));
+        }
+      }
+      if (pathname.match(/^\/api\/transactions\/[^/]+\/restore$/) && req.method === 'POST') {
+        const parts = pathname.split('/');
+        const id = parts[3];
+        try {
+          const restored = restoreTransaction(db, id);
+          return sendJson(200, { success: true, transaction: restored });
+        } catch (err: any) {
+          return sendJson(400, { error: err.message });
         }
       }
       if (pathname.startsWith('/api/transactions/') && req.method === 'DELETE') {

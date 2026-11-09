@@ -291,14 +291,23 @@ export default function CurrentExpenses() {
                         />
                       </td>
                       <td>
-                        <Button 
-                          variant="outline"
-                          onClick={() => handleMarkCleared(exp)}
-                          icon={<CheckCircle size={14} color="#16a34a" />}
-                          style={{ color: '#16a34a', borderColor: '#86efac', fontWeight: 600, padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}
-                        >
-                          Marquer réglé
-                        </Button>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <Button 
+                            variant="outline"
+                            onClick={() => handleMarkCleared(exp)}
+                            icon={<CheckCircle size={14} color="#16a34a" />}
+                            style={{ color: '#16a34a', borderColor: '#86efac', fontWeight: 600, padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}
+                          >
+                            Marquer réglé
+                          </Button>
+                          <Button 
+                            variant="icon" 
+                            onClick={() => handleDelete(exp.id)}
+                            title="Supprimer cette dépense"
+                          >
+                            <Trash2 size={16} color="var(--danger-color)" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );

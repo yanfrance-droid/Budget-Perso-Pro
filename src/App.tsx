@@ -17,8 +17,28 @@ import Dashboard from './pages/Dashboard';
 import SettingsPage from './pages/Settings';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ServerDataProvider, useServerDataOptional } from './contexts/ServerDataContext';
+import { UndoRedoControls } from './components/ui/UndoRedoControls';
 import { AuthModal } from './components/auth/AuthModal';
 import { useUIPreferences } from './contexts/UIPreferencesContext';
+
+function getPageTitle(pathname: string): string {
+  switch (pathname) {
+    case '/': return 'Tableau de bord';
+    case '/revenus': return 'Revenus';
+    case '/charges-fixes': return 'Charges fixes';
+    case '/charges-variables': return 'Charges variables';
+    case '/credits': return 'Crédits';
+    case '/sante': return 'Santé';
+    case '/depenses-courantes': return 'Dépenses';
+    case '/depenses-futures': return 'Dépenses futures';
+    case '/mes-projets': return 'Mes projets';
+    case '/analyse-depenses': return 'Analyse des dépenses';
+    case '/analyse-charges': return 'Analyse des charges';
+    case '/epargne': return 'Épargne & transferts';
+    case '/parametres': return 'Paramètres';
+    default: return 'Budget Perso Pro';
+  }
+}
 
 function AppContent() {
   const { isAuthenticated, isLoading: isAuthLoading, user, logout } = useAuth();
@@ -107,6 +127,7 @@ function AppContent() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {serverData && <UndoRedoControls compact />}
           <button
             type="button"
             title={isPrivacyMode ? 'Désactiver le mode discret' : 'Activer le mode discret'}
@@ -239,8 +260,20 @@ function AppContent() {
           </div>
         </aside>
         
-        <main className="main-content">
-          <Routes>
+        <div className="main-area">
+          <header className="desktop-top-bar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>
+                {getPageTitle(location.pathname)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {serverData && <UndoRedoControls />}
+            </div>
+          </header>
+
+          <main className="main-content">
+            <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/revenus" element={<Incomes />} />
             <Route path="/charges-fixes" element={<FixedExpenses />} />
@@ -257,7 +290,8 @@ function AppContent() {
             {/* Redirection par défaut vers le Tableau de bord pour toute route inconnue ou malformée */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </main>
+          </main>
+        </div>
       </div>
     </>
   );

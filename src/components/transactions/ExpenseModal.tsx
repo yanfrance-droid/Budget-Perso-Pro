@@ -75,7 +75,7 @@ export default function ExpenseModal({
         setFormData({
           date: defaultDate || new Date().toISOString().split('T')[0],
           amount: 0,
-          status: defaultStatus || (isFutureMode ? 'planned' : 'cleared'),
+          status: defaultStatus || 'planned',
           label: '',
           notes: '',
           paymentMethod: '',
@@ -258,7 +258,7 @@ export default function ExpenseModal({
           <select 
             className="form-control" 
             required 
-            value={formData.status || 'cleared'} 
+            value={formData.status || defaultStatus || 'planned'} 
             onChange={e => setFormData({ ...formData, status: e.target.value as any })}
           >
             <option value="cleared">Débité</option>

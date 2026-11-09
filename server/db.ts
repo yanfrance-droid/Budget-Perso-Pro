@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { repairOrphans } from './services/maintenanceService.ts';
+import { repairOrphans, purgeExpiredDeletedTransactions } from './services/maintenanceService.ts';
 import { writeTechnicalLog } from './services/loggerService.ts';
 
 export interface ServerConfig {
@@ -41,8 +41,15 @@ export function initDatabase(dbPath = process.env.DB_PATH || './data/budget.db')
  * Routine d'auto-maintenance silencieuse et idempotente exécutée à chaque démarrage du serveur :
  * Purge des sessions expirées, correction des liaisons orphelines et intégrité relationnelle.
  */
-export function runStartupMaintenance(db: DatabaseSync): { repaired: number } {
+export function runStartupMaintenance(db: DatabaseSync): { repaired: number; purged: number } {
   try {
+    const purged = purgeExpiredDeletedTransactions(db, 30);
+    if (purged > 0) {
+      writeTechnicalLog(
+        'INFO',
+        `Maintenance au démarrage : ${purged} transaction(s) supprimée(s) définitivement (> 30 jours).`
+      );
+    }
     const repairResult = repairOrphans(db);
     if (repairResult.repaired > 0) {
       writeTechnicalLog(
@@ -52,21 +59,30 @@ export function runStartupMaintenance(db: DatabaseSync): { repaired: number } {
     } else {
       writeTechnicalLog('INFO', 'Maintenance au démarrage : base de données vérifiée et intègre.');
     }
-    return { repaired: repairResult.repaired };
+    return { repaired: repairResult.repaired, purged };
   } catch (err: any) {
     writeTechnicalLog('WARN', `Avertissement maintenance au démarrage : ${err.message}`);
-    return { repaired: 0 };
+    return { repaired: 0, purged: 0 };
   }
 }
 
-function runMigrations(db: DatabaseSync) {
+export function runMigrations(db: DatabaseSync) {
   try {
     const txCols = db.prepare("PRAGMA table_info(transactions)").all() as any[];
     if (!txCols.some(c => c.name === 'payerId')) {
       db.exec("ALTER TABLE transactions ADD COLUMN payerId TEXT;");
     }
+    if (!txCols.some(c => c.name === 'deleted_at')) {
+      db.exec("ALTER TABLE transactions ADD COLUMN deleted_at INTEGER DEFAULT NULL;");
+    }
+    // Création immédiate et sécurisée des index dépendant des colonnes dynamiques
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_transactions_payer ON transactions(payerId);
+      CREATE INDEX IF NOT EXISTS idx_transactions_active ON transactions(accountId, date) WHERE deleted_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_transactions_deleted ON transactions(deleted_at);
+    `);
   } catch (e) {
-    console.error("Migration transactions payerId error:", e);
+    console.error("Migration transactions payerId/deleted_at error:", e);
   }
 
   try {
@@ -74,8 +90,17 @@ function runMigrations(db: DatabaseSync) {
     if (!recCols.some(c => c.name === 'payerId')) {
       db.exec("ALTER TABLE recurrence_templates ADD COLUMN payerId TEXT;");
     }
+    if (!recCols.some(c => c.name === 'commitment_end_date')) {
+      db.exec("ALTER TABLE recurrence_templates ADD COLUMN commitment_end_date TEXT DEFAULT NULL;");
+    }
+    if (!recCols.some(c => c.name === 'price_after_promo')) {
+      db.exec("ALTER TABLE recurrence_templates ADD COLUMN price_after_promo REAL DEFAULT NULL;");
+    }
+    if (!recCols.some(c => c.name === 'notice_period_days')) {
+      db.exec("ALTER TABLE recurrence_templates ADD COLUMN notice_period_days INTEGER DEFAULT 30;");
+    }
   } catch (e) {
-    console.error("Migration recurrence_templates payerId error:", e);
+    console.error("Migration recurrence_templates commitment error:", e);
   }
 
   try {
@@ -190,6 +215,8 @@ function runMigrations(db: DatabaseSync) {
       CREATE INDEX IF NOT EXISTS idx_transactions_dest_account ON transactions(destinationAccountId);
       CREATE INDEX IF NOT EXISTS idx_transactions_payer ON transactions(payerId);
       CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(accountId, date);
+      CREATE INDEX IF NOT EXISTS idx_transactions_active ON transactions(accountId, date) WHERE deleted_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_transactions_deleted ON transactions(deleted_at);
       CREATE INDEX IF NOT EXISTS idx_loans_account ON loans(accountId);
       CREATE INDEX IF NOT EXISTS idx_recurrence_account ON recurrence_templates(accountId);
       CREATE INDEX IF NOT EXISTS idx_planned_expenses_category ON planned_expenses(categoryId);
@@ -366,6 +393,7 @@ function createSchema(db: DatabaseSync) {
       isCustomized INTEGER NOT NULL DEFAULT 0,
       isReconstituted INTEGER NOT NULL DEFAULT 0,
       payerId TEXT,
+      deleted_at INTEGER DEFAULT NULL,
       FOREIGN KEY (accountId) REFERENCES accounts(id) ON DELETE RESTRICT
     );
 
@@ -422,7 +450,10 @@ function createSchema(db: DatabaseSync) {
       disabledFromMonth TEXT,
       createdAt TEXT,
       updatedAt TEXT,
-      payerId TEXT
+      payerId TEXT,
+      commitment_end_date TEXT DEFAULT NULL,
+      price_after_promo REAL DEFAULT NULL,
+      notice_period_days INTEGER DEFAULT 30
     );
 
     -- 9. Table Clés de configuration et état Dashboard (manualBalance, card1, card2)
@@ -455,7 +486,7 @@ function createSchema(db: DatabaseSync) {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Index de performance pour les filtres par date, compte, type, liens et échéances
+    -- Index de performance pour les filtres par date, compte, type, liens et échéances (colonnes stables du schéma de base)
     CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
     CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(accountId);
     CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
@@ -463,7 +494,6 @@ function createSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_transactions_template ON transactions(templateId);
     CREATE INDEX IF NOT EXISTS idx_transactions_linked ON transactions(linkedId);
     CREATE INDEX IF NOT EXISTS idx_transactions_dest_account ON transactions(destinationAccountId);
-    CREATE INDEX IF NOT EXISTS idx_transactions_payer ON transactions(payerId);
     CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(accountId, date);
     CREATE INDEX IF NOT EXISTS idx_loans_account ON loans(accountId);
     CREATE INDEX IF NOT EXISTS idx_recurrence_account ON recurrence_templates(accountId);

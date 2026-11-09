@@ -14,7 +14,8 @@ import {
   Percent,
   Calendar,
   Layers,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -242,6 +243,27 @@ export default function ChargesAnalysis() {
             </div>
           </div>
 
+          {/* Bandeau d'alerte spécifique aux préavis d'engagement / fin de promo */}
+          {analysisResult.fixedContracts.some(c => c.commitmentStatus === 'notice_window') && (
+            <div className="tariff-increase-banner" style={{ background: '#fffbeb', borderColor: '#fde68a', marginBottom: '1rem' }} data-testid="commitment-notice-banner">
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                <Clock size={22} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <h4 style={{ margin: '0 0 0.35rem 0', color: '#b45309', fontSize: '0.95rem', fontWeight: 700 }}>
+                    Fenêtre de préavis ouverte — Contrats fixes arrivant à échéance
+                  </h4>
+                  <ul style={{ margin: 0, paddingLeft: '1.25rem', color: '#92400e', fontSize: '0.85rem' }}>
+                    {analysisResult.fixedContracts.filter(c => c.commitmentStatus === 'notice_window').map(c => (
+                      <li key={c.id} style={{ marginBottom: '0.25rem' }}>
+                        <strong>{c.name}</strong> : engagement jusqu'au {c.commitmentEndDate}. <strong>À résilier avant le {c.noticeDeadline}</strong> ({c.noticePeriodDays} j de préavis){c.postPromoAnnualCost && c.postPromoAnnualCost > 0 ? ` pour éviter une hausse de +${formatCurrency(c.postPromoAnnualCost)}/an (passage à ${formatCurrency(c.priceAfterPromo || 0)}/mois)` : ''}.
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Bandeau d'alerte spécifique aux hausses de tarifs */}
           {analysisResult.tariffIncreases.length > 0 && (
             <div className="tariff-increase-banner" data-testid="tariff-increase-banner">
@@ -340,7 +362,71 @@ export default function ChargesAnalysis() {
                   ) : (
                     filteredFixedContracts.map(c => (
                       <tr key={c.id} style={{ background: c.hasIncreased ? 'rgba(254, 242, 242, 0.4)' : undefined }}>
-                        <td style={{ fontWeight: 600 }}>{c.name}</td>
+                        <td style={{ fontWeight: 600 }}>
+                          <span>{c.name}</span>
+                          {c.commitmentStatus === 'notice_window' && (
+                            <span
+                              className="badge-notice-window"
+                              style={{
+                                marginLeft: '0.5rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                backgroundColor: '#fee2e2',
+                                color: '#b91c1c',
+                                border: '1px solid #f87171',
+                                borderRadius: '4px',
+                                padding: '0.15rem 0.45rem',
+                                fontSize: '0.72rem',
+                                fontWeight: 600
+                              }}
+                              title={`Préavis à envoyer avant le ${c.noticeDeadline}`}
+                            >
+                              ⚠️ À résilier avant le {c.noticeDeadline}{c.postPromoAnnualCost && c.postPromoAnnualCost > 0 ? ` (+${c.postPromoAnnualCost} €/an)` : ''}
+                            </span>
+                          )}
+                          {c.commitmentStatus === 'active' && (
+                            <span
+                              className="badge-active-commitment"
+                              style={{
+                                marginLeft: '0.5rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                backgroundColor: '#dcfce7',
+                                color: '#15803d',
+                                border: '1px solid #86efac',
+                                borderRadius: '4px',
+                                padding: '0.15rem 0.45rem',
+                                fontSize: '0.72rem',
+                                fontWeight: 500
+                              }}
+                              title={`Sous engagement jusqu'au ${c.commitmentEndDate}`}
+                            >
+                              Fin de promo le {c.commitmentEndDate}
+                            </span>
+                          )}
+                          {c.commitmentStatus === 'expired_post_promo' && (
+                            <span
+                              className="badge-expired-commitment"
+                              style={{
+                                marginLeft: '0.5rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                backgroundColor: '#f1f5f9',
+                                color: '#475569',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '4px',
+                                padding: '0.15rem 0.45rem',
+                                fontSize: '0.72rem',
+                                fontWeight: 500
+                              }}
+                            >
+                              Post-promo
+                            </span>
+                          )}
+                        </td>
                         <td style={{ color: '#64748b', fontSize: '0.85rem' }}>{c.categoryName}</td>
                         <td className="text-right" style={{ fontWeight: 700 }}>{formatCurrency(c.currentAmount)}</td>
                         <td className="text-right" style={{ color: '#64748b' }}>{formatCurrency(c.previousAmount)}</td>

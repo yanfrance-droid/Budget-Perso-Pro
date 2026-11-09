@@ -18,6 +18,12 @@ export interface FixedContractAnalysis {
   hasIncreased: boolean; // Hausse tarifaire détectée
   annualizedImpact: number; // diffMvsM1 * 12 si hausse
   monthlyHistory: Array<{ month: string; amount: number }>;
+  commitmentEndDate?: string | null;
+  noticePeriodDays?: number;
+  noticeDeadline?: string | null;
+  commitmentStatus?: 'none' | 'active' | 'notice_window' | 'expired_post_promo';
+  priceAfterPromo?: number | null;
+  postPromoAnnualCost?: number;
 }
 
 export interface FixedChargesMonthlyPoint {
@@ -220,6 +226,7 @@ export function analyzeCharges({
     id: string;
     name: string;
     categoryId?: string;
+    templateId?: string;
     amountsByMonth: Map<string, number>;
   }>();
 
@@ -236,6 +243,7 @@ export function analyzeCharges({
         id: t.templateId || key,
         name: resolvedName,
         categoryId: t.categoryId || tpl?.categoryId,
+        templateId: t.templateId,
         amountsByMonth: new Map<string, number>()
       });
     }
@@ -291,6 +299,46 @@ export function analyzeCharges({
     }
 
     const cat = group.categoryId ? categoryMap.get(group.categoryId) : undefined;
+    const tpl = group.templateId ? templateMap.get(group.templateId) : undefined;
+    let commitmentEndDate: string | null = null;
+    let noticePeriodDays = 30;
+    let noticeDeadline: string | null = null;
+    let commitmentStatus: 'none' | 'active' | 'notice_window' | 'expired_post_promo' = 'none';
+    let priceAfterPromo: number | null = null;
+    let postPromoAnnualCost = 0;
+
+    if (tpl?.commitment_end_date) {
+      commitmentEndDate = tpl.commitment_end_date;
+      noticePeriodDays = tpl.notice_period_days !== undefined && tpl.notice_period_days !== null ? Number(tpl.notice_period_days) : 30;
+      priceAfterPromo = tpl.price_after_promo !== undefined && tpl.price_after_promo !== null ? Number(tpl.price_after_promo) : null;
+
+      let fullEndDate = commitmentEndDate;
+      if (commitmentEndDate.length === 7) {
+        const [y, m] = commitmentEndDate.split('-').map(Number);
+        const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+        fullEndDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      }
+
+      const [ey, em, ed] = fullEndDate.split('-').map(Number);
+      const deadlineDate = new Date(Date.UTC(ey, em - 1, ed - noticePeriodDays));
+      noticeDeadline = deadlineDate.toISOString().slice(0, 10);
+
+      const todayStr = currentMonthStr === refMonth 
+        ? `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+        : `${refMonth}-01`;
+
+      if (todayStr > fullEndDate) {
+        commitmentStatus = 'expired_post_promo';
+      } else if (todayStr >= noticeDeadline) {
+        commitmentStatus = 'notice_window';
+      } else {
+        commitmentStatus = 'active';
+      }
+
+      if (priceAfterPromo !== null && priceAfterPromo > currentAmount) {
+        postPromoAnnualCost = roundCurrency((priceAfterPromo - currentAmount) * 12);
+      }
+    }
 
     fixedContracts.push({
       id: group.id,
@@ -306,7 +354,13 @@ export function analyzeCharges({
       maxAmount,
       hasIncreased,
       annualizedImpact,
-      monthlyHistory
+      monthlyHistory,
+      commitmentEndDate,
+      noticePeriodDays,
+      noticeDeadline,
+      commitmentStatus,
+      priceAfterPromo,
+      postPromoAnnualCost
     });
   });
 

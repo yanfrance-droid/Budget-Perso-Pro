@@ -55,6 +55,7 @@ export interface Transaction {
   isCustomized?: boolean; // Vrai si le montant ou le libellé a été personnalisé pour ce mois
   isReconstituted?: boolean; // Vrai si l'occurrence a été reconstituée historiquement sans pointage
   payerId?: string; // Référence vers l'organisme verseur IncomePayer
+  deleted_at?: number | null; // Timestamp Unix ms de suppression logique (soft-delete)
 }
 
 export interface RecurrenceTemplate {
@@ -75,6 +76,9 @@ export interface RecurrenceTemplate {
   updatedAt?: string;
   payerId?: string; // Référence vers l'organisme verseur IncomePayer
   updateFutureOccurrencesFromDate?: string;
+  commitment_end_date?: string | null; // YYYY-MM ou YYYY-MM-DD
+  price_after_promo?: number | null; // Tarif appliqué post-promo
+  notice_period_days?: number | null; // Délai de préavis en jours (défaut 30)
 }
 
 export interface Loan {

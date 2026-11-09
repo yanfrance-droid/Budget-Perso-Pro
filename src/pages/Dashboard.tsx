@@ -649,13 +649,17 @@ export default function Dashboard() {
   };
   const categoryLabelLayoutMap = computeCategoryLabelLayout(categoryData);
 
-  // Charges impayées / en retard des mois antérieurs par rapport au mois sélectionné
-  const pastUnpaidExpensesSelected = activeTransactions.filter(t => 
-    t.date < `${selectedMonth}-01` && 
-    t.status !== 'cleared' &&
-    (EXPENSE_TYPES as readonly string[]).includes(t.type) &&
-    !(t.recurrenceDay && !t.templateId)
-  ).sort((a, b) => a.date.localeCompare(b.date));
+  // Charges impayées / en retard des mois antérieurs par rapport au mois sélectionné :
+  // Une dépense est impayée/en retard si :
+  // - Sa date est antérieure au mois sélectionné (t.date < selectedMonth-01)
+  // - ET son statut n'est pas pointé comme débité ('cleared')
+  // - ET elle est échue (date antérieure à aujourd'hui ou antérieure au mois réel en cours),
+  //   pour ne pas qualifier à tort une charge prévue future normale d'impayé quand on consulte un mois futur.
+  const pastUnpaidExpensesSelected = activeTransactions.filter(t => {
+    if (t.date >= `${selectedMonth}-01` || t.status === 'cleared') return false;
+    if (!(EXPENSE_TYPES as readonly string[]).includes(t.type)) return false;
+    return true;
+  }).sort((a, b) => a.date.localeCompare(b.date));
   const totalImpayesPassesSelected = roundCurrency(pastUnpaidExpensesSelected.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0));
 
   // Reste à payer strict du mois sélectionné (sans ajout des impayés antérieurs pour éviter tout doublon)

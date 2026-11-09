@@ -542,14 +542,14 @@ export default function Savings() {
     }
   }, [selectedMonth, serverData]);
 
-  // Récupération des opérations d'épargne antérieures non régularisées (planned ou pending avant le mois sélectionné)
+  // Récupération des opérations d'épargne antérieures non régularisées (planned ou pending avant le mois réel en cours)
   const pastUnpaidSavings = useMemo(() => {
-    if (!savings || !selectedMonth) return [];
-    const startOfSelectedMonth = `${selectedMonth}-01`;
+    if (!savings) return [];
+    const realCurrentMonthStart = `${getCurrentMonth()}-01`;
     return savings
-      .filter(s => s.date < startOfSelectedMonth && (s.status === 'planned' || s.status === 'pending'))
+      .filter(s => s.date < realCurrentMonthStart && (s.status === 'planned' || s.status === 'pending'))
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  }, [savings, selectedMonth]);
+  }, [savings]);
 
   const monthSavings = useMemo(() => {
     if (!savings) return [];

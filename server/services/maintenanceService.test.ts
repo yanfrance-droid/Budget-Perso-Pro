@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { initDatabase, runStartupMaintenance } from '../db.ts';
-import { deleteTransaction } from './transactionService.ts';
+import { deleteTransaction, getTransactions } from './transactionService.ts';
 import { 
   getMaintenanceStatus, 
   vacuumAndOptimize, 
@@ -231,9 +231,11 @@ describe('maintenanceService', () => {
     // Suppression de la dépense via deleteTransaction
     deleteTransaction(db, 'exp-dentiste');
 
-    // Vérifier que la dépense est supprimée
-    const expRow = db.prepare('SELECT * FROM transactions WHERE id = ?').get('exp-dentiste');
-    expect(expRow).toBeUndefined();
+    // Vérifier que la dépense est soft-deleted
+    const expRow = db.prepare('SELECT * FROM transactions WHERE id = ?').get('exp-dentiste') as any;
+    expect(expRow).toBeDefined();
+    expect(expRow.deleted_at).toBeTypeOf('number');
+    expect(getTransactions(db).some(t => t.id === 'exp-dentiste')).toBe(false);
 
     // Vérifier que le remboursement existe toujours mais a été détaché (linkedId = null) sans erreur orpheline
     const reimbRow = db.prepare('SELECT * FROM transactions WHERE id = ?').get('reimb-cpam') as any;

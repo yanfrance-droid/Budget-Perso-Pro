@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { createSafetyBackup } from './migrationService.ts';
+import { runMigrations } from '../db.ts';
 
 export interface SystemHealthMetrics {
   uptimeSeconds: number;
@@ -218,9 +219,10 @@ export function getMaintenanceStatus(db: DatabaseSync): MaintenanceStatus {
     }
   }
 
-  const getCount = (table: string): number => {
+  const getCount = (table: string, condition?: string): number => {
     try {
-      const row = db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get() as { c: number };
+      const sql = condition ? `SELECT COUNT(*) as c FROM ${table} WHERE ${condition}` : `SELECT COUNT(*) as c FROM ${table}`;
+      const row = db.prepare(sql).get() as { c: number };
       return row?.c ?? 0;
     } catch {
       return 0;
@@ -237,7 +239,7 @@ export function getMaintenanceStatus(db: DatabaseSync): MaintenanceStatus {
       accounts: getCount('accounts'),
       categories: getCount('categories'),
       incomePayers: getCount('income_payers'),
-      transactions: getCount('transactions'),
+      transactions: getCount('transactions', 'deleted_at IS NULL'),
       loans: getCount('loans'),
       recurrenceTemplates: getCount('recurrence_templates'),
       plannedExpenses: getCount('planned_expenses')
@@ -290,32 +292,63 @@ export function vacuumAndOptimize(db: DatabaseSync): { success: boolean; message
 }
 
 /**
+ * Supprime définitivement de SQLite les transactions en soft-delete dont l'horodatage deleted_at
+ * dépasse le délai de rétention (par défaut 30 jours).
+ */
+export function purgeExpiredDeletedTransactions(db: DatabaseSync, retentionDays = 30): number {
+  try {
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    // 1. Détachement relationnel avant suppression définitive des transactions liées
+    db.prepare(`
+      UPDATE transactions 
+      SET linkedId = NULL 
+      WHERE linkedId IN (
+        SELECT id FROM transactions 
+        WHERE deleted_at IS NOT NULL AND deleted_at < ?
+      )
+    `).run(cutoff);
+
+    // 2. Suppression physique définitive
+    const stmt = db.prepare('DELETE FROM transactions WHERE deleted_at IS NOT NULL AND deleted_at < ?');
+    const result = stmt.run(cutoff) as { changes?: number };
+    return Number(result?.changes || 0);
+  } catch (err: any) {
+    console.warn('Avertissement lors de la purge des transactions expirées :', err.message);
+    return 0;
+  }
+}
+
+/**
  * Analyse et diagnostic exhaustif des enregistrements orphelins et anomalies d'intégrité métier.
  */
 export function checkOrphans(db: DatabaseSync): OrphanCheckResult {
   const missingAccounts = db.prepare(`
     SELECT COUNT(*) as c FROM transactions t
-    WHERE t.accountId NOT IN (SELECT id FROM accounts)
+    WHERE t.deleted_at IS NULL
+      AND t.accountId NOT IN (SELECT id FROM accounts)
   `).get() as { c: number };
 
   const missingCategories = db.prepare(`
     SELECT COUNT(*) as c FROM transactions t
-    WHERE t.categoryId IS NOT NULL 
+    WHERE t.deleted_at IS NULL
+      AND t.categoryId IS NOT NULL 
       AND t.categoryId != '' 
       AND t.categoryId NOT IN (SELECT id FROM categories)
   `).get() as { c: number };
 
   const brokenRecurrences = db.prepare(`
     SELECT COUNT(*) as c FROM transactions t
-    WHERE t.templateId IS NOT NULL 
+    WHERE t.deleted_at IS NULL
+      AND t.templateId IS NOT NULL 
       AND t.templateId != '' 
       AND t.templateId NOT IN (SELECT id FROM recurrence_templates)
   `).get() as { c: number };
 
-  // 1. Vrais linkedId orphelins
+  // 1. Vrais linkedId orphelins (sur transactions actives)
   const brokenLoanLinks = db.prepare(`
     SELECT COUNT(*) as c FROM transactions
-    WHERE type = 'loan_payment'
+    WHERE deleted_at IS NULL
+      AND type = 'loan_payment'
       AND linkedId IS NOT NULL 
       AND linkedId != '' 
       AND linkedId NOT IN (SELECT id FROM loans)
@@ -323,23 +356,26 @@ export function checkOrphans(db: DatabaseSync): OrphanCheckResult {
 
   const brokenHealthLinks = db.prepare(`
     SELECT COUNT(*) as c FROM transactions
-    WHERE type = 'health_reimbursement'
+    WHERE deleted_at IS NULL
+      AND type = 'health_reimbursement'
       AND linkedId IS NOT NULL 
       AND linkedId != '' 
-      AND linkedId NOT IN (SELECT id FROM transactions WHERE type = 'health_expense')
+      AND linkedId NOT IN (SELECT id FROM transactions WHERE type = 'health_expense' AND deleted_at IS NULL)
   `).get() as { c: number };
 
   // 2. destinationAccountId, payerId et planned_expenses.categoryId orphelins
   const brokenDestinationAccounts = db.prepare(`
     SELECT COUNT(*) as c FROM transactions
-    WHERE destinationAccountId IS NOT NULL 
+    WHERE deleted_at IS NULL
+      AND destinationAccountId IS NOT NULL 
       AND destinationAccountId != '' 
       AND destinationAccountId NOT IN (SELECT id FROM accounts)
   `).get() as { c: number };
 
   const brokenPayers = db.prepare(`
     SELECT COUNT(*) as c FROM transactions
-    WHERE payerId IS NOT NULL 
+    WHERE deleted_at IS NULL
+      AND payerId IS NOT NULL 
       AND payerId != '' 
       AND payerId NOT IN (SELECT id FROM income_payers)
   `).get() as { c: number };
@@ -387,7 +423,8 @@ export function checkOrphans(db: DatabaseSync): OrphanCheckResult {
 
   const excessAmortizedCapitals = db.prepare(`
     SELECT COUNT(*) as c FROM transactions
-    WHERE type = 'loan_payment' 
+    WHERE deleted_at IS NULL
+      AND type = 'loan_payment' 
       AND amortizedCapital IS NOT NULL 
       AND amortizedCapital > amount
   `).get() as { c: number };
@@ -465,7 +502,8 @@ export function repairOrphans(db: DatabaseSync): { success: boolean; repaired: n
     const brokenTmplStmt = db.prepare(`
       UPDATE transactions 
       SET templateId = NULL 
-      WHERE templateId IS NOT NULL 
+      WHERE deleted_at IS NULL
+        AND templateId IS NOT NULL 
         AND templateId != '' 
         AND templateId NOT IN (SELECT id FROM recurrence_templates)
     `);
@@ -476,7 +514,8 @@ export function repairOrphans(db: DatabaseSync): { success: boolean; repaired: n
     const brokenCatStmt = db.prepare(`
       UPDATE transactions 
       SET categoryId = NULL 
-      WHERE categoryId IS NOT NULL 
+      WHERE deleted_at IS NULL
+        AND categoryId IS NOT NULL 
         AND categoryId != '' 
         AND categoryId NOT IN (SELECT id FROM categories)
     `);
@@ -489,7 +528,8 @@ export function repairOrphans(db: DatabaseSync): { success: boolean; repaired: n
       const brokenAccStmt = db.prepare(`
         UPDATE transactions 
         SET accountId = ? 
-        WHERE accountId NOT IN (SELECT id FROM accounts)
+        WHERE deleted_at IS NULL
+          AND accountId NOT IN (SELECT id FROM accounts)
       `);
       const accChanges = brokenAccStmt.run(firstAccount.id);
       repaired += Number(accChanges.changes || 0);
@@ -499,7 +539,8 @@ export function repairOrphans(db: DatabaseSync): { success: boolean; repaired: n
     const brokenLoanStmt = db.prepare(`
       UPDATE transactions 
       SET linkedId = NULL 
-      WHERE type = 'loan_payment' 
+      WHERE deleted_at IS NULL
+        AND type = 'loan_payment' 
         AND linkedId IS NOT NULL 
         AND linkedId != '' 
         AND linkedId NOT IN (SELECT id FROM loans)
@@ -511,10 +552,11 @@ export function repairOrphans(db: DatabaseSync): { success: boolean; repaired: n
     const brokenHealthStmt = db.prepare(`
       UPDATE transactions 
       SET linkedId = NULL 
-      WHERE type = 'health_reimbursement' 
+      WHERE deleted_at IS NULL
+        AND type = 'health_reimbursement' 
         AND linkedId IS NOT NULL 
         AND linkedId != '' 
-        AND linkedId NOT IN (SELECT id FROM transactions WHERE type = 'health_expense')
+        AND linkedId NOT IN (SELECT id FROM transactions WHERE type = 'health_expense' AND deleted_at IS NULL)
     `);
     const healthChanges = brokenHealthStmt.run();
     repaired += Number(healthChanges.changes || 0);
@@ -523,7 +565,8 @@ export function repairOrphans(db: DatabaseSync): { success: boolean; repaired: n
     const brokenDestStmt = db.prepare(`
       UPDATE transactions 
       SET destinationAccountId = NULL 
-      WHERE destinationAccountId IS NOT NULL 
+      WHERE deleted_at IS NULL
+        AND destinationAccountId IS NOT NULL 
         AND destinationAccountId != '' 
         AND destinationAccountId NOT IN (SELECT id FROM accounts)
     `);
@@ -534,7 +577,8 @@ export function repairOrphans(db: DatabaseSync): { success: boolean; repaired: n
     const brokenPayerStmt = db.prepare(`
       UPDATE transactions 
       SET payerId = NULL 
-      WHERE payerId IS NOT NULL 
+      WHERE deleted_at IS NULL
+        AND payerId IS NOT NULL 
         AND payerId != '' 
         AND payerId NOT IN (SELECT id FROM income_payers)
     `);
@@ -859,42 +903,10 @@ export function restoreSqliteDbFile(
     db.exec('PRAGMA journal_mode = WAL;');
     db.exec('PRAGMA busy_timeout = 5000;');
 
-    // 8b. Application automatique des migrations (ex: table income_payers ou colonnes ajoutées)
+    // 8b. Application automatique des migrations centralisées
     // directement sur la connexion réouverte pour garantir la rétrocompatibilité totale
     try {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS income_payers (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          isArchived INTEGER NOT NULL DEFAULT 0,
-          createdAt TEXT NOT NULL
-        );
-      `);
-      const txCols = db.prepare("PRAGMA table_info(transactions)").all() as any[];
-      if (!txCols.some(c => c.name === 'payerId')) {
-        db.exec("ALTER TABLE transactions ADD COLUMN payerId TEXT;");
-      }
-      const recCols = db.prepare("PRAGMA table_info(recurrence_templates)").all() as any[];
-      if (!recCols.some(c => c.name === 'payerId')) {
-        db.exec("ALTER TABLE recurrence_templates ADD COLUMN payerId TEXT;");
-      }
-      const userCols = db.prepare("PRAGMA table_info(users)").all() as any[];
-      if (!userCols.some(c => c.name === 'recovery_key_hash')) {
-        db.exec("ALTER TABLE users ADD COLUMN recovery_key_hash TEXT;");
-        db.exec("ALTER TABLE users ADD COLUMN recovery_key_salt TEXT;");
-      }
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS planned_expenses (
-          id TEXT PRIMARY KEY,
-          label TEXT NOT NULL,
-          estimatedAmount REAL NOT NULL,
-          categoryId TEXT,
-          urgency TEXT NOT NULL,
-          targetDate TEXT,
-          notes TEXT,
-          createdAt TEXT NOT NULL
-        );
-      `);
+      runMigrations(db);
     } catch (migErr: any) {
       console.warn('Avertissement migration post-restauration:', migErr.message);
     }

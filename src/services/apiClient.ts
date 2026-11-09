@@ -77,7 +77,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     } catch {
       // Ignorer si pas de JSON d'erreur
     }
-    throw new Error(errorMsg);
+    const err: any = new Error(errorMsg);
+    err.status = response.status;
+    throw err;
   }
 
   return response.json();
@@ -164,20 +166,22 @@ export const apiClient = {
 
   // 4. Transactions
   transactions: {
-    get: (filters: { month?: string; accountId?: string; type?: string; status?: string } = {}) => {
+    get: (filters: { month?: string; accountId?: string; type?: string; status?: string; includeDeleted?: boolean } = {}) => {
       const params = new URLSearchParams();
       if (filters.month) params.append('month', filters.month);
       if (filters.accountId) params.append('accountId', filters.accountId);
       if (filters.type) params.append('type', filters.type);
       if (filters.status) params.append('status', filters.status);
+      if (filters.includeDeleted) params.append('includeDeleted', 'true');
       const query = params.toString() ? `?${params.toString()}` : '';
       return request<any[]>(`/api/transactions${query}`);
     },
-    getAll: (filters: { month?: string; accountId?: string; type?: string; status?: string } = {}) => {
+    getAll: (filters: { month?: string; accountId?: string; type?: string; status?: string; includeDeleted?: boolean } = {}) => {
       return apiClient.transactions.get(filters);
     },
     save: (transaction: any) => request<any>('/api/transactions', { method: 'POST', body: JSON.stringify(transaction) }),
     delete: (id: string) => request<{ success: boolean }>(`/api/transactions/${id}`, { method: 'DELETE' }),
+    restore: (id: string) => request<{ success: boolean; transaction: any }>(`/api/transactions/${id}/restore`, { method: 'POST' }),
     updateStatus: (id: string, status: string) => 
       request<any>(`/api/transactions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
   },

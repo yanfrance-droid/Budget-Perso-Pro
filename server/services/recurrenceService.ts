@@ -21,6 +21,9 @@ export interface RecurrenceTemplateData {
   updatedAt?: string;
   payerId?: string;
   updateFutureOccurrencesFromDate?: string;
+  commitment_end_date?: string | null;
+  price_after_promo?: number | null;
+  notice_period_days?: number | null;
 }
 
 export function getAllRecurrenceTemplates(db: DatabaseSync): RecurrenceTemplateData[] {
@@ -30,8 +33,38 @@ export function getAllRecurrenceTemplates(db: DatabaseSync): RecurrenceTemplateD
     ...r,
     amount: Number(r.amount),
     recurrenceDay: Number(r.recurrenceDay),
-    isActive: Boolean(r.isActive)
+    isActive: Boolean(r.isActive),
+    commitment_end_date: r.commitment_end_date || null,
+    price_after_promo: r.price_after_promo !== null && r.price_after_promo !== undefined ? Number(r.price_after_promo) : null,
+    notice_period_days: r.notice_period_days !== null && r.notice_period_days !== undefined ? Number(r.notice_period_days) : 30
   }));
+}
+
+/**
+ * Détermine le montant effectif à appliquer pour une occurrence récurrente :
+ * Si la date de l'échéance dépasse strictement commitment_end_date et qu'un tarif post-promo
+ * valide (> 0) est configuré, bascule automatiquement vers price_after_promo.
+ */
+export function computeEffectiveRecurrenceAmount(
+  t: { amount: number; commitment_end_date?: string | null; price_after_promo?: number | null },
+  occurrenceDate: string,
+  targetMonth?: string
+): number {
+  if (
+    t.commitment_end_date &&
+    t.price_after_promo !== undefined &&
+    t.price_after_promo !== null &&
+    Number(t.price_after_promo) > 0
+  ) {
+    const isPastCommitment = t.commitment_end_date.length === 7
+      ? (targetMonth ? targetMonth > t.commitment_end_date : occurrenceDate.slice(0, 7) > t.commitment_end_date)
+      : occurrenceDate > t.commitment_end_date;
+
+    if (isPastCommitment) {
+      return Number(t.price_after_promo);
+    }
+  }
+  return Number(t.amount);
 }
 
 export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<RecurrenceTemplateData>): RecurrenceTemplateData {
@@ -60,14 +93,22 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
     const disabledFromMonth = data.disabledFromMonth !== undefined ? (data.disabledFromMonth || null) : (existing?.disabledFromMonth ?? null);
     const createdAt = existing?.createdAt || data.createdAt || now;
     const payerId = data.payerId !== undefined ? (data.payerId || null) : (existing?.payerId ?? null);
+    const commitment_end_date = data.commitment_end_date !== undefined ? (data.commitment_end_date || null) : (existing?.commitment_end_date ?? null);
+    const price_after_promo = data.price_after_promo !== undefined
+      ? (data.price_after_promo !== null && !isNaN(Number(data.price_after_promo)) ? Number(data.price_after_promo) : null)
+      : (existing?.price_after_promo !== undefined && existing?.price_after_promo !== null ? Number(existing.price_after_promo) : null);
+    const notice_period_days = data.notice_period_days !== undefined
+      ? (data.notice_period_days !== null && !isNaN(Number(data.notice_period_days)) ? Number(data.notice_period_days) : 30)
+      : (existing?.notice_period_days !== undefined && existing?.notice_period_days !== null ? Number(existing.notice_period_days) : 30);
 
     const stmt = db.prepare(`
       INSERT INTO recurrence_templates (
         id, type, amount, recurrenceDay, accountId, destinationAccountId,
         categoryId, label, notes, startDate, endDate, isActive,
-        disabledFromMonth, createdAt, updatedAt, payerId
+        disabledFromMonth, createdAt, updatedAt, payerId,
+        commitment_end_date, price_after_promo, notice_period_days
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         amount = excluded.amount,
@@ -82,7 +123,10 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
         isActive = excluded.isActive,
         disabledFromMonth = excluded.disabledFromMonth,
         updatedAt = excluded.updatedAt,
-        payerId = excluded.payerId
+        payerId = excluded.payerId,
+        commitment_end_date = excluded.commitment_end_date,
+        price_after_promo = excluded.price_after_promo,
+        notice_period_days = excluded.notice_period_days
     `);
 
     stmt.run(
@@ -101,7 +145,10 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
       disabledFromMonth,
       createdAt,
       now,
-      payerId
+      payerId,
+      commitment_end_date,
+      price_after_promo,
+      notice_period_days
     );
 
     // Si le modèle a été désactivé durablement à partir d'un mois précis (disabledFromMonth) :
@@ -116,6 +163,22 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
       disableStmt.run(id, fromDate);
     }
 
+    // Mise à jour automatique des occurrences non pointées et non personnalisées
+    // pour garantir la cohérence du palier tarifaire actuel / post-promo
+    const unpointedOccurrences = db.prepare(`
+      SELECT id, date FROM transactions
+      WHERE templateId = ? AND status != 'cleared' AND isCustomized = 0
+    `).all(id) as { id: string; date: string }[];
+
+    for (const occ of unpointedOccurrences) {
+      const effectiveAmt = computeEffectiveRecurrenceAmount({
+        amount,
+        commitment_end_date,
+        price_after_promo
+      }, occ.date);
+      db.prepare('UPDATE transactions SET amount = ? WHERE id = ?').run(effectiveAmt, occ.id);
+    }
+
     // Si demandé (application aux mois futurs), mettre à jour toutes les occurrences futures déjà générées
     // qui ne sont pas déjà débitées ('cleared') et n'ont pas fait l'objet d'une personnalisation ponctuelle (isCustomized = 0)
     if (data.updateFutureOccurrencesFromDate) {
@@ -128,6 +191,12 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
       for (const occ of futureOccurrences) {
         const [y, m] = occ.date.split('-').map(Number);
         const newOccDate = computeOccurrenceDate(y, m, recurrenceDay);
+        const effectiveAmt = computeEffectiveRecurrenceAmount({
+          amount,
+          commitment_end_date,
+          price_after_promo
+        }, newOccDate);
+
         db.prepare(`
           UPDATE transactions
           SET amount = ?,
@@ -142,7 +211,7 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
               payerId = ?
           WHERE id = ?
         `).run(
-          amount,
+          effectiveAmt,
           label,
           accountId,
           destinationAccountId,
@@ -163,7 +232,10 @@ export function saveRecurrenceTemplate(db: DatabaseSync, data: Partial<Recurrenc
       ...r,
       amount: Number(r.amount),
       recurrenceDay: Number(r.recurrenceDay),
-      isActive: Boolean(r.isActive)
+      isActive: Boolean(r.isActive),
+      commitment_end_date: r.commitment_end_date || null,
+      price_after_promo: r.price_after_promo !== null && r.price_after_promo !== undefined ? Number(r.price_after_promo) : null,
+      notice_period_days: r.notice_period_days !== null && r.notice_period_days !== undefined ? Number(r.notice_period_days) : 30
     };
   });
 }
@@ -197,13 +269,17 @@ export function generateMonthlyOccurrences(db: DatabaseSync, targetMonth: string
       const isExplicitlyDisabled = !t.isActive || Boolean(t.disabledFromMonth && targetMonth >= t.disabledFromMonth);
       const occurrenceStatus: 'planned' | 'disabled' = isExplicitlyDisabled ? 'disabled' : 'planned';
 
-      // Vérifier si une occurrence existe déjà pour ce template dans ce mois
+      // Vérifier si une occurrence existe déjà pour ce template dans ce mois (qu'elle soit active ou soft-deleted)
       const existingStmt = db.prepare(`
-        SELECT id, status FROM transactions
+        SELECT id, status, deleted_at FROM transactions
         WHERE templateId = ? AND date LIKE ?
       `);
       const existing = existingStmt.get(t.id!, `${targetMonth}%`) as any;
       if (existing) {
+        // Anti-Zombie : Si l'occurrence existante a été supprimée par l'utilisateur (soft-deleted), NE PAS LA RECRÉER NI LA RESSUSCITER
+        if (existing.deleted_at) {
+          continue;
+        }
         // Si l'occurrence existante est au statut planned alors que le modèle est désormais désactivé durablement, on la synchronise
         if (isExplicitlyDisabled && existing.status === 'planned') {
           const updateStmt = db.prepare('UPDATE transactions SET status = \'disabled\', isCustomized = 1 WHERE id = ?');
@@ -215,13 +291,14 @@ export function generateMonthlyOccurrences(db: DatabaseSync, targetMonth: string
       // Construction de la date exacte
       const [year, month] = targetMonth.split('-').map(Number);
       const occurrenceDate = computeOccurrenceDate(year, month, t.recurrenceDay);
+      const occurrenceAmount = computeEffectiveRecurrenceAmount(t, occurrenceDate, targetMonth);
 
       saveTransaction(db, {
         date: occurrenceDate,
         expectedDate: occurrenceDate,
         recurrenceDay: t.recurrenceDay,
         type: t.type,
-        amount: t.amount,
+        amount: occurrenceAmount,
         status: occurrenceStatus,
         isCustomized: isExplicitlyDisabled,
         accountId: t.accountId,
@@ -246,29 +323,28 @@ export function deleteRecurrenceTemplate(db: DatabaseSync, id: string, fromDate?
     const stmt = db.prepare('DELETE FROM recurrence_templates WHERE id = ?');
     stmt.run(id);
 
-    // Détermination de la date pivot (début du mois en cours par défaut)
-    const thresholdDate = fromDate || (() => {
-      const d = new Date();
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      return `${y}-${m}-01`;
-    })();
+    if (fromDate) {
+      // Si une date de début est spécifiée, supprimer toutes les occurrences à partir de cette date
+      const cleanStmt = db.prepare(`
+        DELETE FROM transactions
+        WHERE templateId = ? AND date >= ?
+      `);
+      cleanStmt.run(id, fromDate);
 
-    // Supprime UNIQUEMENT les occurrences futures associées qui n'ont jamais été débitées en banque (statut != 'cleared' et date >= thresholdDate)
-    // pour que la récurrence disparaisse définitivement de la vue sur tous les mois futurs,
-    // tout en préservant scrupuleusement l'historique financier et les impayés des mois passés (statut planned ou pending antérieurs).
-    const cleanStmt = db.prepare(`
-      DELETE FROM transactions
-      WHERE templateId = ? AND status != 'cleared' AND date >= ?
-    `);
-    cleanStmt.run(id, thresholdDate);
-
-    // Détacher les éventuelles transactions passées restantes pour éviter un lien orphelin vers un template supprimé
-    const detachStmt = db.prepare(`
-      UPDATE transactions
-      SET templateId = NULL
-      WHERE templateId = ?
-    `);
-    detachStmt.run(id);
+      // Détacher les éventuelles transactions passées restantes
+      const detachStmt = db.prepare(`
+        UPDATE transactions
+        SET templateId = NULL
+        WHERE templateId = ?
+      `);
+      detachStmt.run(id);
+    } else {
+      // Suppression définitive absolue : supprimer TOUTES les transactions de ce template sur tous les mois et toutes les années
+      const cleanStmt = db.prepare(`
+        DELETE FROM transactions
+        WHERE templateId = ?
+      `);
+      cleanStmt.run(id);
+    }
   });
 }

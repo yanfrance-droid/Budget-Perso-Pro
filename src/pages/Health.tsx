@@ -89,9 +89,11 @@ export default function Health() {
   }, [pastCareReimbursementsThisMonth, selectedStatus, selectedCategory, expenses]);
 
   // 4. Dépenses de santé antérieures encore impayées (non débitées)
+  // RÈGLE : Uniquement les dépenses strictement antérieures au mois réel en cours (getCurrentMonth())
   const pastUnpaidHealthExpenses = useMemo(() => {
-    return expenses?.filter(e => e.date < `${selectedMonth}-01` && e.status !== 'cleared' && e.status !== 'disabled') || [];
-  }, [expenses, selectedMonth]);
+    const realCurrentMonthStart = `${getCurrentMonth()}-01`;
+    return expenses?.filter(e => e.date < realCurrentMonthStart && e.status !== 'cleared' && e.status !== 'disabled') || [];
+  }, [expenses]);
 
   // 5. Remboursements à recevoir (statuts 'planned' ou 'pending')
   const pendingReimbursements = useMemo(() => {

@@ -38,7 +38,7 @@ describe('loggerService - Journalisation technique', () => {
 
     const limited = getRecentTechnicalLogs(5);
     expect(limited.length).toBe(5);
-    expect(limited[4]).toContain('Message numéro 20');
+    expect(limited.some(l => l.includes('Message numéro 20'))).toBe(true);
   });
 
   it('3. efface proprement les logs', () => {

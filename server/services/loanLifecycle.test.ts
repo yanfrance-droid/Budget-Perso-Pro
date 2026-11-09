@@ -12,6 +12,7 @@ import {
 import { 
   saveTransaction, 
   getTransactionById, 
+  getTransactions,
   deleteTransaction, 
   updateTransactionStatus 
 } from './transactionService.ts';
@@ -236,8 +237,10 @@ describe('Cycle de vie complet et Fiabilité du Module Crédits (SQLite)', () =>
       const loanInDb = db.prepare('SELECT remainingCapital FROM loans WHERE id = ?').get(loan.id!) as any;
       expect(Number(loanInDb.remainingCapital)).toBe(10000);
 
-      const txInDb = db.prepare('SELECT * FROM transactions WHERE id = ?').get(payment.id!);
-      expect(txInDb).toBeUndefined();
+      const txInDb = db.prepare('SELECT * FROM transactions WHERE id = ?').get(payment.id!) as any;
+      expect(txInDb).toBeDefined();
+      expect(txInDb.deleted_at).toBeTypeOf('number');
+      expect(getTransactions(db).some(t => t.id === payment.id)).toBe(false);
     });
   });
 
