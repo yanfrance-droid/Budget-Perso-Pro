@@ -12,14 +12,17 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 - **Moteur Undo/Redo résilient face aux erreurs 400 (`ServerDataContext.tsx`) :**
   - Gestion automatique des transactions introuvables en base (HTTP 400 sur `/restore`) : dépilage automatique des actions obsolètes sans bloquer l'utilisateur.
   - Sauvegarde et propagation du code HTTP (`err.status`) dans `apiClient.ts`.
-  - Boutons Annuler / Rétablir de l'en-tête rendus réactifs et interactifs (`UndoRedoControls.tsx`) avec stopPropagation et pointer-events sécurisés.
+  - Boutons Annuler / Rétablir de l'en-tête rendus réactifs et interactifs (`UndoRedoControls.tsx`) avec `stopPropagation` et `pointer-events: none` sécurisés sur les éléments enfants.
 - **Suppression directe et élimination des charges zombies (`FixedExpenses.tsx`, `VariableExpenses.tsx`) :**
   - Suppression immédiate des charges sans bascule intempestive vers l'état "débité".
-  - Nettoyage du filtre mensuel : les dépenses sans template ne sont plus projetées indûment sur les mois futurs.
-  - Suppression définitive d'une récurrence purge complètement le modèle et toutes ses occurrences sur tous les mois/années.
+  - Nettoyage du filtre mensuel : les dépenses sans modèle ne sont plus projetées indûment sur les mois futurs.
+  - Suppression définitive d'une récurrence purge complètement le modèle et toutes ses occurrences sur tous les mois et toutes les années.
   - Ajout d'un bouton de suppression rapide dans le bandeau des impayés antérieurs.
 - **Rapports et arriérés sur les mois futurs (`Dashboard.tsx`) :**
   - Maintien rigoureux du calcul des impayés des mois antérieurs lors de la navigation dans les mois futurs.
+- **Gestion des contrats et préavis d'engagement (`ChargesAnalysis.tsx`, `chargesAnalysisEngine.ts`) :**
+  - Préavis rendu optionnel et initialisé à 0 par défaut pour les charges sans contrainte de résiliation.
+  - Détection automatique des fenêtres de préavis et calcul précis de l'impact financier annuel post-promotionnel.
 
 ---
 
