@@ -23,6 +23,15 @@ export interface FinancialInsight {
   metadata?: Record<string, any>;
 }
 
+export interface ChargesBaselineInput {
+  fixed?: number;
+  variable?: number;
+  loan?: number;
+  daily?: number;
+  health?: number;
+  transfer?: number;
+}
+
 export interface InsightsContext {
   currentDate: string; // YYYY-MM-DD
   manualBalance: number;
@@ -34,7 +43,8 @@ export interface InsightsContext {
   daysElapsed?: number;
   daysInMonth?: number;
   liquidSavingsTotal: number;
-  totalObligatoires: number;
+  totalObligatoires?: number;
+  chargesBreakdown?: ChargesBaselineInput;
   healthExpenses?: Transaction[];
   healthReimbursements?: Transaction[];
   healthDaysThreshold?: number;
@@ -280,16 +290,38 @@ export function auditDailyExpenseCadence(
 }
 
 /**
- * 4. SENTINELLE MATELAS DE PRÉCAUTION (Socle des charges incompressibles totalObligatoires)
+ * Calcule l'assiette mensuelle des charges incompressibles pour le matelas de sécurité / précaution.
+ *
+ * RÈGLE D'OR : Exclut formellement et strictement les flux d'épargne volontaire (virements vers livrets/épargne)
+ * afin d'éliminer la boucle infinie (« le serpent qui se mord la queue » : plus l'utilisateur épargne,
+ * plus les charges obligatoires augmenteraient et plus le moteur exigerait d'épargne de sécurité).
+ *
+ * L'assiette repose EXCLUSIVEMENT sur les dépenses contraintes et de fonctionnement pures :
+ * - Charges fixes (loyer, assurances, factures régulières, abonnements)
+ * - Charges variables de subsistance et fonctionnement (énergie, carburant, etc.)
+ * - Échéances de crédits / emprunts
+ */
+export function calculateEmergencyFundBaseline(charges: ChargesBaselineInput): number {
+  return roundCurrency(
+    (Number(charges.fixed) || 0) +
+    (Number(charges.variable) || 0) +
+    (Number(charges.loan) || 0)
+  );
+}
+
+/**
+ * 4. SENTINELLE MATELAS DE PRÉCAUTION (Socle des charges incompressibles)
  * Calcule l'autonomie financière liquide sur la base stricte des charges incompressibles du foyer,
- * sans inventer de revenu théorique.
+ * sans inventer de revenu théorique et en excluant rigoureusement tout flux d'épargne volontaire.
  */
 export function auditEmergencyFund(
   liquidSavingsTotal: number,
-  totalObligatoires: number
+  totalObligatoiresOrCharges: number | ChargesBaselineInput
 ): FinancialInsight | null {
   const liquid = roundCurrency(liquidSavingsTotal);
-  const obligations = roundCurrency(totalObligatoires);
+  const obligations = typeof totalObligatoiresOrCharges === 'number'
+    ? roundCurrency(totalObligatoiresOrCharges)
+    : calculateEmergencyFundBaseline(totalObligatoiresOrCharges);
 
   if (obligations <= 0) {
     return null;
@@ -614,9 +646,13 @@ export function generateInsights(context: InsightsContext): FinancialInsight[] {
   );
   if (dailyCadence) insights.push(dailyCadence);
 
+  const emergencyFundBase = context.chargesBreakdown
+    ? calculateEmergencyFundBaseline(context.chargesBreakdown)
+    : (context.totalObligatoires ?? 0);
+
   const emergencyFund = auditEmergencyFund(
     context.liquidSavingsTotal, 
-    context.totalObligatoires
+    emergencyFundBase
   );
   if (emergencyFund) insights.push(emergencyFund);
 

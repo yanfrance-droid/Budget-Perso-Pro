@@ -5,6 +5,7 @@ import {
   auditIdleCash,
   auditDailyExpenseCadence,
   auditEmergencyFund,
+  calculateEmergencyFundBaseline,
   auditStalledHealth,
   auditLoanPrepayment,
   generateInsights,
@@ -241,6 +242,50 @@ describe('insightsEngine - Conseiller Financier & Anticipation', () => {
     it('retourne null si les charges obligatoires sont nulles ou négatives', () => {
       expect(auditEmergencyFund(5000, 0)).toBeNull();
     });
+
+    it('calcule la base de charges incompressibles en excluant STRICTEMENT l\'épargne volontaire (transfer)', () => {
+      const breakdown = {
+        fixed: 1000,
+        variable: 400,
+        loan: 200,
+        transfer: 500, // Doit être STRICTEMENT ignoré !
+        daily: 300,
+        health: 100
+      };
+
+      const baseline = calculateEmergencyFundBaseline(breakdown);
+      // Base = 1000 (fixes) + 400 (variables) + 200 (crédit) = 1600 € (et non 2100 € avec épargne)
+      expect(baseline).toBe(1600);
+    });
+
+    it('supprime l\'effet boucle infinie (« le serpent qui se mord la queue ») quand on passe une décomposition de charges', () => {
+      const liquidSavingsTotal = 6400; // 4 mois d\'autonomie sur base de 1600 €
+
+      // Situation 1 : Épargne mensuelle de 200 €
+      const insight1 = auditEmergencyFund(liquidSavingsTotal, {
+        fixed: 1000,
+        variable: 400,
+        loan: 200,
+        transfer: 200
+      });
+
+      // Situation 2 : L\'utilisateur augmente son épargne mensuelle à 1000 € (gros effort d\'épargne)
+      const insight2 = auditEmergencyFund(liquidSavingsTotal, {
+        fixed: 1000,
+        variable: 400,
+        loan: 200,
+        transfer: 1000
+      });
+
+      // Les deux calculs doivent STRICTEMENT donner le même nombre de mois (4 mois, optimal),
+      // prouvant que l\'effort d\'épargne n\'est pas pénalisé par le moteur
+      expect(insight1?.metadata?.monthsCovered).toBe(4);
+      expect(insight2?.metadata?.monthsCovered).toBe(4);
+      expect(insight1?.severity).toBe('success');
+      expect(insight2?.severity).toBe('success');
+      expect(insight1?.metadata?.totalObligatoires).toBe(1600);
+      expect(insight2?.metadata?.totalObligatoires).toBe(1600);
+    });
   });
 
   describe('5. auditStalledHealth (Détection des soins non remboursés > 35 jours)', () => {
@@ -449,6 +494,12 @@ describe('insightsEngine - Conseiller Financier & Anticipation', () => {
         daysInMonth: 30,
         liquidSavingsTotal: 8000, // 4 mois sur 2000 € d'obligations -> SUCCESS
         totalObligatoires: 2000,
+        chargesBreakdown: {
+          fixed: 1200,
+          variable: 500,
+          loan: 300,
+          transfer: 600 // Exclu automatiquement de la base emergency_fund
+        },
         healthExpenses: [],
         loans: []
       };

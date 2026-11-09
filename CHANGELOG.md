@@ -6,6 +6,21 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.3.8] - 2026-11-09
+
+### Correction de l'Assiette du Matelas de Sécurité & Élimination de la Boucle Infinie (Bug Fix & Engine)
+- **Exclusion formelle de l'épargne volontaire de l'assiette du matelas de précaution (`insightsEngine.ts`) :**
+  - Introduction de la fonction `calculateEmergencyFundBaseline()` calculant l'autonomie financière strictement sur les charges incompressibles pures (charges fixes, variables de fonctionnement et mensualités d'emprunt).
+  - Élimination de la boucle infinie (« le serpent qui se mord la queue ») où chaque virement vers un livret ou compte d'épargne gonflait artificiellement le total des charges et augmentait l'exigence du moteur de recommandation d'épargne.
+  - Support de `chargesBreakdown` dans `InsightsContext` pour assainir et filtrer de manière déterministe tout flux de transfert d'épargne (`transfer`).
+- **Harmonisation de la carte KPI « Charges obligatoires » (`Dashboard.tsx`) :**
+  - Alignement de la formule de calcul de `totalObligatoires` avec son sous-titre UI « Fixes + Variables + Prêts » : suppression du terme `chargesMois.transfer` qui polluait le total des charges incompressibles.
+  - Transmission propre de `chargesBreakdown: chargesMois` au contexte du conseiller financier (`insightsContext`).
+- **Couverture de tests Vitest (589 tests au vert) :**
+  - Ajout de tests ciblés dans `insightsEngine.test.ts` vérifiant l'exclusion absolue des flux d'épargne dans `calculateEmergencyFundBaseline()` et l'invariance stricte de l'autonomie calculée quel que soit l'effort d'épargne consenti.
+
+---
+
 ## [1.3.7] - 2026-11-09
 
 ### Harmonisation Post-Contre-Audit (Docs, SQLite & Licence)

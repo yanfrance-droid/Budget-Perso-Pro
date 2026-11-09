@@ -1,8 +1,8 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-09 (Version 1.3.7)  
-> **Statut QA :** 61 suites de tests Vitest, 587 tests au vert (100 % passants).
+> **Dernière mise à jour :** 2026-11-09 (Version 1.3.8)  
+> **Statut QA :** 61 suites de tests Vitest, 589 tests au vert (100 % passants).
 
 ---
 
@@ -153,11 +153,13 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 > 4. **Isolation des origines `localStorage` :** Se souvenir que `localhost:3001` et `192.168.0.59:3001` ont des stockages locaux distincts. Ne jamais forcer `isAuthenticated: true` si la santé serveur échoue sans jeton.
 > 5. **Projection temporelle des charges :** Ne jamais réintroduire de logique projetant automatiquement des charges sans template sur les mois futurs (`if (exp.recurrenceDay && !exp.templateId)` est banni).
 > 6. **Undo de suppression :** Toujours injecter le snapshot complet de la transaction (`targetCopy`) dans l'action Undo pour permettre sa recréation en cas de purge physique en base.
+> 7. **Assiette du matelas de sécurité / précaution :** L'assiette mensuelle pour calculer le nombre de mois de couverture en épargne de précaution ne doit en aucun cas inclure les flux d'épargne volontaire (virements vers l'épargne). Elle repose exclusivement sur les dépenses contraintes pures (fixes, variables de subsistance, crédits).
 
 ---
 
 ## 7. Historique Récent des Versions Majeures
 
+- **v1.3.8 :** Correction de l'assiette de calcul du matelas de sécurité dans `insightsEngine.ts` et `Dashboard.tsx`, exclusion stricte des flux d'épargne volontaire (`transfer`) pour supprimer la boucle infinie, fiabilisation du KPI « Charges obligatoires » (589 tests).
 - **v1.2.2 :** Sécurité transactionnelle atomique (`withTransaction` / `SAVEPOINT`), limitation DoS payload 15 Mo, index SQLite pour accélérer les requêtes relationnelles.
 - **v1.3.3 :** Résilience Undo/Redo face aux erreurs HTTP 400, suppression directe des charges fixes et variables sans bascule en statut "débité", nettoyage du filtre mensuel strict, calcul rigoureux des impayés antérieurs sur les mois futurs.
 - **v1.3.4 :** Prise en charge transparente de l'accès par IP réseau locale (`192.168.0.59`), chemins relatifs `/api/...`, CORS avec `credentials: true`, interception de l'événement `auth:unauthorized` pour éviter l'état "zombie".

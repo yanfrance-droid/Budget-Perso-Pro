@@ -665,8 +665,8 @@ export default function Dashboard() {
   // Reste à payer strict du mois sélectionné (sans ajout des impayés antérieurs pour éviter tout doublon)
   const totalResteAPayerMois = roundCurrency(resteAPayer.fixed + resteAPayer.variable + resteAPayer.loan + resteAPayer.daily + resteAPayer.health + resteAPayer.transfer);
 
-  // Total des charges obligatoires du mois sélectionné
-  const totalObligatoires = roundCurrency(chargesMois.fixed + chargesMois.variable + chargesMois.loan + chargesMois.transfer);
+  // Total des charges obligatoires du mois sélectionné (charges fixes, variables et crédits pures, HORS flux d'épargne volontaire)
+  const totalObligatoires = roundCurrency(chargesMois.fixed + chargesMois.variable + chargesMois.loan);
 
   // -------------------------------------------------------------
   // Suivi informatif des remboursements de santé en attente
@@ -770,6 +770,7 @@ export default function Dashboard() {
     daysInMonth,
     liquidSavingsTotal,
     totalObligatoires,
+    chargesBreakdown: chargesMois,
     healthExpenses,
     healthReimbursements,
     loans
@@ -784,6 +785,7 @@ export default function Dashboard() {
     daysInMonth,
     liquidSavingsTotal,
     totalObligatoires,
+    chargesMois,
     healthExpenses,
     healthReimbursements,
     loans
