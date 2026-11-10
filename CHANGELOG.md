@@ -6,6 +6,30 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.4.0] - 2026-11-10
+
+### Électrochoc Visuel & Coût Réel des Crédits (Palier 1 — Module Crédits & Prêts)
+- **Bandeau Macro « Prêts Immobiliers » (`src/pages/Loans.tsx`) :**
+  - Ajout de la jauge macro de progression globale d'amortissement pour les prêts immobiliers (`loanType === 'mortgage'`), créant une parfaite symétrie avec les crédits consommation.
+  - Affichage dynamique du pourcentage amorti, barre de progression bleue `#2563eb`, montant amorti à ce jour et capital restant dû sur le total emprunté.
+  - Gestion du libellé au singulier ou au pluriel selon le nombre de prêts immobiliers actifs.
+- **Électrochoc du « Coût Caché Réel » sur chaque fiche de prêt (`src/pages/Loans.tsx`) :**
+  - Exploitation directe de `estimateLoanPayoffClient` pour tout prêt actif non soldé.
+  - Encart visuel impactant affichant la **Facture réelle restante** (`totalCost` = capital restant dû + total intérêts + total assurance) et la **Perte sèche (coût banque)** en orange ambré (`totalInterest` + `totalInsurance` avec détail entre parenthèses).
+  - Badge compte à rebours dynamique dans l'en-tête de la carte : `⏳ Plus que X mensualités (mois AAAA)`.
+- **Barre de découpe de la mensualité courante (« Capital utile vs Coût banque ») :**
+  - Intégration sur chaque carte de crédit d'une micro-barre horizontale bicolore décomposant l'échéance :
+    - Vert `#16a34a` : Part Capital utile (amortissement patrimonial effectif réduisant la dette) avec montant et pourcentage.
+    - Orange `#ea580c` : Part Coût banque (intérêts du mois + assurance) avec montant et pourcentage.
+  - Gestion native des cas limites : les prêts à taux zéro (PTZ) affichent fidèlement 100 % de capital utile.
+- **Synthèse globale du coût caché en haut de page :**
+  - Ajout dans la grille des KPIs supérieurs d'une nouvelle carte dédiée : **« Coût total des intérêts & assurances restants »**, cumulant les pertes sèches résiduelles de l'ensemble des crédits actifs et précisant la facture réelle totale.
+- **Couverture de tests Vitest (63 suites, 607 tests au vert) :**
+  - Création de la suite dédiée `src/pages/LoansCostBreakdown.test.tsx` (8 nouveaux tests) validant les jauges immo, la facture résiduelle, la découpe de mensualité, les taux 0 % (PTZ) et les cas limites.
+  - Cap symbolique des 600 tests franchi (607/607 tests au vert, 100 % passants).
+
+---
+
 ## [1.3.9] - 2026-11-09
 
 ### Suivi des Fins de Contrat, Anticipation des Tacites Reconductions & Alertes Dashboard (Feature & Backend)

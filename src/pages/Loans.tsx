@@ -9,7 +9,7 @@ import {
 
 import { useServerDataOptional } from '../contexts/ServerDataContext';
 import { apiClient } from '../services/apiClient';
-import { estimateLoanPayoffClient } from '../engine/calculations';
+import { estimateLoanPayoffClient, calculateAmortizedCapital } from '../engine/calculations';
 import { getCurrentMonth } from '../utils/dateUtils';
 
 const LOAN_PAYMENT_STATUS_OPTIONS = [
@@ -461,6 +461,9 @@ export default function Loans() {
   const remainingCapitalMortgage = mortgageLoans
     .reduce((sum, l) => sum + (Number(l.remainingCapital) || 0), 0);
 
+  const initialCapitalMortgage = mortgageLoans
+    .reduce((sum, l) => sum + (Number(l.initialAmount) || 0), 0);
+
   const totalRemainingCapital = activeLoans.reduce((sum, l) => sum + (Number(l.remainingCapital) || 0), 0);
   const totalInitialCapital = activeLoans.reduce((sum, l) => sum + (Number(l.initialAmount) || 0), 0);
 
@@ -471,9 +474,46 @@ export default function Loans() {
     hasConsumerProgress = true;
   }
 
+  let mortgageProgress = 0;
+  let hasMortgageProgress = false;
+  if (initialCapitalMortgage > 0) {
+    mortgageProgress = Math.max(0, Math.min(100, ((initialCapitalMortgage - remainingCapitalMortgage) / initialCapitalMortgage) * 100));
+    hasMortgageProgress = true;
+  }
+
+  // Calcul du coût total résiduel (perte sèche intérêts + assurances futures de tous les prêts actifs)
+  let totalFutureInterest = 0;
+  let totalFutureInsurance = 0;
+  let totalFutureCost = 0;
+
+  activeLoans.forEach(loan => {
+    const rem = Number(loan.remainingCapital) || 0;
+    const pay = Number(loan.monthlyPayment) || 0;
+    if (rem > 0 && pay > 0) {
+      const sim = estimateLoanPayoffClient({
+        remainingCapital: rem,
+        monthlyPayment: pay,
+        interestRate: Number(loan.interestRate) || 0,
+        insurancePart: Number(loan.insurancePart) || 0,
+        startMonth: currentMonth
+      });
+      if (sim.possible) {
+        totalFutureInterest += sim.totalInterest || 0;
+        totalFutureInsurance += sim.totalInsurance || 0;
+        totalFutureCost += sim.totalCost || (rem + (sim.totalInterest || 0) + (sim.totalInsurance || 0));
+      } else {
+        totalFutureCost += rem;
+      }
+    }
+  });
+
+  const totalFutureBankLoss = Math.round((totalFutureInterest + totalFutureInsurance) * 100) / 100;
+
   const renderLoanCard = (loan: Loan, isArchivedView = false) => {
     const initialAmount = Number(loan.initialAmount) || 0;
     const remainingAmount = Number(loan.remainingCapital) || 0;
+    const monthlyPaymentNum = Number(loan.monthlyPayment) || 0;
+
     let progress = 0;
     let hasProgress = false;
     if (initialAmount > 0) {
@@ -488,6 +528,32 @@ export default function Loans() {
     const duration = Number(loan.durationMonths) || 0;
     if (clearedPayments < 0) clearedPayments = 0;
     if (duration > 0 && clearedPayments > duration) clearedPayments = duration;
+
+    // Simulation actuarielle pour le prêt individuel
+    const payoffEstimate = (!isArchivedView && remainingAmount > 0 && monthlyPaymentNum > 0)
+      ? estimateLoanPayoffClient({
+          remainingCapital: remainingAmount,
+          monthlyPayment: monthlyPaymentNum,
+          interestRate: Number(loan.interestRate) || 0,
+          insurancePart: Number(loan.insurancePart) || 0,
+          startMonth: currentMonth
+        })
+      : null;
+
+    // Découpe de la mensualité courante : Capital utile vs Coût banque
+    const currentCapitalPart = calculateAmortizedCapital(
+      monthlyPaymentNum,
+      remainingAmount,
+      loan.interestRate,
+      loan.insurancePart
+    );
+    const currentBankCost = Math.max(0, Math.round((monthlyPaymentNum - currentCapitalPart) * 100) / 100);
+    let capitalPercent = 0;
+    let bankCostPercent = 0;
+    if (monthlyPaymentNum > 0) {
+      capitalPercent = Math.min(100, Math.max(0, (currentCapitalPart / monthlyPaymentNum) * 100));
+      bankCostPercent = Math.max(0, 100 - capitalPercent);
+    }
 
     return (
       <div key={loan.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem', opacity: isArchivedView ? 0.92 : 1 }}>
@@ -524,6 +590,28 @@ export default function Loans() {
                   ⏸️ En pause
                 </span>
               ) : null}
+
+              {!isArchivedView && !loan.isPaused && remainingAmount > 0 && payoffEstimate && payoffEstimate.possible && payoffEstimate.monthsRemaining !== undefined && payoffEstimate.monthsRemaining > 0 && (
+                <span style={{ 
+                  fontSize: '0.75rem', 
+                  padding: '0.15rem 0.55rem', 
+                  borderRadius: '999px', 
+                  backgroundColor: '#eff6ff', 
+                  color: '#1d4ed8', 
+                  border: '1px solid #bfdbfe',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem'
+                }}>
+                  ⏳ Plus que {payoffEstimate.monthsRemaining} mensualité{payoffEstimate.monthsRemaining > 1 ? 's' : ''}
+                  {payoffEstimate.estimatedEndMonth && (
+                    <span style={{ color: '#4b5563', fontWeight: 500 }}>
+                      ({formatMonth(payoffEstimate.estimatedEndMonth)})
+                    </span>
+                  )}
+                </span>
+              )}
             </div>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{loan.lender}</span>
           </div>
@@ -623,6 +711,90 @@ export default function Loans() {
             </div>
           )}
         </div>
+
+        {/* Électrochoc du coût caché réel (Facture réelle restante & Perte sèche) */}
+        {!isArchivedView && remainingAmount > 0 && payoffEstimate && payoffEstimate.possible && (
+          <div style={{
+            backgroundColor: 'var(--bg-color)',
+            border: '1px solid var(--border-color)',
+            borderLeft: '3px solid #ea580c',
+            borderRadius: 'var(--radius)',
+            padding: '0.55rem 0.75rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.25rem',
+            fontSize: '0.8rem'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '0.25rem' }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.025em', fontWeight: 600 }}>
+                Facture réelle restante
+              </span>
+              <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                {(payoffEstimate.totalCost ?? (remainingAmount + (payoffEstimate.totalInterest || 0) + (payoffEstimate.totalInsurance || 0))).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '0.25rem', fontSize: '0.78rem' }}>
+              <span style={{ color: '#ea580c', fontWeight: 600 }}>
+                Perte sèche (coût banque) :
+              </span>
+              <span style={{ fontWeight: 700, color: '#ea580c' }}>
+                +{((payoffEstimate.totalInterest || 0) + (payoffEstimate.totalInsurance || 0)).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+              </span>
+            </div>
+
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'right' }}>
+              (dont {(payoffEstimate.totalInterest || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € d'intérêts et {(payoffEstimate.totalInsurance || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € d'assurance)
+            </div>
+          </div>
+        )}
+
+        {/* Découpe de la mensualité courante : Capital utile vs Coût banque */}
+        {!isArchivedView && remainingAmount > 0 && monthlyPaymentNum > 0 && (
+          <div style={{ fontSize: '0.78rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              <span>Découpe mensualité ({monthlyPaymentNum.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €)</span>
+              <span>
+                <strong style={{ color: '#16a34a' }}>{capitalPercent.toFixed(0)} %</strong> utile / <strong style={{ color: '#ea580c' }}>{bankCostPercent.toFixed(0)} %</strong> banque
+              </span>
+            </div>
+
+            <div style={{
+              width: '100%',
+              height: '6px',
+              borderRadius: '999px',
+              backgroundColor: 'var(--border-color)',
+              display: 'flex',
+              overflow: 'hidden'
+            }}>
+              <div 
+                title={`Capital utile : ${currentCapitalPart.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € (${capitalPercent.toFixed(1)} %)`}
+                style={{
+                  width: `${capitalPercent}%`,
+                  backgroundColor: '#16a34a',
+                  height: '100%'
+                }} 
+              />
+              <div 
+                title={`Coût banque : ${currentBankCost.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € (${bankCostPercent.toFixed(1)} %)`}
+                style={{
+                  width: `${bankCostPercent}%`,
+                  backgroundColor: '#ea580c',
+                  height: '100%'
+                }} 
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
+              <span style={{ color: '#16a34a', fontWeight: 600 }}>
+                Capital utile : {currentCapitalPart.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+              </span>
+              <span style={{ color: '#ea580c', fontWeight: 600 }}>
+                Coût banque : {currentBankCost.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+              </span>
+            </div>
+          </div>
+        )}
 
         <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px dashed var(--border-color)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -781,7 +953,32 @@ export default function Loans() {
             <Card title="Capital restant dû — Total de tous les crédits et prêts immobiliers" value={`${totalRemainingCapital.toLocaleString('fr-FR', {minimumFractionDigits: 2})} €`} />
             <Card title="Capital restant dû — Crédits à la consommation" value={`${remainingCapitalConsumer.toLocaleString('fr-FR', {minimumFractionDigits: 2})} €`} />
             <Card title="Capital restant dû — Prêt immobilier" value={`${remainingCapitalMortgage.toLocaleString('fr-FR', {minimumFractionDigits: 2})} €`} />
+            <Card title="Coût total des intérêts & assurances restants" value={`${totalFutureBankLoss.toLocaleString('fr-FR', {minimumFractionDigits: 2})} €`}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem', lineHeight: '1.4' }}>
+                Facture réelle totale : <strong style={{ color: 'var(--text-main)' }}>{totalFutureCost.toLocaleString('fr-FR', {minimumFractionDigits: 2})} €</strong>
+                <br />
+                (dont {totalFutureInterest.toLocaleString('fr-FR', {minimumFractionDigits: 2})} € d'intérêts et {totalFutureInsurance.toLocaleString('fr-FR', {minimumFractionDigits: 2})} € d'assurances)
+              </div>
+            </Card>
           </div>
+
+          {hasMortgageProgress && (
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                <span style={{ fontWeight: 500 }}>
+                  {mortgageLoans.length > 1 ? 'Progression du remboursement des prêts immobiliers' : 'Progression du remboursement du prêt immobilier'}
+                </span>
+                <span style={{ fontWeight: 'bold', color: '#2563eb' }}>{mortgageProgress.toLocaleString('fr-FR', {maximumFractionDigits: 1})} %</span>
+              </div>
+              <div style={{ width: '100%', backgroundColor: 'var(--border-color)', borderRadius: '999px', height: '8px', marginBottom: '0.5rem' }}>
+                <div style={{ backgroundColor: '#2563eb', height: '8px', borderRadius: '999px', width: `${mortgageProgress}%` }}></div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <span>Amorti à ce jour : {(initialCapitalMortgage - remainingCapitalMortgage).toLocaleString('fr-FR', {minimumFractionDigits: 2})} €</span>
+                <span>Capital restant dû : {remainingCapitalMortgage.toLocaleString('fr-FR', {minimumFractionDigits: 2})} € (sur {initialCapitalMortgage.toLocaleString('fr-FR', {minimumFractionDigits: 2})} € de référence)</span>
+              </div>
+            </div>
+          )}
 
           {hasConsumerProgress && (
             <div className="card" style={{ marginBottom: '1.5rem' }}>

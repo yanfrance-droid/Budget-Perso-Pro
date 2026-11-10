@@ -1,8 +1,8 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-09 (Version 1.3.9)  
-> **Statut QA :** 62 suites de tests Vitest, 599 tests au vert (100 % passants).
+> **Dernière mise à jour :** 2026-11-10 (Version 1.4.0)  
+> **Statut QA :** 63 suites de tests Vitest, 607 tests au vert (100 % passants).
 
 ---
 
@@ -160,6 +160,7 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 
 ## 7. Historique Récent des Versions Majeures
 
+- **v1.4.0 :** Implémentation du Palier 1 du module Crédits & Prêts : jauge macro d'amortissement pour les prêts immobiliers (`mortgage`), électrochoc du coût caché réel sur chaque fiche de prêt (facture réelle restante et perte sèche banque en intérêts + assurance via `estimateLoanPayoffClient`), badge compte à rebours dynamique (`⏳ Plus que X mensualités`), micro-barre bicolore de découpe de mensualité (capital utile vs coût banque), et carte KPI de synthèse globale du coût résiduel des crédits (63 suites, 607 tests au vert).
 - **v1.3.9 :** Ajout du suivi des fins de contrat (`contract_end_date`), compte à rebours visuel dans les charges fixes, sentinelle Dashboard d'anticipation des tacites reconductions (`auditContractExpirations`), persistance SQLite et export JSON (599 tests).
 - **v1.3.8 :** Correction de l'assiette de calcul du matelas de sécurité dans `insightsEngine.ts` et `Dashboard.tsx`, exclusion stricte des flux d'épargne volontaire (`transfer`) pour supprimer la boucle infinie, fiabilisation du KPI « Charges obligatoires » (589 tests).
 - **v1.2.2 :** Sécurité transactionnelle atomique (`withTransaction` / `SAVEPOINT`), limitation DoS payload 15 Mo, index SQLite pour accélérer les requêtes relationnelles.
