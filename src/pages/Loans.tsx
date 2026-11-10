@@ -490,12 +490,25 @@ export default function Loans() {
     const rem = Number(loan.remainingCapital) || 0;
     const pay = Number(loan.monthlyPayment) || 0;
     if (rem > 0 && pay > 0) {
+      // Si l'échéance du mois courant est déjà cleared, la simulation commence au mois M+1
+      const isCurrentMonthCleared = loanPayments.some(
+        p => p.linkedId === loan.id && p.status === 'cleared' && p.date.startsWith(currentMonth)
+      );
+      const simStartMonth = isCurrentMonthCleared
+        ? (() => {
+            const [y, m] = currentMonth.split('-').map(Number);
+            const nextM = m === 12 ? 1 : m + 1;
+            const nextY = m === 12 ? y + 1 : y;
+            return `${nextY}-${String(nextM).padStart(2, '0')}`;
+          })()
+        : currentMonth;
+
       const sim = estimateLoanPayoffClient({
         remainingCapital: rem,
         monthlyPayment: pay,
         interestRate: Number(loan.interestRate) || 0,
         insurancePart: Number(loan.insurancePart) || 0,
-        startMonth: currentMonth
+        startMonth: simStartMonth
       });
       if (sim.possible) {
         totalFutureInterest += sim.totalInterest || 0;
@@ -529,6 +542,22 @@ export default function Loans() {
     if (clearedPayments < 0) clearedPayments = 0;
     if (duration > 0 && clearedPayments > duration) clearedPayments = duration;
 
+    // Nombre d'historiques effectif (net d'ajustement) pour garantir la cohérence mathématique de l'affichage
+    const effectivePrepaid = Math.max(0, prepaid + adjustment);
+
+    // Détermination du mois de départ de la simulation (si échéance courante déjà débitée, démarre à M+1)
+    const isCurrentMonthCleared = loanPayments.some(
+      p => p.linkedId === loan.id && p.status === 'cleared' && p.date.startsWith(currentMonth)
+    );
+    const simStartMonth = isCurrentMonthCleared
+      ? (() => {
+          const [y, m] = currentMonth.split('-').map(Number);
+          const nextM = m === 12 ? 1 : m + 1;
+          const nextY = m === 12 ? y + 1 : y;
+          return `${nextY}-${String(nextM).padStart(2, '0')}`;
+        })()
+      : currentMonth;
+
     // Simulation actuarielle pour le prêt individuel
     const payoffEstimate = (!isArchivedView && remainingAmount > 0 && monthlyPaymentNum > 0)
       ? estimateLoanPayoffClient({
@@ -536,9 +565,19 @@ export default function Loans() {
           monthlyPayment: monthlyPaymentNum,
           interestRate: Number(loan.interestRate) || 0,
           insurancePart: Number(loan.insurancePart) || 0,
-          startMonth: currentMonth
+          startMonth: simStartMonth
         })
       : null;
+
+    // Mensualités restantes pour le badge : calculées sur la base contractuelle validée si durationMonths > 0
+    const remainingInstallments = duration > 0
+      ? Math.max(0, duration - clearedPayments)
+      : (payoffEstimate?.monthsRemaining ?? 0);
+
+    // Date de fin pour le badge : date de fin contractuelle en priorité, sinon estimation actuarielle
+    const displayEndMonthFormatted = loan.endDate
+      ? formatMonth(loan.endDate.slice(0, 7))
+      : (payoffEstimate?.estimatedEndMonth ? formatMonth(payoffEstimate.estimatedEndMonth) : '');
 
     // Découpe de la mensualité courante : Capital utile vs Coût banque
     const currentCapitalPart = calculateAmortizedCapital(
@@ -591,7 +630,7 @@ export default function Loans() {
                 </span>
               ) : null}
 
-              {!isArchivedView && !loan.isPaused && remainingAmount > 0 && payoffEstimate && payoffEstimate.possible && payoffEstimate.monthsRemaining !== undefined && payoffEstimate.monthsRemaining > 0 && (
+              {!isArchivedView && !loan.isPaused && remainingAmount > 0 && remainingInstallments > 0 && (
                 <span style={{ 
                   fontSize: '0.75rem', 
                   padding: '0.15rem 0.55rem', 
@@ -604,10 +643,10 @@ export default function Loans() {
                   alignItems: 'center',
                   gap: '0.25rem'
                 }}>
-                  ⏳ Plus que {payoffEstimate.monthsRemaining} mensualité{payoffEstimate.monthsRemaining > 1 ? 's' : ''}
-                  {payoffEstimate.estimatedEndMonth && (
+                  ⏳ Plus que {remainingInstallments} mensualité{remainingInstallments > 1 ? 's' : ''}
+                  {displayEndMonthFormatted && (
                     <span style={{ color: '#4b5563', fontWeight: 500 }}>
-                      ({formatMonth(payoffEstimate.estimatedEndMonth)})
+                      ({displayEndMonthFormatted})
                     </span>
                   )}
                 </span>
@@ -693,8 +732,8 @@ export default function Loans() {
 
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.25rem 0' }}>
           <strong>Mensualités payées :</strong> <span>{clearedPayments} sur {loan.durationMonths || '?'}</span> 
-          {prepaid > 0 && appClearedPayments > 0 && (
-            <span> ({prepaid} historiques et {appClearedPayments} débitées ici)</span>
+          {effectivePrepaid > 0 && appClearedPayments > 0 && (
+            <span> ({effectivePrepaid} historique{effectivePrepaid > 1 ? 's' : ''} et {appClearedPayments} débitée{appClearedPayments > 1 ? 's' : ''} ici)</span>
           )}
         </div>
 

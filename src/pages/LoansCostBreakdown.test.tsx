@@ -288,4 +288,110 @@ describe('Palier 1 : Électrochoc Visuel & Coût Réel des Crédits (Loans.tsx)'
     expect(text).not.toContain('Facture réelle restante');
     expect(text).not.toContain('Découpe mensualité');
   });
+
+  it('9. Cohérence mathématique : affiche le nombre d\'historiques net d\'ajustement dans les parenthèses', () => {
+    // Cas Prêt Immo : 87 historiques saisis, adjustment -1, 2 mensualités débitées dans l'app
+    // Total = 87 - 1 + 2 = 88 sur 303. Le texte doit afficher "(86 historiques et 2 débitées ici)"
+    mockLoans = [
+      {
+        id: 'loan-immo-test',
+        name: 'Prêt Immobilier',
+        lender: 'Crédit Mutuel',
+        initialAmount: 300000,
+        remainingCapital: 200000,
+        monthlyPayment: 1100,
+        interestRate: 1.5,
+        insurancePart: 30,
+        startDate: '2019-08-05',
+        endDate: '2044-10-05',
+        durationMonths: 303,
+        prepaidInstallments: 87,
+        monthsAdjustment: -1,
+        accountId: 'acc-1',
+        loanType: 'mortgage',
+        isArchived: false
+      }
+    ];
+
+    mockTransactions = [
+      {
+        id: 'tx-1',
+        date: '2026-10-05',
+        amount: 1100,
+        status: 'cleared',
+        type: 'loan_payment',
+        linkedId: 'loan-immo-test',
+        accountId: 'acc-1'
+      },
+      {
+        id: 'tx-2',
+        date: '2026-11-05',
+        amount: 1100,
+        status: 'cleared',
+        type: 'loan_payment',
+        linkedId: 'loan-immo-test',
+        accountId: 'acc-1'
+      }
+    ];
+
+    const { container } = render(<Loans />);
+    const text = container.textContent?.replace(/\u202F/g, ' ') || '';
+
+    // Vérifie le compteur total : 88 sur 303
+    expect(text).toContain('Mensualités payées : 88 sur 303');
+    // Vérifie la cohérence arithmétique : 86 + 2 = 88 (au lieu de 87 et 2)
+    expect(text).toContain('(86 historiques et 2 débitées ici)');
+
+    // Vérifie le badge "Plus que X mensualités" : 303 - 88 = 215 mensualités
+    // Et la date contractuelle : octobre 2044 (basée sur endDate 2044-10-05)
+    expect(text).toContain('⏳ Plus que 215 mensualités');
+    expect(text).toContain('(octobre 2044)');
+  });
+
+  it('10. Simulation actuarielle résiduelle : démarre à M+1 si l\'échéance du mois courant est déjà cleared', () => {
+    // Si l'échéance de currentMonth est déjà payée, elle ne doit pas être comptée en double dans la perte sèche
+    mockLoans = [
+      {
+        id: 'loan-cleared-m',
+        name: 'Prêt Personnel',
+        lender: 'Sofinco',
+        initialAmount: 10000,
+        remainingCapital: 5000,
+        monthlyPayment: 250,
+        interestRate: 4.0,
+        insurancePart: 10,
+        startDate: '2025-01-01',
+        endDate: '2028-12-01',
+        durationMonths: 48,
+        prepaidInstallments: 0,
+        accountId: 'acc-1',
+        loanType: 'consumer',
+        isArchived: false
+      }
+    ];
+
+    // On récupère le mois courant (YYYY-MM)
+    const today = new Date();
+    const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+    mockTransactions = [
+      {
+        id: 'tx-cm-1',
+        date: `${currentMonthStr}-05`,
+        amount: 250,
+        status: 'cleared',
+        type: 'loan_payment',
+        linkedId: 'loan-cleared-m',
+        accountId: 'acc-1'
+      }
+    ];
+
+    const { container } = render(<Loans />);
+    const text = container.textContent?.replace(/\u202F/g, ' ') || '';
+
+    expect(text).toContain('Facture réelle restante');
+    expect(text).toContain('Perte sèche (coût banque) :');
+    // Le badge affiche la fin contractuelle
+    expect(text).toContain('(décembre 2028)');
+  });
 });
