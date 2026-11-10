@@ -1,8 +1,8 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-10 (Version 1.4.0)  
-> **Statut QA :** 63 suites de tests Vitest, 607 tests au vert (100 % passants).
+> **Dernière mise à jour :** 2026-11-10 (Version 1.4.0 — Palier 2 Crédits & Sentinelles)  
+> **Statut QA :** 64 suites de tests Vitest, 621 tests au vert (100 % passants).
 
 ---
 
@@ -115,10 +115,19 @@ La base SQLite contient 12 tables relationnelles initialisées et migrées dans 
   - La suppression définitive d'un modèle récurrent purge l'ensemble des transactions liées sur tous les mois et toutes les années.
 - **Filtrage mensuel strict :** Les composants [`FixedExpenses.tsx`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/src/pages/FixedExpenses.tsx) et [`VariableExpenses.tsx`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/src/pages/VariableExpenses.tsx) filtrent strictement par `exp.date.startsWith(selectedMonth)` pour ne jamais projeter indûment sur les mois futurs des charges ponctuelles orphelines de template.
 
-### 4.3. Pilotage de Trésorerie & Règle d'Or Bancaire
+### 4.3. Pilotage de Trésorerie, Crédits & Règle d'Or Bancaire
 - **Anti-découvert (Crash-Test) :** Calculé sur le **Solde Réel instantané** avec simulation jour par jour jusqu'au prochain revenu (priorité débits avant crédits du même jour).
 - **Opportunité d'épargne :** Calculée **EXCLUSIVEMENT sur le Solde Prévisionnel net de fin de mois** (après déduction des charges engagées et du fond de roulement de sécurité).
-- **Crédits à paliers :** Calcul actuariel strict du capital amorti (`calculateAmortizedCapitalServer`), plafonné au capital restant dû réel (`Math.min(capitalPart, remaining)`).
+- **Crédits & Amortissement Actuariel (Paliers 1 & 2) :**
+  - **Cohérence arithmétique des compteurs :** Décompte des échéances historiques net d'ajustement (`effectivePrepaid = Math.max(0, prepaid + adjustment)` dans [`Loans.tsx`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/src/pages/Loans.tsx)) pour garantir la concordance stricte entre total affiché et détail entre parenthèses.
+  - **Compte à rebours contractuel :** Badge d'en-tête de prêt basé en priorité sur `durationMonths - clearedPayments` et la date de fin contractuelle (`loan.endDate`).
+  - **Simulation actuarielle dynamique (`simStartMonth`) :** Si l'échéance du mois en cours est déjà au statut `cleared` (donc déjà déduite du capital restant dû en base), `estimateLoanPayoffClient` démarre la simulation d'amortissement résiduelle à **M+1**, éliminant tout double comptage du mois déjà prélevé.
+  - **Coût caché & Perte sèche résiduelle :** Cumul des intérêts et cotisations d'assurance restants jusqu'au terme du crédit, dissocié du capital amorti utile.
+  - **Monitoring HCSF sur Dashboard :** Taux d'endettement brut du foyer avec pastille d'alerte HCSF (sain <30%, modéré 30-33%, limite 33-35%, élevé 35-45%, critique ≥45%), découpe de l'effort Immo patrimonial vs Conso fractionné, et passif global du foyer (capital restant dû + facture réelle).
+  - **Sentinelles d'endettement automatisées (`insightsEngine.ts`) :**
+    * `auditConsumerDebtVulnerability` : warning si les crédits conso dépassent 15 % des revenus prévus.
+    * `auditLoanFreedomCountdown` : notification (success/info) à ≤ 3 mensualités de l'échéance chiffrant le cash-flow mensuel définitivement libéré.
+    * `auditUpcomingLoanTiers` : alerte anticipée sous 60 jours en cas de hausse ou baisse de mensualité programmée sur un prêt à paliers.
 
 ---
 
@@ -160,7 +169,9 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 
 ## 7. Historique Récent des Versions Majeures
 
-- **v1.4.0 :** Implémentation du Palier 1 du module Crédits & Prêts : jauge macro d'amortissement pour les prêts immobiliers (`mortgage`), électrochoc du coût caché réel sur chaque fiche de prêt (facture réelle restante et perte sèche banque en intérêts + assurance via `estimateLoanPayoffClient`), badge compte à rebours dynamique (`⏳ Plus que X mensualités`), micro-barre bicolore de découpe de mensualité (capital utile vs coût banque), et carte KPI de synthèse globale du coût résiduel des crédits (63 suites, 607 tests au vert).
+- **v1.4.0 :** Implémentation complète des Paliers 1 et 2 du module Crédits & Prêts :
+  - *Palier 1 :* Jauge macro d'amortissement pour les prêts immobiliers (`mortgage`), électrochoc du coût caché réel sur chaque fiche de prêt (facture réelle restante et perte sèche banque en intérêts + assurance via `estimateLoanPayoffClient`), badge compte à rebours contractuel dynamique (`⏳ Plus que X mensualités (mois AAAA)`), micro-barre bicolore de découpe de mensualité (capital utile vs coût banque), et carte KPI de synthèse globale du coût résiduel des crédits.
+  - *Palier 2 :* Bloc KPI « Passif du Foyer & Endettement » sur le Dashboard (taux d'endettement brut, pastilles colorées HCSF, découpe de l'effort Immo patrimonial vs Conso fractionné, capital restant dû global, facture résiduelle totale), et 3 nouvelles sentinelles expertes dans `insightsEngine.ts` (`auditConsumerDebtVulnerability` au seuil de 15 %, `auditLoanFreedomCountdown` pour le cash-flow libéré ≤ 3 mensualités, et `auditUpcomingLoanTiers` pour les variations de mensualité sous 60 jours) (64 suites, 621 tests au vert).
 - **v1.3.9 :** Ajout du suivi des fins de contrat (`contract_end_date`), compte à rebours visuel dans les charges fixes, sentinelle Dashboard d'anticipation des tacites reconductions (`auditContractExpirations`), persistance SQLite et export JSON (599 tests).
 - **v1.3.8 :** Correction de l'assiette de calcul du matelas de sécurité dans `insightsEngine.ts` et `Dashboard.tsx`, exclusion stricte des flux d'épargne volontaire (`transfer`) pour supprimer la boucle infinie, fiabilisation du KPI « Charges obligatoires » (589 tests).
 - **v1.2.2 :** Sécurité transactionnelle atomique (`withTransaction` / `SAVEPOINT`), limitation DoS payload 15 Mo, index SQLite pour accélérer les requêtes relationnelles.

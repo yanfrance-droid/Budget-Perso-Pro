@@ -10,6 +10,9 @@ export type InsightCategory =
   | 'emergency_fund' 
   | 'stalled_health' 
   | 'loan_prepayment'
+  | 'consumer_debt_vulnerability'
+  | 'loan_freedom_countdown'
+  | 'upcoming_loan_tiers'
   | 'commitment_deadline'
   | 'contract_expiration';
 
@@ -50,6 +53,9 @@ export interface InsightsContext {
   healthReimbursements?: Transaction[];
   healthDaysThreshold?: number;
   loans?: Loan[];
+  loanPayments?: Transaction[];
+  loanPaymentHistory?: { loanId: string; effectiveMonth: string; monthlyPayment: number; previousPayment?: number | null; notes?: string | null }[];
+  incomesPlanned?: number;
   templates?: RecurrenceTemplate[];
 }
 
@@ -520,6 +526,193 @@ export function auditLoanPrepayment(
   return null;
 }
 
+/**
+ * SENTINELLE : VULNÉRABILITÉ DU CRÉDIT À LA CONSOMMATION
+ * Alerte (type warning) si les mensualités cumulées des crédits conso dépassent 15 % des revenus prévus.
+ */
+export function auditConsumerDebtVulnerability(
+  loans: Loan[],
+  incomesPlanned: number
+): FinancialInsight | null {
+  if (!loans || loans.length === 0 || !incomesPlanned || incomesPlanned <= 0) {
+    return null;
+  }
+
+  const activeConsumerLoans = loans.filter(l => 
+    !l.isArchived && 
+    !l.isPaused && 
+    (l.loanType === 'consumer' || !l.loanType) && 
+    (Number(l.remainingCapital) || 0) > 0
+  );
+
+  if (activeConsumerLoans.length === 0) {
+    return null;
+  }
+
+  const totalConsumerMonthly = roundCurrency(
+    activeConsumerLoans.reduce((sum, l) => sum + (Number(l.monthlyPayment) || 0), 0)
+  );
+
+  const consumerRatio = (totalConsumerMonthly / incomesPlanned) * 100;
+
+  if (consumerRatio > 15) {
+    const formattedRatio = consumerRatio.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    return {
+      id: 'consumer_debt_vulnerability',
+      category: 'consumer_debt_vulnerability',
+      severity: 'warning',
+      title: 'Poids élevé des crédits à la consommation',
+      message: `Vos crédits à la consommation absorbent ${formattedRatio} % de vos revenus (${formatCurrencyFr(totalConsumerMonthly)}/mois sur ${formatCurrencyFr(incomesPlanned)}). Ce niveau dépasse le seuil de vigilance recommandé de 15 % et fragilise votre capacité d'épargne.`,
+      actionLabel: 'Analyser mes crédits',
+      actionTarget: '/credits',
+      metadata: {
+        totalConsumerMonthly,
+        incomesPlanned,
+        consumerRatio
+      }
+    };
+  }
+
+  return null;
+}
+
+/**
+ * SENTINELLE : COMPTE À REBOURS DE LIBÉRATION DE CRÉDIT (Cash-flow libéré)
+ * Notification (type success/info) lorsqu'un crédit actif arrive à échéance dans 3 mois ou moins (1, 2 ou 3 mensualités restantes).
+ */
+export function auditLoanFreedomCountdown(
+  loans: Loan[],
+  loanPayments: Transaction[] = [],
+  currentMonth?: string
+): FinancialInsight[] {
+  const insights: FinancialInsight[] = [];
+  if (!loans || loans.length === 0) return insights;
+
+  const activeLoans = loans.filter(l => !l.isArchived && !l.isPaused && (Number(l.remainingCapital) || 0) > 0);
+
+  for (const loan of activeLoans) {
+    const appCleared = loanPayments.filter(p => p.linkedId === loan.id && p.status === 'cleared').length;
+    const prepaid = Number(loan.prepaidInstallments) || 0;
+    const adj = Number(loan.monthsAdjustment) || 0;
+    let cleared = appCleared + prepaid + adj;
+    const duration = Number(loan.durationMonths) || 0;
+    if (cleared < 0) cleared = 0;
+    if (duration > 0 && cleared > duration) cleared = duration;
+
+    let remainingInstallments = 0;
+    if (duration > 0) {
+      remainingInstallments = Math.max(0, duration - cleared);
+    } else {
+      const rem = Number(loan.remainingCapital) || 0;
+      const pay = Number(loan.monthlyPayment) || 0;
+      if (rem > 0 && pay > 0) {
+        const sim = estimateLoanPayoffClient({
+          remainingCapital: rem,
+          monthlyPayment: pay,
+          interestRate: Number(loan.interestRate) || 0,
+          insurancePart: Number(loan.insurancePart) || 0,
+          startMonth: currentMonth
+        });
+        remainingInstallments = sim.monthsRemaining || 0;
+      }
+    }
+
+    if (remainingInstallments > 0 && remainingInstallments <= 3) {
+      const freedAmount = Number(loan.monthlyPayment) || 0;
+      const formattedFreed = formatCurrencyFr(freedAmount);
+      const isLastMonth = remainingInstallments === 1;
+
+      insights.push({
+        id: `loan_freedom_${loan.id}`,
+        category: 'loan_freedom_countdown',
+        severity: isLastMonth ? 'success' : 'info',
+        title: isLastMonth 
+          ? `Dernière mensualité pour « ${loan.name} » !` 
+          : `Fin proche pour « ${loan.name} »`,
+        message: isLastMonth
+          ? `Plus qu'une seule mensualité ! Dès le mois prochain, vous récupérerez définitivement +${formattedFreed}/mois de cash-flow net.`
+          : `Plus que ${remainingInstallments} mensualités : vous allez bientôt récupérer définitivement +${formattedFreed}/mois de reste à vivre !`,
+        actionLabel: 'Voir le crédit',
+        actionTarget: '/credits',
+        metadata: {
+          loanId: loan.id,
+          loanName: loan.name,
+          remainingInstallments,
+          freedMonthlyAmount: freedAmount
+        }
+      });
+    }
+  }
+
+  return insights;
+}
+
+/**
+ * SENTINELLE : ANTICIPATION DE PALIERS DE CRÉDIT (dans les 60 jours)
+ * Détecte si un palier de mensualité est programmé dans les 60 prochains jours (ou mois M+1 / M+2).
+ */
+export function auditUpcomingLoanTiers(
+  tiers: { loanId: string; effectiveMonth: string; monthlyPayment: number; previousPayment?: number | null; notes?: string | null }[],
+  loans: Loan[],
+  currentDate: string
+): FinancialInsight[] {
+  const insights: FinancialInsight[] = [];
+  if (!tiers || tiers.length === 0 || !loans || loans.length === 0) return insights;
+
+  const currentYm = currentDate.slice(0, 7);
+  const loanMap = new Map(loans.map(l => [l.id, l]));
+
+  // Calcul des 2 mois à venir (M+1 et M+2)
+  const [curY, curM] = currentYm.split('-').map(Number);
+  const targetMonths: string[] = [];
+  for (let offset = 1; offset <= 2; offset++) {
+    const m = curM + offset;
+    const y = curY + Math.floor((m - 1) / 12);
+    const normalizedM = ((m - 1) % 12) + 1;
+    targetMonths.push(`${y}-${String(normalizedM).padStart(2, '0')}`);
+  }
+
+  for (const tier of tiers) {
+    if (!targetMonths.includes(tier.effectiveMonth)) continue;
+
+    const loan = loanMap.get(tier.loanId);
+    if (!loan || loan.isArchived) continue;
+
+    const currentPay = Number(loan.monthlyPayment) || 0;
+    const newPay = Number(tier.monthlyPayment) || 0;
+    if (newPay === currentPay) continue;
+
+    const diff = roundCurrency(newPay - currentPay);
+    const isIncrease = diff > 0;
+    const formattedDiff = formatCurrencyFr(Math.abs(diff));
+    const formattedNew = formatCurrencyFr(newPay);
+
+    insights.push({
+      id: `upcoming_tier_${tier.loanId}_${tier.effectiveMonth}`,
+      category: 'upcoming_loan_tiers',
+      severity: isIncrease ? 'warning' : 'info',
+      title: isIncrease 
+        ? `Hausse de mensualité programmée : « ${loan.name} »`
+        : `Baisse de mensualité programmée : « ${loan.name} »`,
+      message: isIncrease
+        ? `À compter de ${tier.effectiveMonth}, la mensualité de « ${loan.name} » passera à ${formattedNew} (+${formattedDiff}/mois). Anticipez cette hausse dans votre budget.`
+        : `À compter de ${tier.effectiveMonth}, la mensualité de « ${loan.name} » passera à ${formattedNew} (-${formattedDiff}/mois de reste à vivre en plus).`,
+      actionLabel: 'Gérer les paliers',
+      actionTarget: '/credits',
+      metadata: {
+        loanId: loan.id,
+        loanName: loan.name,
+        effectiveMonth: tier.effectiveMonth,
+        currentPayment: currentPay,
+        newPayment: newPay,
+        difference: diff
+      }
+    });
+  }
+
+  return insights;
+}
+
 function formatDateFr(isoDate: string): string {
   const parts = isoDate.split('-');
   if (parts.length === 3) {
@@ -825,6 +1018,37 @@ export function generateInsights(context: InsightsContext): FinancialInsight[] {
     context.seuilFondRoulement
   );
   if (loanPrepay) insights.push(loanPrepay);
+
+  // Sentinelles Crédits (Palier 2)
+  if (context.loans && context.incomesPlanned) {
+    const consumerVulnerability = auditConsumerDebtVulnerability(
+      context.loans,
+      context.incomesPlanned
+    );
+    if (consumerVulnerability) insights.push(consumerVulnerability);
+  }
+
+  if (context.loans) {
+    const freedomInsights = auditLoanFreedomCountdown(
+      context.loans,
+      context.loanPayments || [],
+      context.currentDate.slice(0, 7)
+    );
+    if (freedomInsights.length > 0) {
+      insights.push(...freedomInsights);
+    }
+  }
+
+  if (context.loanPaymentHistory && context.loans) {
+    const tiersInsights = auditUpcomingLoanTiers(
+      context.loanPaymentHistory,
+      context.loans,
+      context.currentDate
+    );
+    if (tiersInsights.length > 0) {
+      insights.push(...tiersInsights);
+    }
+  }
 
   const commitmentInsights = auditCommitmentDeadlines(
     context.templates || [],

@@ -6,27 +6,25 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
-## [1.4.0] - 2026-11-10
+## [1.4.0] - 2026-11-11
 
-### Électrochoc Visuel & Coût Réel des Crédits (Palier 1 — Module Crédits & Prêts)
-- **Bandeau Macro « Prêts Immobiliers » (`src/pages/Loans.tsx`) :**
-  - Ajout de la jauge macro de progression globale d'amortissement pour les prêts immobiliers (`loanType === 'mortgage'`), créant une parfaite symétrie avec les crédits consommation.
-  - Affichage dynamique du pourcentage amorti, barre de progression bleue `#2563eb`, montant amorti à ce jour et capital restant dû sur le total emprunté.
-  - Gestion du libellé au singulier ou au pluriel selon le nombre de prêts immobiliers actifs.
-- **Électrochoc du « Coût Caché Réel » sur chaque fiche de prêt (`src/pages/Loans.tsx`) :**
-  - Exploitation directe de `estimateLoanPayoffClient` pour tout prêt actif non soldé.
-  - Encart visuel impactant affichant la **Facture réelle restante** (`totalCost` = capital restant dû + total intérêts + total assurance) et la **Perte sèche (coût banque)** en orange ambré (`totalInterest` + `totalInsurance` avec détail entre parenthèses).
-  - Badge compte à rebours dynamique dans l'en-tête de la carte : `⏳ Plus que X mensualités (mois AAAA)`.
-- **Barre de découpe de la mensualité courante (« Capital utile vs Coût banque ») :**
-  - Intégration sur chaque carte de crédit d'une micro-barre horizontale bicolore décomposant l'échéance :
-    - Vert `#16a34a` : Part Capital utile (amortissement patrimonial effectif réduisant la dette) avec montant et pourcentage.
-    - Orange `#ea580c` : Part Coût banque (intérêts du mois + assurance) avec montant et pourcentage.
-  - Gestion native des cas limites : les prêts à taux zéro (PTZ) affichent fidèlement 100 % de capital utile.
-- **Synthèse globale du coût caché en haut de page :**
-  - Ajout dans la grille des KPIs supérieurs d'une nouvelle carte dédiée : **« Coût total des intérêts & assurances restants »**, cumulant les pertes sèches résiduelles de l'ensemble des crédits actifs et précisant la facture réelle totale.
-- **Couverture de tests Vitest (63 suites, 607 tests au vert) :**
-  - Création de la suite dédiée `src/pages/LoansCostBreakdown.test.tsx` (8 nouveaux tests) validant les jauges immo, la facture résiduelle, la découpe de mensualité, les taux 0 % (PTZ) et les cas limites.
-  - Cap symbolique des 600 tests franchi (607/607 tests au vert, 100 % passants).
+### Added
+- **Dashboard :** Widget KPI d'endettement du foyer avec suivi des normes HCSF (sain < 30 %, modéré 30-33 %, limite 33-35 %, élevé 35-45 %, critique ≥ 45 %).
+- **Dashboard :** Découpe en temps réel entre dette patrimoniale (prêt immobilier) et endettement fractionné (crédits consommation).
+- **Dashboard :** Synthèse du passif global (capital restant dû total et facture réelle résiduelle avec intérêts/assurances).
+- **Insights Engine :** 3 sentinelles expertes d'anticipation des prêts (`auditConsumerDebtVulnerability` au seuil de 15 % des revenus, `auditLoanFreedomCountdown` pour le cash-flow libéré ≤ 3 mensualités, et `auditUpcomingLoanTiers` pour les variations de mensualité sous 60 jours).
+- **Crédits & Prêts :** Bandeau macro d'amortissement pour les prêts immobiliers (`mortgage`) et encart d'électrochoc du « coût caché réel » (facture restante et perte sèche banque).
+- **Crédits & Prêts :** Micro-barre bicolore de découpe de mensualité (capital utile vs coût banque).
+- **Documentation :** Guide méthodologique interactif in-app (`src/pages/Loans.tsx`) expliquant les normes HCSF, la perte sèche et les formules de calcul.
+
+### Fixed
+- **Crédits & Prêts :** Cohérence arithmétique stricte du compteur d'échéances payées entre parenthèses (`effectivePrepaid = Math.max(0, prepaid + adjustment)`).
+- **Crédits & Prêts :** Décalage temporel dynamique de la simulation actuarielle (`simStartMonth` à M+1) lorsque la mensualité courante est déjà pointée au statut `cleared`, supprimant tout double comptage.
+- **Crédits & Prêts :** Alignement du compte à rebours de libération d'échéance sur le compteur contractuel issu de la base SQLite (`durationMonths - clearedPayments`).
+
+### QA & Testing
+- Ajout des suites de tests unitaires pour le widget KPI d'endettement (`DashboardDebtKpi.test.tsx`), les 3 sentinelles de prêts (`insightsEngine.test.ts`) et la décomposition actuarielle (`LoansCostBreakdown.test.tsx`).
+- 64 suites de tests Vitest, **621 tests automatisés au vert (100 % passants)**.
 
 ---
 

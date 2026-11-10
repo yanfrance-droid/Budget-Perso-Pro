@@ -15,7 +15,9 @@ import {
   TrendingUp,
   HeartPulse,
   PiggyBank,
-  CalendarClock
+  CalendarClock,
+  Landmark,
+  ArrowRight
 } from 'lucide-react';
 import { isFutureExpense, getLocalTodayString, formatDateDisplay } from './FutureExpenses';
 import { getCurrentMonth } from '../utils/dateUtils';
@@ -30,7 +32,7 @@ import {
   type LoanCapitalRecordInput, 
   type DiscrepancyReport 
 } from '../services/loanCapitalHistoryService';
-import { calculateRealBalance, roundCurrency } from '../engine/calculations';
+import { calculateRealBalance, roundCurrency, estimateLoanPayoffClient } from '../engine/calculations';
 import { apiClient } from '../services/apiClient';
 import { resolvePrimaryAccountId } from '../services/accountPresentation';
 import { DashboardInsightsWidget } from '../components/dashboard/DashboardInsightsWidget';
@@ -759,6 +761,117 @@ export default function Dashboard() {
     return transactions.filter(t => t.type === 'health_reimbursement' && t.status !== 'disabled');
   }, [transactions]);
 
+  // Revenus prévus du mois sélectionné (pour le calcul du taux d'endettement)
+  const totalIncomesPlannedSelected = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'income' && t.status !== 'disabled' && (t.date.startsWith(selectedMonth) || (t.recurrenceDay && !t.templateId)))
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  }, [transactions, selectedMonth]);
+
+  // Indicateurs d'endettement & Normes HCSF pour le Dashboard
+  const debtIndicators = useMemo(() => {
+    const activeLoansList = loans.filter(l => !l.isArchived && (Number(l.remainingCapital) || 0) > 0);
+    const totalRemainingCapital = roundCurrency(activeLoansList.reduce((sum, l) => sum + (Number(l.remainingCapital) || 0), 0));
+
+    let totalFutureCost = 0;
+    activeLoansList.forEach(loan => {
+      const rem = Number(loan.remainingCapital) || 0;
+      const pay = Number(loan.monthlyPayment) || 0;
+      if (rem > 0 && pay > 0) {
+        const isCurrentMonthCleared = transactions.some(
+          p => p.type === 'loan_payment' && p.linkedId === loan.id && p.status === 'cleared' && p.date.startsWith(currentMonth)
+        );
+        const simStartMonth = isCurrentMonthCleared
+          ? (() => {
+              const [y, m] = currentMonth.split('-').map(Number);
+              const nextM = m === 12 ? 1 : m + 1;
+              const nextY = m === 12 ? y + 1 : y;
+              return `${nextY}-${String(nextM).padStart(2, '0')}`;
+            })()
+          : currentMonth;
+
+        const sim = estimateLoanPayoffClient({
+          remainingCapital: rem,
+          monthlyPayment: pay,
+          interestRate: Number(loan.interestRate) || 0,
+          insurancePart: Number(loan.insurancePart) || 0,
+          startMonth: simStartMonth
+        });
+        if (sim.possible) {
+          totalFutureCost += sim.totalCost || (rem + (sim.totalInterest || 0) + (sim.totalInsurance || 0));
+        } else {
+          totalFutureCost += rem;
+        }
+      } else {
+        totalFutureCost += rem;
+      }
+    });
+
+    const mortgageMonthly = activeLoansList
+      .filter(l => l.loanType === 'mortgage' && !l.isPaused)
+      .reduce((sum, l) => sum + (Number(l.monthlyPayment) || 0), 0);
+
+    const consumerMonthly = activeLoansList
+      .filter(l => (l.loanType === 'consumer' || !l.loanType) && !l.isPaused)
+      .reduce((sum, l) => sum + (Number(l.monthlyPayment) || 0), 0);
+
+    const totalMonthly = mortgageMonthly + consumerMonthly;
+
+    let debtRatio: number | null = null;
+    let mortgageRatio: number | null = null;
+    let consumerRatio: number | null = null;
+
+    if (totalIncomesPlannedSelected > 0) {
+      debtRatio = (totalMonthly / totalIncomesPlannedSelected) * 100;
+      mortgageRatio = (mortgageMonthly / totalIncomesPlannedSelected) * 100;
+      consumerRatio = (consumerMonthly / totalIncomesPlannedSelected) * 100;
+    }
+
+    // Pastille de couleur HCSF : Vert < 30%, Lime 30-33%, Jaune 33-35%, Orange 35-45%, Rouge >= 45%
+    let badgeBg = '#f1f5f9';
+    let badgeColor = '#475569';
+    let badgeText = 'Non calculable';
+
+    if (debtRatio !== null) {
+      if (debtRatio < 30) {
+        badgeBg = '#dcfce7';
+        badgeColor = '#16a34a';
+        badgeText = 'Sain (< 30 %)';
+      } else if (debtRatio < 33) {
+        badgeBg = '#ecfccb';
+        badgeColor = '#65a30d';
+        badgeText = 'Modéré (30-33 %)';
+      } else if (debtRatio <= 35) {
+        badgeBg = '#fef9c3';
+        badgeColor = '#ca8a04';
+        badgeText = 'Limite HCSF (33-35 %)';
+      } else if (debtRatio < 45) {
+        badgeBg = '#ffedd5';
+        badgeColor = '#ea580c';
+        badgeText = 'Élevé (35-45 %)';
+      } else {
+        badgeBg = '#fee2e2';
+        badgeColor = '#dc2626';
+        badgeText = 'Critique (≥ 45 %)';
+      }
+    }
+
+    return {
+      activeLoansCount: activeLoansList.length,
+      totalRemainingCapital,
+      totalFutureCost: roundCurrency(totalFutureCost),
+      totalMonthly: roundCurrency(totalMonthly),
+      mortgageMonthly: roundCurrency(mortgageMonthly),
+      consumerMonthly: roundCurrency(consumerMonthly),
+      debtRatio,
+      mortgageRatio,
+      consumerRatio,
+      badgeBg,
+      badgeColor,
+      badgeText
+    };
+  }, [loans, transactions, currentMonth, totalIncomesPlannedSelected]);
+
   const insightsContext = useMemo<InsightsContext>(() => ({
     currentDate: todayStr,
     manualBalance: parsedManualBalance,
@@ -774,6 +887,8 @@ export default function Dashboard() {
     healthExpenses,
     healthReimbursements,
     loans,
+    loanPayments: transactions.filter(t => t.type === 'loan_payment'),
+    incomesPlanned: totalIncomesPlannedSelected,
     templates: serverData?.recurrenceTemplates || []
   }), [
     todayStr,
@@ -790,6 +905,7 @@ export default function Dashboard() {
     healthExpenses,
     healthReimbursements,
     loans,
+    totalIncomesPlannedSelected,
     serverData?.recurrenceTemplates
   ]);
 
@@ -899,6 +1015,135 @@ export default function Dashboard() {
 
       {/* Conseiller Financier - Flash Insights */}
       <DashboardInsightsWidget context={insightsContext} />
+
+      {/* Bloc KPI d'Endettement & HCSF (Passif du Foyer) */}
+      {debtIndicators.activeLoansCount > 0 && (
+        <div 
+          className="dashboard-debt-kpi-card"
+          style={{
+            marginBottom: '1.5rem',
+            background: 'var(--surface-color, #ffffff)',
+            border: '1px solid var(--border-color, #e2e8f0)',
+            borderRadius: 'var(--radius, 12px)',
+            padding: '1.25rem',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color, #e2e8f0)', paddingBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Landmark size={18} color="#2563eb" />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-main, #0f172a)' }}>
+                  Passif du Foyer & Endettement ({debtIndicators.activeLoansCount} crédit{debtIndicators.activeLoansCount > 1 ? 's' : ''})
+                </h3>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #64748b)' }}>
+                  Normes de solvabilité et suivi actuariel global
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                padding: '0.25rem 0.65rem',
+                borderRadius: '9999px',
+                backgroundColor: debtIndicators.badgeBg,
+                color: debtIndicators.badgeColor,
+                border: `1px solid ${debtIndicators.badgeColor}33`,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}>
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: debtIndicators.badgeColor }}></span>
+                {debtIndicators.badgeText}
+              </span>
+              <a 
+                href="/credits" 
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#2563eb',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem'
+                }}
+              >
+                Gérer les prêts <ArrowRight size={14} />
+              </a>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+            {/* KPI 1 : Taux d'endettement global */}
+            <div style={{ background: 'var(--bg-color, #f8fafc)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color, #e2e8f0)' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.025em' }}>
+                Taux d'endettement brut
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: debtIndicators.badgeColor, margin: '0.25rem 0' }}>
+                {debtIndicators.debtRatio !== null
+                  ? `${debtIndicators.debtRatio.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
+                  : '— %'}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted, #64748b)' }}>
+                Mensualités : {formatCurrency(debtIndicators.totalMonthly)}/mois
+              </div>
+            </div>
+
+            {/* KPI 2 : Découpe HCSF (Immo vs Conso) */}
+            <div style={{ background: 'var(--bg-color, #f8fafc)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color, #e2e8f0)' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.025em' }}>
+                Découpe HCSF de l'effort
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.35rem', fontSize: '0.8rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#2563eb', fontWeight: 600 }}>• Immo (patrimonial) :</span>
+                  <span style={{ fontWeight: 700 }}>
+                    {debtIndicators.mortgageRatio !== null ? `${debtIndicators.mortgageRatio.toFixed(1)} %` : '— %'}
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted, #64748b)', fontWeight: 400 }}> ({formatCurrency(debtIndicators.mortgageMonthly)})</span>
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#ea580c', fontWeight: 600 }}>• Conso (fractionné) :</span>
+                  <span style={{ fontWeight: 700 }}>
+                    {debtIndicators.consumerRatio !== null ? `${debtIndicators.consumerRatio.toFixed(1)} %` : '— %'}
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted, #64748b)', fontWeight: 400 }}> ({formatCurrency(debtIndicators.consumerMonthly)})</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI 3 : Capital restant dû global */}
+            <div style={{ background: 'var(--bg-color, #f8fafc)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color, #e2e8f0)' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.025em' }}>
+                Capital restant dû global
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main, #0f172a)', margin: '0.25rem 0' }}>
+                {formatCurrency(debtIndicators.totalRemainingCapital)}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted, #64748b)' }}>
+                Dette nominale restant à rembourser
+              </div>
+            </div>
+
+            {/* KPI 4 : Facture réelle totale résiduelle */}
+            <div style={{ background: 'var(--bg-color, #f8fafc)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color, #e2e8f0)' }}>
+              <div style={{ fontSize: '0.72rem', color: '#ea580c', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.025em' }}>
+                Facture réelle résiduelle
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ea580c', margin: '0.25rem 0' }}>
+                {formatCurrency(debtIndicators.totalFutureCost)}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted, #64748b)' }}>
+                Intérêts & assurances futurs inclus
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Grille principale : C. Situation bancaire & E. Tableau des charges */}
       <div className="dashboard-main-grid">

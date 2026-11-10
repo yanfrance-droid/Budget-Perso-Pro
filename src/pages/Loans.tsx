@@ -4,7 +4,7 @@ import type { Loan, Transaction, LoanPaymentHistory } from '../db/database';
 import { Card, Button, Modal, StatusBadgeSelect, AccountSelect, AmountInput } from '../components/ui/Components';
 import { 
   Plus, Edit2, Trash2, Filter, Pause, Play, 
-  Archive, ArchiveRestore, History, CreditCard, Info, AlertCircle, CheckCircle 
+  Archive, ArchiveRestore, History, CreditCard, Info, AlertCircle, CheckCircle, HelpCircle, ChevronDown, ChevronUp 
 } from 'lucide-react';
 
 import { useServerDataOptional } from '../contexts/ServerDataContext';
@@ -69,6 +69,9 @@ export default function Loans() {
 
   const currentMonth = getCurrentMonth();
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+
+  // Guide pédagogique & règles d'endettement HCSF dépliable
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   const formatMonth = (ym: string) => {
     if (!ym) return '';
@@ -905,23 +908,112 @@ export default function Loans() {
         </Button>
       </div>
 
-      {/* Onglets : Crédits actifs vs Crédits archivés */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-        <Button
-          variant={activeTab === 'active' ? 'primary' : 'outline'}
-          onClick={() => setActiveTab('active')}
-          icon={<CreditCard size={16} />}
+      {/* Onglets : Crédits actifs vs Crédits archivés & Guide Pédagogique */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <Button
+            variant={activeTab === 'active' ? 'primary' : 'outline'}
+            onClick={() => setActiveTab('active')}
+            icon={<CreditCard size={16} />}
+          >
+            Crédits actifs ({activeLoans.length})
+          </Button>
+          <Button
+            variant={activeTab === 'archived' ? 'primary' : 'outline'}
+            onClick={() => setActiveTab('archived')}
+            icon={<Archive size={16} />}
+          >
+            Crédits archivés ({archivedLoans.length})
+          </Button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsGuideOpen(prev => !prev)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--primary-color, #2563eb)',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            padding: '0.25rem 0.5rem',
+            borderRadius: 'var(--radius, 6px)'
+          }}
         >
-          Crédits actifs ({activeLoans.length})
-        </Button>
-        <Button
-          variant={activeTab === 'archived' ? 'primary' : 'outline'}
-          onClick={() => setActiveTab('archived')}
-          icon={<Archive size={16} />}
-        >
-          Crédits archivés ({archivedLoans.length})
-        </Button>
+          <HelpCircle size={15} />
+          <span>Comprendre les calculs & normes HCSF</span>
+          {isGuideOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+        </button>
       </div>
+
+      {/* Guide Pédagogique Dépliable (In-App Documentation) */}
+      {isGuideOpen && (
+        <div 
+          className="card" 
+          style={{ 
+            marginBottom: '1.5rem', 
+            backgroundColor: 'var(--bg-color, #f8fafc)', 
+            border: '1px solid var(--border-color, #e2e8f0)',
+            borderLeft: '4px solid #2563eb',
+            padding: '1.25rem',
+            fontSize: '0.85rem',
+            lineHeight: '1.5'
+          }}
+        >
+          <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', fontWeight: 700, color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Info size={18} color="#2563eb" />
+            Guide méthodologique : Endettement, Perte sèche & Sentinelles
+          </h3>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+            <div>
+              <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main, #0f172a)' }}>
+                1. Normes HCSF & Découpe de l'effort
+              </h4>
+              <p style={{ margin: 0, color: 'var(--text-muted, #64748b)' }}>
+                Le Haut Conseil de Stabilité Financière (HCSF) recommande un taux d'endettement maximal de <strong>35 %</strong> des revenus bruts. L'application distingue :
+              </p>
+              <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0, color: 'var(--text-muted, #64748b)' }}>
+                <li><strong>Effort patrimonial (Immobilier) :</strong> création d'actif tangible sur le long terme.</li>
+                <li><strong>Endettement fractionné (Consommation) :</strong> seuil de vigilance à <strong>15 %</strong> des revenus. Au-delà, le reste à vivre et la capacité d'épargne sont compromis.</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main, #0f172a)' }}>
+                2. Notion de « Perte sèche » (Coût banque)
+              </h4>
+              <p style={{ margin: 0, color: 'var(--text-muted, #64748b)' }}>
+                Contrairement au capital amorti (qui réduit votre dette), la <strong>perte sèche</strong> représente le total des intérêts d'emprunt et cotisations d'assurance restantes dû à la banque. Elle matérialise la dépense sans retour sur investissement.
+              </p>
+            </div>
+
+            <div>
+              <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main, #0f172a)' }}>
+                3. Compteur d'échéances net d'ajustement
+              </h4>
+              <p style={{ margin: 0, color: 'var(--text-muted, #64748b)' }}>
+                Le total des mensualités payées est strictement arithmétique : les mensualités historiques affichées intègrent l'ajustement éventuel (<code>effectivePrepaid = Math.max(0, prepaid + adjustment)</code>). La somme entre parenthèses correspond exactement au total affiché.
+              </p>
+            </div>
+
+            <div>
+              <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main, #0f172a)' }}>
+                4. Les 3 Sentinelles automatisées
+              </h4>
+              <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0, color: 'var(--text-muted, #64748b)' }}>
+                <li><strong>Vulnérabilité Conso :</strong> alerte si les crédits conso dépassent 15 % des revenus.</li>
+                <li><strong>Compte à rebours libération :</strong> notification dès qu'un prêt arrive à ≤ 3 mensualités, chiffrant le cash-flow libéré.</li>
+                <li><strong>Anticipation de paliers :</strong> prévient sous 60 jours de toute variation programmée.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeTab === 'active' ? (
         <>

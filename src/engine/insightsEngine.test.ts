@@ -9,6 +9,9 @@ import {
   auditContractExpirations,
   auditStalledHealth,
   auditLoanPrepayment,
+  auditConsumerDebtVulnerability,
+  auditLoanFreedomCountdown,
+  auditUpcomingLoanTiers,
   generateInsights,
   formatCurrencyFr,
   type InsightsContext
@@ -729,6 +732,266 @@ describe('insightsEngine - Conseiller Financier & Anticipation', () => {
       expect(contractAlert?.title).toContain('Fin de contrat imminente');
       expect(contractAlert?.message).toContain('18/11/2026');
       expect(contractAlert?.actionTarget).toBe('/charges-fixes');
+    });
+  });
+
+  describe('9. auditConsumerDebtVulnerability (Palier 2 - Seuil 15 % conso)', () => {
+    it('déclenche un warning si les mensualités de crédits conso dépassent 15 % des revenus prévus', () => {
+      const loans: Loan[] = [
+        {
+          id: 'loan-immo',
+          name: 'Prêt Immo',
+          lender: 'Banque',
+          initialAmount: 200000,
+          remainingCapital: 150000,
+          monthlyPayment: 800,
+          startDate: '2020-01-01',
+          durationMonths: 240,
+          accountId: 'acc-1',
+          loanType: 'mortgage',
+          isArchived: false
+        },
+        {
+          id: 'loan-conso-1',
+          name: 'Prêt Auto',
+          lender: 'Sofinco',
+          initialAmount: 15000,
+          remainingCapital: 10000,
+          monthlyPayment: 350,
+          startDate: '2024-01-01',
+          durationMonths: 48,
+          accountId: 'acc-1',
+          loanType: 'consumer',
+          isArchived: false
+        },
+        {
+          id: 'loan-conso-2',
+          name: 'Prêt Conso Travaux',
+          lender: 'Cetelem',
+          initialAmount: 8000,
+          remainingCapital: 5000,
+          monthlyPayment: 200,
+          startDate: '2025-01-01',
+          durationMonths: 48,
+          accountId: 'acc-1',
+          loanType: 'consumer',
+          isArchived: false
+        }
+      ];
+
+      // Total conso = 350 + 200 = 550 €.
+      // Sur 3000 € de revenus -> 550 / 3000 = 18.3 % (> 15 %)
+      const alert = auditConsumerDebtVulnerability(loans, 3000);
+      expect(alert).not.toBeNull();
+      expect(alert?.severity).toBe('warning');
+      expect(alert?.category).toBe('consumer_debt_vulnerability');
+      expect(alert?.title).toContain('Poids élevé des crédits à la consommation');
+      expect(alert?.message).toContain('18,3 %');
+      expect(alert?.message).toContain('550,00 €/mois');
+      expect(alert?.actionTarget).toBe('/credits');
+    });
+
+    it('ne déclenche rien si les mensualités conso sont sous le seuil de 15 %', () => {
+      const loans: Loan[] = [
+        {
+          id: 'loan-conso',
+          name: 'Petit Prêt',
+          lender: 'Banque',
+          initialAmount: 3000,
+          remainingCapital: 1500,
+          monthlyPayment: 150,
+          startDate: '2025-01-01',
+          durationMonths: 24,
+          accountId: 'acc-1',
+          loanType: 'consumer',
+          isArchived: false
+        }
+      ];
+      // 150 € sur 3000 € = 5 % (bien sous 15 %)
+      const alert = auditConsumerDebtVulnerability(loans, 3000);
+      expect(alert).toBeNull();
+    });
+  });
+
+  describe('10. auditLoanFreedomCountdown (Palier 2 - Compte à rebours libération)', () => {
+    it('notifie le cash-flow libéré pour un crédit ayant 2 mensualités restantes', () => {
+      const loans: Loan[] = [
+        {
+          id: 'loan-meia',
+          name: 'Prêt Poêle Granulé',
+          lender: 'MEIA',
+          initialAmount: 6000,
+          remainingCapital: 120,
+          monthlyPayment: 60,
+          startDate: '2024-01-01',
+          durationMonths: 24,
+          prepaidInstallments: 20,
+          monthsAdjustment: 0,
+          accountId: 'acc-1',
+          loanType: 'consumer',
+          isArchived: false
+        }
+      ];
+
+      // 20 historiques + 2 cleared = 22. Sur 24 -> Reste 2 mensualités.
+      const loanPayments: Transaction[] = [
+        { id: 'p1', date: '2026-10-01', amount: 60, type: 'loan_payment', status: 'cleared', linkedId: 'loan-meia', accountId: 'acc-1' },
+        { id: 'p2', date: '2026-11-01', amount: 60, type: 'loan_payment', status: 'cleared', linkedId: 'loan-meia', accountId: 'acc-1' }
+      ];
+
+      const insights = auditLoanFreedomCountdown(loans, loanPayments, '2026-11');
+      expect(insights.length).toBe(1);
+      const freedom = insights[0];
+      expect(freedom.category).toBe('loan_freedom_countdown');
+      expect(freedom.severity).toBe('info');
+      expect(freedom.title).toContain('Fin proche pour « Prêt Poêle Granulé »');
+      expect(freedom.message).toContain('Plus que 2 mensualités');
+      expect(freedom.message).toContain('+60,00 €/mois');
+    });
+
+    it('déclenche une notification de type success pour la toute dernière mensualité (1 restante)', () => {
+      const loans: Loan[] = [
+        {
+          id: 'loan-last',
+          name: 'Crédit Smartphone',
+          lender: 'Fnac',
+          initialAmount: 1200,
+          remainingCapital: 100,
+          monthlyPayment: 100,
+          startDate: '2025-01-01',
+          durationMonths: 12,
+          prepaidInstallments: 11,
+          monthsAdjustment: 0,
+          accountId: 'acc-1',
+          loanType: 'consumer',
+          isArchived: false
+        }
+      ];
+
+      const insights = auditLoanFreedomCountdown(loans, [], '2026-11');
+      expect(insights.length).toBe(1);
+      const freedom = insights[0];
+      expect(freedom.severity).toBe('success');
+      expect(freedom.title).toContain('Dernière mensualité');
+      expect(freedom.message).toContain('+100,00 €/mois');
+    });
+  });
+
+  describe('11. auditUpcomingLoanTiers (Palier 2 - Anticipation des paliers dans les 60 jours)', () => {
+    it('alerte d\'une hausse de mensualité programmée sur un prêt le mois prochain (M+1)', () => {
+      const loans: Loan[] = [
+        {
+          id: 'loan-sofinco',
+          name: 'Sofinco Regroupement',
+          lender: 'Sofinco',
+          initialAmount: 30000,
+          remainingCapital: 25000,
+          monthlyPayment: 350,
+          startDate: '2024-01-01',
+          durationMonths: 96,
+          accountId: 'acc-1',
+          loanType: 'consumer',
+          isArchived: false
+        }
+      ];
+
+      // Date courante : 15 novembre 2026. Palier en décembre 2026 (2026-12)
+      const tiers = [
+        {
+          loanId: 'loan-sofinco',
+          effectiveMonth: '2026-12',
+          monthlyPayment: 420,
+          previousPayment: 350,
+          notes: 'Passage palier 2'
+        }
+      ];
+
+      const insights = auditUpcomingLoanTiers(tiers, loans, '2026-11-15');
+      expect(insights.length).toBe(1);
+      const tierAlert = insights[0];
+      expect(tierAlert.category).toBe('upcoming_loan_tiers');
+      expect(tierAlert.severity).toBe('warning');
+      expect(tierAlert.title).toContain('Hausse de mensualité programmée');
+      expect(tierAlert.message).toContain('420,00 €');
+      expect(tierAlert.message).toContain('+70,00 €/mois');
+      expect(tierAlert.actionTarget).toBe('/credits');
+    });
+
+    it('informe d\'une baisse de mensualité programmée en M+2', () => {
+      const loans: Loan[] = [
+        {
+          id: 'loan-immo',
+          name: 'Prêt Immo Paliers',
+          lender: 'Banque',
+          initialAmount: 180000,
+          remainingCapital: 120000,
+          monthlyPayment: 900,
+          startDate: '2020-01-01',
+          durationMonths: 240,
+          accountId: 'acc-1',
+          loanType: 'mortgage',
+          isArchived: false
+        }
+      ];
+
+      // Date courante : 10 novembre 2026. Palier en janvier 2027 (2027-01, soit M+2)
+      const tiers = [
+        {
+          loanId: 'loan-immo',
+          effectiveMonth: '2027-01',
+          monthlyPayment: 750,
+          previousPayment: 900,
+          notes: 'Fin palier assurance initiale'
+        }
+      ];
+
+      const insights = auditUpcomingLoanTiers(tiers, loans, '2026-11-10');
+      expect(insights.length).toBe(1);
+      const tierAlert = insights[0];
+      expect(tierAlert.severity).toBe('info');
+      expect(tierAlert.title).toContain('Baisse de mensualité programmée');
+      expect(tierAlert.message).toContain('750,00 €');
+      expect(tierAlert.message).toContain('-150,00 €/mois');
+    });
+  });
+
+  describe('12. Intégration globale generateInsights avec les sentinelles de prêts', () => {
+    it('génère et ordonne correctement les insights de prêts selon la sévérité', () => {
+      const context: InsightsContext = {
+        currentDate: '2026-11-10',
+        manualBalance: 3000,
+        soldePrevisionnel: 2500,
+        pendingTransactions: [],
+        liquidSavingsTotal: 8000,
+        totalObligatoires: 1200,
+        incomesPlanned: 2000,
+        loans: [
+          {
+            id: 'loan-conso',
+            name: 'Prêt Auto',
+            lender: 'Banque',
+            initialAmount: 10000,
+            remainingCapital: 500,
+            monthlyPayment: 400, // 400 / 2000 = 20 % (> 15 %)
+            startDate: '2024-01-01',
+            durationMonths: 24,
+            prepaidInstallments: 23, // 24 - 23 = 1 restante -> success
+            accountId: 'acc-1',
+            loanType: 'consumer',
+            isArchived: false
+          }
+        ]
+      };
+
+      const insights = generateInsights(context);
+      const categories = insights.map(i => i.category);
+      expect(categories).toContain('consumer_debt_vulnerability');
+      expect(categories).toContain('loan_freedom_countdown');
+
+      // Le warning de vulnérabilité (poids 3) doit être priorisé avant l'info/success de libération (poids 1)
+      const vulnIndex = insights.findIndex(i => i.category === 'consumer_debt_vulnerability');
+      const freedomIndex = insights.findIndex(i => i.category === 'loan_freedom_countdown');
+      expect(vulnIndex).toBeLessThan(freedomIndex);
     });
   });
 });
