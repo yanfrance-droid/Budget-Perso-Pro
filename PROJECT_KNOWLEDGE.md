@@ -1,8 +1,8 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-10 (Version 1.4.0 — Palier 2 Crédits & Sentinelles)  
-> **Statut QA :** 64 suites de tests Vitest, 621 tests au vert (100 % passants).
+> **Dernière mise à jour :** 2026-11-11 (Version 1.4.1 — Palier 3 Trajectoire & Frise Chronologique)  
+> **Statut QA :** 65 suites de tests Vitest, 626 tests au vert (100 % passants).
 
 ---
 
@@ -118,16 +118,19 @@ La base SQLite contient 12 tables relationnelles initialisées et migrées dans 
 ### 4.3. Pilotage de Trésorerie, Crédits & Règle d'Or Bancaire
 - **Anti-découvert (Crash-Test) :** Calculé sur le **Solde Réel instantané** avec simulation jour par jour jusqu'au prochain revenu (priorité débits avant crédits du même jour).
 - **Opportunité d'épargne :** Calculée **EXCLUSIVEMENT sur le Solde Prévisionnel net de fin de mois** (après déduction des charges engagées et du fond de roulement de sécurité).
-- **Crédits & Amortissement Actuariel (Paliers 1 & 2) :**
+- **Crédits & Amortissement Actuariel (Paliers 1, 2 & 3) :**
   - **Cohérence arithmétique des compteurs :** Décompte des échéances historiques net d'ajustement (`effectivePrepaid = Math.max(0, prepaid + adjustment)` dans [`Loans.tsx`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/src/pages/Loans.tsx)) pour garantir la concordance stricte entre total affiché et détail entre parenthèses.
   - **Compte à rebours contractuel :** Badge d'en-tête de prêt basé en priorité sur `durationMonths - clearedPayments` et la date de fin contractuelle (`loan.endDate`).
   - **Simulation actuarielle dynamique (`simStartMonth`) :** Si l'échéance du mois en cours est déjà au statut `cleared` (donc déjà déduite du capital restant dû en base), `estimateLoanPayoffClient` démarre la simulation d'amortissement résiduelle à **M+1**, éliminant tout double comptage du mois déjà prélevé.
   - **Coût caché & Perte sèche résiduelle :** Cumul des intérêts et cotisations d'assurance restants jusqu'au terme du crédit, dissocié du capital amorti utile.
-  - **Monitoring HCSF sur Dashboard :** Taux d'endettement brut du foyer avec pastille d'alerte HCSF (sain <30%, modéré 30-33%, limite 33-35%, élevé 35-45%, critique ≥45%), découpe de l'effort Immo patrimonial vs Conso fractionné, et passif global du foyer (capital restant dû + facture réelle).
+  - **Monitoring HCSF sur Dashboard & Harmonisation Loans.tsx :** Taux d'endettement brut du foyer avec pastille d'alerte HCSF (`Sain (< 30 %)`, `Modéré (30-33 %)`, `Limite HCSF (33-35 %)`, `Élevé (35-45 %)`, `Critique (≥ 45 %)`), découpe de l'effort Immo patrimonial vs Conso fractionné, et passif global du foyer (capital restant dû + facture réelle).
   - **Sentinelles d'endettement automatisées (`insightsEngine.ts`) :**
     * `auditConsumerDebtVulnerability` : warning si les crédits conso dépassent 15 % des revenus prévus.
     * `auditLoanFreedomCountdown` : notification (success/info) à ≤ 3 mensualités de l'échéance chiffrant le cash-flow mensuel définitivement libéré.
     * `auditUpcomingLoanTiers` : alerte anticipée sous 60 jours en cas de hausse ou baisse de mensualité programmée sur un prêt à paliers.
+  - **Trajectoire d'Extinction & Libération du Cash-Flow (Palier 3) :**
+    * Nouvel onglet interne dédié `[🚀 Trajectoire & Libération]` dans `Loans.tsx` (`LoanTab = 'active' | 'timeline' | 'archived'`).
+    * Composant [`LoanReleaseTimeline.tsx`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/src/components/loans/LoanReleaseTimeline.tsx) : tri chronologique exact des crédits par date d'extinction (`endDate` ou simulation actuarielle), calcul du gain mensuel (+XX €/m), cumul progressif de cash-flow récupéré, endettement projeté étape par étape, et mise en valeur des paliers majeurs jusqu'à la libération totale.
 
 ---
 

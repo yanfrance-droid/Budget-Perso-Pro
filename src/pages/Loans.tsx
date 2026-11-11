@@ -4,13 +4,14 @@ import type { Loan, Transaction, LoanPaymentHistory } from '../db/database';
 import { Card, Button, Modal, StatusBadgeSelect, AccountSelect, AmountInput } from '../components/ui/Components';
 import { 
   Plus, Edit2, Trash2, Filter, Pause, Play, 
-  Archive, ArchiveRestore, History, CreditCard, Info, AlertCircle, CheckCircle, HelpCircle, ChevronDown, ChevronUp 
+  Archive, ArchiveRestore, History, CreditCard, Info, AlertCircle, CheckCircle, HelpCircle, ChevronDown, ChevronUp, Rocket 
 } from 'lucide-react';
 
 import { useServerDataOptional } from '../contexts/ServerDataContext';
 import { apiClient } from '../services/apiClient';
 import { estimateLoanPayoffClient, calculateAmortizedCapital } from '../engine/calculations';
 import { getCurrentMonth } from '../utils/dateUtils';
+import { LoanReleaseTimeline } from '../components/loans/LoanReleaseTimeline';
 
 const LOAN_PAYMENT_STATUS_OPTIONS = [
   { value: 'cleared', label: 'Débité' },
@@ -30,8 +31,9 @@ export default function Loans() {
   const loanPayments = (serverData?.transactions || []).filter(t => t.type === 'loan_payment');
   const incomeTransactions = (serverData?.transactions || []).filter(t => t.type === 'income');
 
-  // Navigation par onglets : Crédits actifs vs Crédits archivés
-  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
+  // Navigation par onglets : Crédits actifs, Trajectoire & Libération, Crédits archivés
+  type LoanTab = 'active' | 'timeline' | 'archived';
+  const [activeTab, setActiveTab] = useState<LoanTab>('active');
 
   // Modal d'édition/création d'un crédit
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
@@ -425,29 +427,29 @@ export default function Loans() {
     levelLabel = 'Non calculable';
     levelColor = 'var(--text-muted)';
     levelBg = '#f1f5f9';
-  } else if (debtRatioValue < 20) {
-    levelKey = 'faible';
-    levelLabel = 'Faible';
+  } else if (debtRatioValue < 30) {
+    levelKey = 'sain';
+    levelLabel = 'Sain (< 30 %)';
     levelColor = '#16a34a';
     levelBg = '#dcfce7';
-  } else if (debtRatioValue < 30) {
+  } else if (debtRatioValue < 33) {
     levelKey = 'modere';
-    levelLabel = 'Modéré';
+    levelLabel = 'Modéré (30-33 %)';
     levelColor = '#65a30d';
     levelBg = '#ecfccb';
-  } else if (debtRatioValue < 35) {
+  } else if (debtRatioValue <= 35) {
     levelKey = 'surveiller';
-    levelLabel = 'À surveiller';
+    levelLabel = 'Limite HCSF (33-35 %)';
     levelColor = '#ca8a04';
     levelBg = '#fef9c3';
   } else if (debtRatioValue < 45) {
     levelKey = 'eleve';
-    levelLabel = 'Élevé';
+    levelLabel = 'Élevé (35-45 %)';
     levelColor = '#ea580c';
     levelBg = '#ffedd5';
   } else {
     levelKey = 'tres_eleve';
-    levelLabel = 'Très élevé';
+    levelLabel = 'Critique (≥ 45 %)';
     levelColor = '#dc2626';
     levelBg = '#fee2e2';
   }
@@ -908,15 +910,22 @@ export default function Loans() {
         </Button>
       </div>
 
-      {/* Onglets : Crédits actifs vs Crédits archivés & Guide Pédagogique */}
+      {/* Onglets : Crédits actifs vs Trajectoire vs Crédits archivés & Guide Pédagogique */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <Button
             variant={activeTab === 'active' ? 'primary' : 'outline'}
             onClick={() => setActiveTab('active')}
             icon={<CreditCard size={16} />}
           >
             Crédits actifs ({activeLoans.length})
+          </Button>
+          <Button
+            variant={activeTab === 'timeline' ? 'primary' : 'outline'}
+            onClick={() => setActiveTab('timeline')}
+            icon={<Rocket size={16} />}
+          >
+            🚀 Trajectoire & Libération
           </Button>
           <Button
             variant={activeTab === 'archived' ? 'primary' : 'outline'}
@@ -1171,6 +1180,14 @@ export default function Loans() {
             </div>
           </div>
         </>
+      ) : activeTab === 'timeline' ? (
+        /* VUE TRAJECTOIRE & LIBÉRATION */
+        <LoanReleaseTimeline 
+          loans={activeLoans} 
+          monthlyIncomes={totalIncomesPlanned} 
+          loanPayments={loanPayments} 
+          currentMonth={selectedMonth} 
+        />
       ) : (
         /* VUE CRÉDITS ARCHIVÉS */
         <div>
