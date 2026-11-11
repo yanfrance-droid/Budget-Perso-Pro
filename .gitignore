@@ -34,6 +34,8 @@ dom_revenus.html
 *.png
 !src/assets/*.png
 !public/*.png
+!docs/screenshots/**/*.png
+!docs/screenshots/*.png
 
 # Variables d'environnement locales et secrets
 .env

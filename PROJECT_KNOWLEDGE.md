@@ -158,6 +158,12 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 - **Option 2 :** Mise à jour sécurisée (sauvegarde physique SQLite `.backup` à chaud, `git fetch --tags --force`, `git pull --ff-only origin main`, reconstruction Docker sans cache et validation healthcheck).
 - **Option 3 :** Réinstallation sécurisée avec sanctuarisation des dossiers `data/` et `.env`.
 
+### 5.4. Automatisation Documentaire & Captures Headless (`scripts/`)
+- **Base Démo Étanche (`scripts/seed-demo.ts`) :** Génère une base SQLite 100 % anonymisée dans `data/budget.demo.db` (sanctuarisant la vraie base `data/budget.db`) avec des volumes équilibrés (3 comptes, 3 revenus, 4 crédits échelonnés de 2026 à 2044, 2 dossiers de soins santé et 45 transactions).
+- **Campagne de Captures Headless (`scripts/generate-screenshots.ts`) :** Démarre un serveur éphémère sur le port 3099, pilote Puppeteer avec wait strategies strictes (`networkidle0`, `document.fonts.ready`, stabilisation Recharts SVG + délai de transition CSS), et génère la galerie officielle :
+  * `docs/screenshots/desktop/` : 14 captures haute définition (1920x1080 @2x).
+  * `docs/screenshots/mobile/` : 7 captures iPhone 14 Pro (393x852 @3x).
+
 ---
 
 ## 6. Pièges Fréquents & Gotchas à Éviter Absolument
