@@ -9,15 +9,17 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 ## [1.4.1] - 2026-11-11
 
 ### Added
-- **Crédits & Prêts :** Nouvel onglet interne dédié **« 🚀 Trajectoire & Libération »** dans [`src/pages/Loans.tsx`](src/pages/Loans.tsx) sans modification des formulaires ni des flux existants.
-- **Crédits & Prêts :** Composant [`src/components/loans/LoanReleaseTimeline.tsx`](src/components/loans/LoanReleaseTimeline.tsx) matérialisant la frise chronologique d'extinction des prêts, le cumul progressif de cash-flow récupéré (+XX,XX €/mois) et la projection d'endettement à chaque étape.
+- **Loans / Crédits :** Dedicated internal tab "[🚀 Trajectoire & Libération]" separating daily operations from strategic roadmap.
+- **Loans / Crédits :** New component `LoanReleaseTimeline` displaying chronological debt freedom milestones (2028 to 2044).
+- **Loans / Crédits :** Cumulative liberated monthly cash-flow calculation (+XX,XX €/mois) and projected residual debt ratio at each stage.
+- **In-App Help :** Detailed documentation of release milestones and debt trajectory inside the collapsible guide (`src/pages/Loans.tsx`).
 
-### Changed
-- **Crédits & Prêts :** Harmonisation cosmétique du badge de solvabilité HCSF sur la page Crédits avec la terminologie du Dashboard (`Sain (< 30 %)`, `Modéré (30-33 %)`, `Limite HCSF (33-35 %)`, `Élevé (35-45 %)`, `Critique (≥ 45 %)`).
+### Fixed
+- **Loans / Crédits :** Harmonized HCSF status badge terminology with Dashboard (<30% now displays "Sain (< 30%)").
 
 ### QA & Testing
-- Ajout de la suite de tests unitaires `src/components/loans/__tests__/LoanReleaseTimeline.test.tsx` (5 tests validés).
-- 65 suites de tests Vitest, **626 tests automatisés au vert (100 % passants)**.
+- Added 5 unit tests for timeline computation and tab switching (`src/components/loans/__tests__/LoanReleaseTimeline.test.tsx`).
+- 65 test suites, 626 tests passing at 100%.
 
 ---
 

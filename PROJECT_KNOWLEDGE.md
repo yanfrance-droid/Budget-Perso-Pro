@@ -129,8 +129,14 @@ La base SQLite contient 12 tables relationnelles initialisées et migrées dans 
     * `auditLoanFreedomCountdown` : notification (success/info) à ≤ 3 mensualités de l'échéance chiffrant le cash-flow mensuel définitivement libéré.
     * `auditUpcomingLoanTiers` : alerte anticipée sous 60 jours en cas de hausse ou baisse de mensualité programmée sur un prêt à paliers.
   - **Trajectoire d'Extinction & Libération du Cash-Flow (Palier 3) :**
-    * Nouvel onglet interne dédié `[🚀 Trajectoire & Libération]` dans `Loans.tsx` (`LoanTab = 'active' | 'timeline' | 'archived'`).
-    * Composant [`LoanReleaseTimeline.tsx`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/src/components/loans/LoanReleaseTimeline.tsx) : tri chronologique exact des crédits par date d'extinction (`endDate` ou simulation actuarielle), calcul du gain mensuel (+XX €/m), cumul progressif de cash-flow récupéré, endettement projeté étape par étape, et mise en valeur des paliers majeurs jusqu'à la libération totale.
+    * **Découpage ergonomique par onglets internes :** Dans [`Loans.tsx`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/src/pages/Loans.tsx), gestion d'état `LoanTab = 'active' | 'timeline' | 'archived'` préservant l'étanchéité des formulaires, filtres et flux opérationnels.
+    * **Spécification du composant [`LoanReleaseTimeline.tsx`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/src/components/loans/LoanReleaseTimeline.tsx) :**
+      - Moteur d'ordonnancement `computeReleaseMilestones(loans, monthlyIncomes, loanPayments, currentMonth)` triant rigoureusement chaque prêt actif par date d'extinction contractuelle (`endDate`) ou actuarielle (`estimateLoanPayoffClient`).
+      - Détection des paliers simultanés et regroupement logique des prêts éteints le même mois.
+      - Calcul du gain mensuel net libéré pour chaque crédit (`monthlyPayment`).
+      - Cumul progressif du cash-flow restitué au foyer (`+XX,XX €/mois`) affiché en continu avec mise en valeur de l'effet « boule de neige ».
+      - Projection en temps réel du taux d'endettement résiduel après chaque extinction de dette, jusqu'au « Grand Chelem » final (0,0 % d'endettement, 100 % des mensualités restituées).
+      - Respect strict de l'échelle d'alerte HCSF harmonisée (`Sain < 30 %`, `Modéré 30-33 %`, `Limite HCSF 33-35 %`, `Élevé 35-45 %`, `Critique ≥ 45 %`).
 
 ---
 

@@ -1,9 +1,9 @@
-# Personal Budget Pro (v1.4.0)
+# Personal Budget Pro (v1.4.1)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/Node.js-v24_Alpine-green.svg)](https://nodejs.org/)
 [![Database](https://img.shields.io/badge/SQLite-node:sqlite_WAL-blueviolet.svg)](https://sqlite.org/)
-[![Tests](https://img.shields.io/badge/Tests-621%20passing-brightgreen.svg)](package.json)
+[![Tests](https://img.shields.io/badge/Tests-626%20passing-brightgreen.svg)](package.json)
 [![RAM Footprint](https://img.shields.io/badge/RAM-%3C_60_Mo-success.svg)](#architecture-logicielle--efficience)
 
 **Personal Budget Pro** est une application web auto-hébergée (*self-hosted*), ultra-légère (< 60 Mo de RAM au repos) et de haute précision pour la gestion budgétaire, l'anticipation de trésorerie (*cash-flow*) et le pilotage patrimonial personnel.
@@ -36,6 +36,8 @@ Contrairement aux solutions généralistes anglo-saxonnes (YNAB, Actual Budget),
   Double lecture permanente : le solde physique en banque à l'instant T versus l'atterrissage net de fin de mois après déduction du reste à payer engagé et des cartes à débit différé.
 * **Moteur d'Amortissement de Crédits & Pilotage HCSF :**  
   Décomposition actuarielle stricte de chaque mensualité (Capital amorti + Intérêts + Assurance). Visualisation en temps réel de la **facture réelle résiduelle** et de la **perte sèche banque** (intérêts et assurances futurs). Suivi de solvabilité HCSF sur le Tableau de bord avec distinction entre effort patrimonial (immobilier) et endettement fractionné (consommation). Prise en charge des crédits à paliers et compte à rebours contractuel dynamique.
+* **Trajectoire d'Extinction & Libération de Dette (Roadmap & Frise Chronologique) :**  
+  Onglet dédié dans le module Crédits offrant une frise chronologique détaillée de chaque jalon d'extinction de prêt. Calcul automatique de l'effet « boule de neige » : gain mensuel net par crédit éteint, cumul progressif du cash-flow restitué au foyer (`+XX,XX €/mois`) et projection continue de l'endettement résiduel jusqu'au désendettement total (0,0 %).
 * **Sentinelles d'Audit Prédictif & Flash Insights :**  
   Moteur d'anticipation en temps réel alertant sur la vulnérabilité liée au crédit conso (> 15 % des revenus), décomptant le cash-flow libéré aux échéances proches (≤ 3 mois) et prévenant des hausses ou baisses de paliers sous 60 jours.
 * **Module Santé & Reste à Charge (Sécu + Mutuelle) :**  
@@ -54,7 +56,7 @@ Contrairement aux solutions généralistes anglo-saxonnes (YNAB, Actual Budget),
 * **Frontend :** React 19, TypeScript strict, Vite, Tailwind CSS, Lucide Icons, Recharts.
 * **Conteneurisation :** Image Docker optimisée multi-stage (< 150 Mo).
 * **Empreinte système :** Moins de 60 Mo de RAM au repos, consommation CPU négligeable (< 0.1 % sur conteneur LXC Proxmox).
-* **Assurance Qualité :** 64 fichiers de tests, 621 tests automatisés Vitest (100 % passants).
+* **Assurance Qualité :** 65 fichiers de tests, 626 tests automatisés Vitest (100 % passants).
 
 ---
 

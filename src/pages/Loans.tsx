@@ -1020,6 +1020,20 @@ export default function Loans() {
                 <li><strong>Anticipation de paliers :</strong> prévient sous 60 jours de toute variation programmée.</li>
               </ul>
             </div>
+
+            <div>
+              <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main, #0f172a)' }}>
+                5. Trajectoire & Libération (Frise Chronologique)
+              </h4>
+              <p style={{ margin: 0, color: 'var(--text-muted, #64748b)' }}>
+                L'onglet <strong>🚀 Trajectoire & Libération</strong> ordonne automatiquement chaque crédit par date d'extinction finale. À chaque jalon de libération, il calcule :
+              </p>
+              <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0, color: 'var(--text-muted, #64748b)' }}>
+                <li><strong>Cash-flow libéré cumulé :</strong> gain mensuel net permanent récupéré (effet « boule de neige »).</li>
+                <li><strong>Endettement résiduel projeté :</strong> décroissance du ratio d'effort du foyer jusqu'à 0,0 % (Grand Chelem).</li>
+                <li><strong>Échelle HCSF harmonisée :</strong> Sain (&lt; 30 %), Modéré (30-33 %), Limite HCSF (33-35 %), Élevé (35-45 %), Critique (≥ 45 %).</li>
+              </ul>
+            </div>
           </div>
         </div>
       )}
