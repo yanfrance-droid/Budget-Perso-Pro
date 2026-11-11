@@ -93,6 +93,31 @@ describe('insightsEngine - Conseiller Financier & Anticipation', () => {
       const insight = auditCrashTest(manualBalance, pendingTransactions, '2026-11-10');
       expect(insight).toBeNull();
     });
+
+    it('projette dès le jour courant les opérations pending dont la date est échue (date < currentDate)', () => {
+      // Solde réel au 15 novembre = 300 €
+      // Une dépense de 250 € était prévue au 08 novembre et est restée en attente ('pending' non cleared)
+      // Une autre dépense de 100 € est prévue le 18 novembre ('planned')
+      // Sans la prise en compte de la pending échue du 08/11, le solde au 15/11 semblerait être de 300 € et au 18/11 de 200 € (aucun découvert)
+      // Avec la pending échue projetée dès le 15/11, le solde tombe à 50 € le 15/11 puis plonge à -50 € le 18/11 (découvert critique détecté !)
+      const manualBalance = 300;
+      const currentDate = '2026-11-15';
+
+      const transactions: Transaction[] = [
+        { id: 'tx-overdue-pending', date: '2026-11-08', amount: 250, type: 'variable_expense', status: 'pending', accountId: 'acc-1' },
+        { id: 'tx-future-expense', date: '2026-11-18', amount: 100, type: 'fixed_expense', status: 'planned', accountId: 'acc-1' },
+        { id: 'tx-salary', date: '2026-11-28', amount: 2000, type: 'income', status: 'planned', accountId: 'acc-1' }
+      ];
+
+      const insight = auditCrashTest(manualBalance, transactions, currentDate);
+
+      expect(insight).not.toBeNull();
+      expect(insight?.severity).toBe('critical');
+      expect(insight?.category).toBe('crash_test');
+      expect(insight?.metadata?.minBalance).toBe(-50);
+      expect(insight?.metadata?.minDate).toBe('2026-11-18');
+      expect(insight?.message).toContain('-50,00 €');
+    });
   });
 
   describe('2. auditIdleCash (Optimisation basée STRICTEMENT sur le Solde Prévisionnel net)', () => {

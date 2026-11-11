@@ -83,9 +83,16 @@ export function auditCrashTest(
 ): FinancialInsight | null {
   const currentBal = roundCurrency(manualBalance);
   
-  // Filtrer les opérations non pointées à venir à partir de currentDate
+  // Filtrer les opérations non pointées :
+  // - Opérations à venir (>= currentDate) qu'elles soient 'pending' ou 'planned'
+  // - Opérations échues (< currentDate) de statut 'pending' : non encore actées dans le solde réel de départ,
+  //   elles sont projetées dès aujourd'hui (currentDate) pour ne pas fausser le plancher prévisionnel.
   const upcomingTx = pendingTransactions
-    .filter(t => t.status !== 'disabled' && (t.status === 'pending' || t.status === 'planned') && t.date >= currentDate)
+    .filter(t => t.status !== 'disabled' && (
+      ((t.status === 'pending' || t.status === 'planned') && t.date >= currentDate) ||
+      (t.status === 'pending' && t.date < currentDate)
+    ))
+    .map(t => (t.status === 'pending' && t.date < currentDate ? { ...t, date: currentDate } : t))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   if (upcomingTx.length === 0) {

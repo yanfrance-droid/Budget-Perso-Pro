@@ -1,8 +1,8 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-11 (Version 1.4.1 — Palier 3 Trajectoire & Frise Chronologique)  
-> **Statut QA :** 65 suites de tests Vitest, 626 tests au vert (100 % passants).
+> **Dernière mise à jour :** 2026-11-11 (Version 1.4.2 — Sentinelle anti-découvert & pending échues)  
+> **Statut QA :** 65 suites de tests Vitest, 627 tests au vert (100 % passants).
 
 ---
 

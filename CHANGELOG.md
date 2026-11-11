@@ -6,6 +6,17 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.4.2] - 2026-11-11
+
+### Fixed
+- **Sentinelle Crash-Test (`src/engine/insightsEngine.ts`) :** Intégration des opérations au statut `pending` dont la date est échue (`date < currentDate`). Celles-ci sont désormais projetées immédiatement à la date du jour afin de fiabiliser le solde plancher prévisionnel face aux dépenses engagées non encore pointées.
+
+### QA & Testing
+- Ajout d'un test unitaire dédié dans `src/engine/insightsEngine.test.ts` validant la détection de découvert avec opération pending échue.
+- 65 suites de tests Vitest, 627 tests au vert (100 % passants).
+
+---
+
 ## [1.4.1] - 2026-11-11
 
 ### Added
