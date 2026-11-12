@@ -459,24 +459,24 @@ describe('Server & API Integration - SQLite Centralized Backend', () => {
       });
       expect(tpl.id).toBeDefined();
 
-      // Première génération pour 2026-10
-      const generatedCount1 = await apiClient.recurrence.generateOccurrences('2026-10');
+      // Première génération pour 2026-11
+      const generatedCount1 = await apiClient.recurrence.generateOccurrences('2026-11');
       expect(generatedCount1).toBe(1);
 
       const txsAfterGen1 = await apiClient.transactions.getAll();
       expect(txsAfterGen1.length).toBe(1);
       expect(txsAfterGen1[0].label).toBe('Loyer mensuel');
-      expect(txsAfterGen1[0].date).toBe('2026-10-05');
+      expect(txsAfterGen1[0].date).toBe('2026-11-05');
 
       // Deuxième appel immédiat pour le même mois : doit détecter l'existence et ne pas doubler
-      const generatedCount2 = await apiClient.recurrence.generateOccurrences('2026-10');
+      const generatedCount2 = await apiClient.recurrence.generateOccurrences('2026-11');
       expect(generatedCount2).toBe(0);
 
       const txsAfterGen2 = await apiClient.transactions.getAll();
       expect(txsAfterGen2.length).toBe(1); // Strictement 1 transaction, aucun doublon !
     });
 
-    it('génère la date exacte pour un jour 31 : 31 octobre, 30 novembre, 31 décembre, 31 janvier et 28/29 février', async () => {
+    it('génère la date exacte pour un jour 31 : 30 novembre, 31 décembre, 31 janvier, 31 mars et 28/29 février', async () => {
       const acc = await apiClient.accounts.save({
         name: 'Compte Courant',
         type: 'checking',
@@ -496,8 +496,6 @@ describe('Server & API Integration - SQLite Centralized Backend', () => {
       });
       expect(tpl.id).toBeDefined();
 
-      // Octobre 2026 (31 jours)
-      await apiClient.recurrence.generateOccurrences('2026-10');
       // Novembre 2026 (30 jours)
       await apiClient.recurrence.generateOccurrences('2026-11');
       // Décembre 2026 (31 jours)
@@ -506,17 +504,19 @@ describe('Server & API Integration - SQLite Centralized Backend', () => {
       await apiClient.recurrence.generateOccurrences('2027-01');
       // Février 2027 (28 jours - année non bissextile)
       await apiClient.recurrence.generateOccurrences('2027-02');
+      // Mars 2027 (31 jours)
+      await apiClient.recurrence.generateOccurrences('2027-03');
       // Février 2028 (29 jours - année bissextile)
       await apiClient.recurrence.generateOccurrences('2028-02');
 
       const txs = await apiClient.transactions.getAll();
       const byMonth = new Map(txs.filter(t => t.templateId === tpl.id).map(t => [t.date.slice(0, 7), t.date]));
 
-      expect(byMonth.get('2026-10')).toBe('2026-10-31');
       expect(byMonth.get('2026-11')).toBe('2026-11-30'); // Repli sur le dernier jour du mois
       expect(byMonth.get('2026-12')).toBe('2026-12-31');
       expect(byMonth.get('2027-01')).toBe('2027-01-31');
       expect(byMonth.get('2027-02')).toBe('2027-02-28'); // Repli sur 28 février
+      expect(byMonth.get('2027-03')).toBe('2027-03-31');
       expect(byMonth.get('2028-02')).toBe('2028-02-29'); // Repli sur 29 février (bissextile)
     });
 
@@ -607,12 +607,10 @@ describe('Server & API Integration - SQLite Centralized Backend', () => {
         isActive: true
       });
 
-      // Générer pour octobre et novembre pendant que le modèle est actif
-      await apiClient.recurrence.generateOccurrences('2026-10');
+      // Générer pour novembre pendant que le modèle est actif
       await apiClient.recurrence.generateOccurrences('2026-11');
 
       let txs = await apiClient.transactions.getAll();
-      expect(txs.find(t => t.templateId === tpl.id && t.date === '2026-10-31')?.status).toBe('planned');
       expect(txs.find(t => t.templateId === tpl.id && t.date === '2026-11-30')?.status).toBe('planned');
 
       // Désactiver durablement à partir de décembre 2026

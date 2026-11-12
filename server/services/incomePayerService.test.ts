@@ -120,7 +120,7 @@ describe('incomePayerService & Payer Persistence', () => {
       startDate: '2026-01-01'
     });
 
-    const generatedCount = generateMonthlyOccurrences(db, '2026-10');
+    const generatedCount = generateMonthlyOccurrences(db, '2026-11');
     expect(generatedCount).toBe(1);
 
     const txs = getTransactions(db, { type: 'income' });

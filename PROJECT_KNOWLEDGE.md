@@ -1,8 +1,8 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-12 (Version 1.5.0 — Refonte des Récurrences, Invariants Temporels & Snapshot Undo)  
-> **Statut QA :** 68 suites de tests Vitest, 644 tests au vert (100 % passants).
+> **Dernière mise à jour :** 2026-11-12 (Version 1.5.0 — Verrouillage Temporel en Lecture Seule, Watchdog Historique Universel & Undo Atomique)  
+> **Statut QA :** 68 suites de tests Vitest, 649 tests au vert (100 % passants).
 
 ---
 
@@ -108,8 +108,16 @@ La base SQLite contient 12 tables relationnelles initialisées et migrées dans 
   - Côté client, si l'appel `/restore` échoue avec un code HTTP, un fallback automatique exécute `apiClient.transactions.save(targetCopy)` pour recréer l'opération sans bloquer.
 - **Résilience HTTP 400 :** Si une ressource est irrémédiablement introuvable, l'action obsolète est automatiquement dépilée (*while-pop*) et la boucle enchaîne sur l'action valide suivante.
 
-### 4.2. Cycle de Vie des Charges Récurrentes & Règle Anti-Zombie
-- **Génération déterministe :** Réalisée par `generateMonthlyOccurrences` dans [`server/services/recurrenceService.ts`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/server/services/recurrenceService.ts).
+### 4.2. Cycle de Vie des Charges Récurrentes, Verrouillage Temporel & Watchdog Universel
+- **Génération déterministe & Verrouillage strict du passé :**
+  - Réalisée par `generateMonthlyOccurrences` dans [`server/services/recurrenceService.ts`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/server/services/recurrenceService.ts).
+  - **Verrouillage absolu du passé (< mois civil courant) :** Toute tentative de générer ou synchroniser des transactions sur un mois antérieur au mois en cours (`targetMonth < currentMonth`, ex: avant `2026-11`) est strictement bloquée côté backend (`return 0`).
+  - **Consultation passée 100 % lecture seule :** Les 5 pages clientes (`Dashboard`, `FixedExpenses`, `VariableExpenses`, `Incomes`, `Savings`) neutralisent leurs `useEffect` de synchronisation dès lors que `selectedMonth < currentMonth`.
+  - La navigation vers les mois antérieurs ne peut donc en aucun cas créer de charges prévisionnelles parasites ou fausser les impayés antérieurs.
+- **Watchdog d'Intégrité Universel & Fidélité Historique (`contractIntegrityEngine.ts`) :**
+  - **Fidélité historique multi-rubriques (Fixes, Variables, Revenus) :** Lorsqu'un contrat est résilié au mois $M$, son échéance passée scellée ($M-1$) conserve son statut et voit son template détaché (`templateId = null`). Le Watchdog compte fidèlement ces échéances historiques (`totalExpected++` et `totalFound++`), affichant par exemple `23/23` en Octobre et `22/22` en Novembre sans faux positif de surnombre.
+  - **Exclusion stricte des ponctuels :** Les opérations purement ponctuelles (ex: *Gazoil 32,76 €*, *Virement Épargne 1 860,58 €* sans `templateId` ni `recurrenceDay`) sont totalement ignorées du décompte contractuel.
+  - **Détection hybride des doublons & Affichage nominatif :** Détecte les doublons par composantes connexes soit par `templateId` partagé, soit par triplet (libellé normalisé + montant absolu identique + même date/jour). L'interface affiche nominativement chaque doublon (`⚠️ Doublon : {label} ({amount} €) — {count} occurrences le {dates}`).
 - **Résiliation Atomique en 1 Clic (Choix 2) :**
   - Lorsque l'utilisateur résilie un contrat à partir du mois sélectionné $M$ (`deleteRecurrenceTemplate(db, id, fromDate)`) :
     * Les occurrences futures prévisionnelles (`date >= fromDate AND status = 'planned'`) sont physiquement purgées (`DELETE`).
@@ -194,12 +202,12 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 
 ## 7. Historique Récent des Versions Majeures
 
-- **v1.5.0 :** Implémentation du Watchdog d'Intégrité Universel des Contrats & Récurrences, résolution définitive de la récurrence et résilience Undo/Redo :
-  - *Watchdog d'Intégrité Granulaire & Arbitrable (`contractIntegrityEngine.ts`, `ContractIntegrityBanner.tsx`, `IntegritySectionBadge.tsx`) :* Détection automatique des écarts contractuels entre modèles actifs et occurrences réelles, pastilles d'intégrité par rubrique (Revenus, Fixes, Variables), bouton d'action pour régénérer à la volée une occurrence manquante ou accepter l'écart d'intégrité pour le mois courant.
-  - *Verrouillage Temporel du Passé :* Paramétrage strict de l'horizon glissant avec `pastMonths = 0` par défaut (`syncRollingHorizon`) et verrou mathématique `startOffset = Math.max(0, -Math.max(0, pastMonths))` empêchant toute régénération de transactions sur les mois antérieurs au mois actif.
+- **v1.5.0 :** Implémentation du Watchdog d'Intégrité Universel des Contrats & Récurrences, verrouillage strict du passé en lecture seule et résilience Undo/Redo atomique :
+  - *Verrouillage Temporel du Passé (< mois civil courant) :* Neutralisation des `useEffect` clients lors de la consultation des mois antérieurs et verrou strict côté backend (`generateMonthlyOccurrences`, `syncRollingHorizon`) bloquant toute création de charges prévisionnelles parasites dans le passé et évitant l'apparition de faux impayés antérieurs.
+  - *Watchdog d'Intégrité Universel & Fidélité Historique (`contractIntegrityEngine.ts`, `ContractIntegrityBanner.tsx`, `IntegritySectionBadge.tsx`) :* Audit granulaire et arbitrable couvrant les 3 rubriques (Fixes, Variables, Revenus), fidélité historique du dénominateur (`23/23` en Octobre même après résiliation d'un contrat en Novembre), exclusion stricte des dépenses et revenus ponctuels sans récurrence, détection hybride des doublons (par `templateId` ou libellé normalisé + montant + date) et affichage nominatif détaillé dans l'interface.
   - *Suppression Atomique en 1 Clic sur Résiliation :* Dans `deleteRecurrenceTemplate(db, id, fromDate)`, les occurrences prévisionnelles futures sont purgées physiquement tandis que la charge du mois courant sélectionné $M$ est immédiatement soft-deletée (`deleted_at = now`), garantissant la disparition immédiate en 1 clic sans forcer un double-clic ni dédoubler la pile d'Undo.
   - *Intégrité des Statuts à l'Undo/Redo & Snapshot Intégral :* Sauvegarde et réapplication systématique du statut d'origine (`cleared`, `pending`) lors de l'Undo/Rétablissement avec capture exhaustive des transactions filles, interdisant toute rétrogradation en statut prévisionnel.
-  - *Réhabilitation de la Base Locale SQLite :* Restauration des 31 templates récurrents (avec `startDate = '2026-01'`), réinsertion des 3 charges fixes manquantes d'octobre 2026 au statut `cleared`, rattachement des 23 charges fixes d'octobre et 23 de novembre à leurs templates respectifs, normalisation des variables `Gazoil` et `Gazoil prévision` (68 suites, 644 tests au vert).
+  - *Assainissement Forensique de la Base Locale SQLite :* Élimination des 9 transactions prévisionnelles parasites passées (69,87 €), alignement de la date de démarrage des contrats au 1er jour du mois courant (`2026-11`), et intégrité physique validée à 100 % (68 suites, 649 tests au vert).
 - **v1.4.2 :** Fix de la sentinelle Crash-Test (`src/engine/insightsEngine.ts`) pour projeter à la date du jour les opérations au statut `pending` dont la date est échue (627 tests).
 
 - **v1.4.0 :** Implémentation complète des Paliers 1 et 2 du module Crédits & Prêts :

@@ -38,7 +38,8 @@ export default function VariableExpenses() {
     expense?: Transaction;
   }>({ isOpen: false });
   
-  const [selectedMonth, setSelectedMonth] = useState(() => getCurrentMonth());
+  const currentMonth = getCurrentMonth();
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonth);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
@@ -56,17 +57,17 @@ export default function VariableExpenses() {
 
   const [formData, setFormData] = useState<Partial<Transaction>>({});
 
-  // Génération automatique des échéances pour le mois sélectionné & notification du Watchdog universel
+  // Notification du Watchdog universel & génération des échéances uniquement si selectedMonth >= currentMonth (passé 100% lecture seule)
   useEffect(() => {
     if (selectedMonth) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('pbp-active-month-changed', { detail: { month: selectedMonth } }));
       }
-      if (serverData) {
+      if (serverData && selectedMonth >= currentMonth) {
         serverData.generateMonthlyOccurrences(selectedMonth).catch(console.error);
       }
     }
-  }, [selectedMonth, serverData]);
+  }, [selectedMonth, currentMonth, serverData]);
 
   // Charges impayées des mois précédents (non réglées)
   const pastUnpaidExpenses = useMemo(() => {

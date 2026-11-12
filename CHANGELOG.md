@@ -6,17 +6,26 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
-## [1.5.0] - 2026-11-11
+## [1.5.0] - 2026-11-12
 
 ### Added
-- **Watchdog d'Intégrité Universel des Contrats (`src/engine/contractIntegrityEngine.ts`) :** Détection automatique des ruptures de récurrence et des occurrences manquantes pour le mois actif sur l'ensemble des rubriques (revenus, charges fixes, dépenses variables).
-- **Interface Arbitrable du Watchdog (`src/components/ContractIntegrityBanner.tsx` & `src/components/IntegritySectionBadge.tsx`) :**
+- **Watchdog d'Intégrité Universel des Contrats (`src/engine/contractIntegrityEngine.ts`) :**
+  - Audit d'intégrité contractuelle automatique couvrant l'ensemble des rubriques (charges fixes, variables récurrentes, revenus).
+  - **Fidélité historique du dénominateur :** Prise en compte des factures passées scellées dont le contrat a été résilié ultérieurement (`totalExpected++` et `totalFound++`), maintenant un historique fidèle (`23/23` en Octobre, `22/22` en Novembre) sans faux positifs.
+  - **Exclusion stricte des ponctuels :** Filtrage des opérations purement ponctuelles (sans `templateId` ni `recurrenceDay`) qui n'interfèrent plus dans les compteurs contractuels.
+  - **Détection hybride des doublons & Clustering :** Regroupement par composantes connexes détectant les doublons par `templateId` ou par correspondance exacte libellé normalisé + montant absolu + jour d'échéance.
+- **Interface Arbitrable & Nominative du Watchdog (`src/components/ContractIntegrityBanner.tsx` & `src/components/IntegritySectionBadge.tsx`) :**
+  - Affichage nominatif et détaillé des doublons dans le tiroir de détails : `⚠️ Doublon : {label} ({amount} €) — {count} occurrences le {dates}`.
+  - Infobulle enrichie sur les badges d'en-tête de section listant les doublons détectés.
   - Pastilles d'état d'intégrité par onglet et par rubrique (conforme / anomalie détectée).
-  - Bannière d'alerte contextuelle avec diagnostic précis par contrat manquant.
-  - Boutons d'arbitrage par contrat : régénération unitaire instantanée ou acceptation de l'écart (stockage en `localStorage` par couple contrat/mois).
-  - Bouton global de synchronisation de l'horizon glissant.
+  - Boutons d'arbitrage par contrat : régénération unitaire instantanée ou acceptation de l'écart.
+  - Bouton global de synchronisation de l'horizon glissant sécurisé (ne descend jamais sous le mois courant).
 
 ### Fixed
+- **Verrouillage Temporel du Passé en Lecture Seule :**
+  - Blocage structurel côté backend dans `generateMonthlyOccurrences` et `syncRollingHorizon` interdisant toute génération d'occurrences sur un mois antérieur au mois civil en cours (`< 2026-11`).
+  - Neutralisation des `useEffect` clients sur les 5 pages (`Dashboard`, `FixedExpenses`, `VariableExpenses`, `Incomes`, `Savings`) lors de la navigation dans les mois passés.
+  - Éradication de la génération parasite de charges prévisionnelles passées et des faux « Impayés antérieurs ».
 - **Suppression Atomique en 1 Clic sur Résiliation (`server/services/recurrenceService.ts`) :**
   - Dans `deleteRecurrenceTemplate(db, id, fromDate)`, lorsqu'une charge est déjà pointée (`cleared` ou `pending`) sur le mois sélectionné $M$, elle est immédiatement soft-deletée (`deleted_at = now, templateId = NULL`).
   - La charge disparaît instantanément de l'écran en un seul clic, éliminant le bug du double-clic (qui nécessitait un second clic de suppression sur la ligne orpheline).
@@ -24,27 +33,21 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 - **Étanchéité Absolue du Passé (< M) & Sanctuarisation du Grand Livre (`server/services/recurrenceService.ts`) :**
   - Éradication définitive de la purge physique SQL sans filtre de date (`DELETE FROM transactions WHERE templateId = ?`).
   - Lors d'une résiliation à date d'effet $M$, la purge est strictement limitée aux occurrences futures prévisionnelles (`date >= fromDate AND status = 'planned'`). Les factures passées (`< fromDate`) ou déjà pointées (`cleared`, `pending`) sont 100 % intangibles et sanctuarisées.
-  - Verrouillage structurel de `syncRollingHorizon` avec `startOffset = 0` : aucun calcul ni régénération n'est jamais exécuté sur les mois antérieurs au mois actif.
 - **Sécurisation de l'Interface Utilisateur (`src/pages/FixedExpenses.tsx`, `src/pages/VariableExpenses.tsx`) :**
   - Remplacement des choix trompeurs par deux options explicites et sûres : *« Choix 1 — Supprimer pour ce mois de {mois} uniquement »* (échéance ponctuelle) et *« Choix 2 — Résilier le contrat (à partir de {mois}) »* (résiliation sans altération de l'historique bancaire passé).
 - **Snapshot Intégral Undo sur Résiliation & Restauration Fidèle (`src/contexts/ServerDataContext.tsx`) :**
   - Capture exhaustive de l'ensemble des transactions filles rattachées au contrat avant résiliation.
   - Lors de l'annulation (Undo), chaque transaction est restaurée avec son statut exact d'origine (`cleared`, `pending`, `planned`), interdisant toute rétrogradation en statut prévisionnel sur le Dashboard.
-- **Synchronisation Unique & Suppression des Doublons Concurrents :**
-  - Élimination du double appel concurrent à `syncRollingHorizon` entre le backend (`restoreTransaction`) et le frontend (`deleteTransaction.undo`).
-- **Nettoyage des Clauses Obsolètes dans le Dashboard (`src/pages/Dashboard.tsx`) :**
-  - Suppression des 4 filtres historiques `(t.recurrenceDay && !t.templateId)` pour garantir l'étanchéité stricte par préfixe de mois.
-- **Réhabilitation Complète de la Base SQLite Locale (`data/budget.db`) :**
-  - Restauration des 31 templates de récurrence avec `startDate = '2026-01'` couvrant tous les mois de l'exercice.
-  - Réinsertion des 3 charges fixes manquantes d'octobre 2026 (`Apple com BILL`, `plan prevoyance yann`, `plan prevoyance Rose`) au statut `cleared`.
-  - Reconnexion des 23 charges fixes d'octobre et des 23 de novembre à leurs `templateId`.
-  - Normalisation des charges variables d'octobre et novembre (`Gazoil prévision` et `Gazoil`).
-  - Rétablissement du Watchdog d'Intégrité à 100 % conforme (Charges fixes : 23/23).
+- **Assainissement Forensique de la Base Locale SQLite (`data/budget.db`) :**
+  - Purge des 9 transactions prévisionnelles parasites passées (69,87 €).
+  - Alignement des dates de démarrage des templates sur le mois courant (`2026-11`).
+  - Vérification de l'intégrité globale : 0 orphelin, 0 impayé antérieur, 100 % conforme sur Octobre (`23/23`), Novembre (`23/23`), et Décembre (`23/23`).
 
 ### QA & Testing
-- Ajout des tests de validation unitaire des 3 Invariants d'Or dans `server/services/recurrenceService.test.ts`.
-- Ajout du test de validation du Snapshot Intégral Undo sur résiliation dans `src/contexts/UndoRedoEngine.test.tsx`.
-- 68 suites de tests Vitest, 644 tests au vert (100 % passants).
+- 8 tests complets du moteur d'intégrité contractuelle (`src/engine/contractIntegrityEngine.test.ts`).
+- Tests de validation unitaire des 3 Invariants d'Or dans `server/services/recurrenceService.test.ts`.
+- Tests de validation du Snapshot Intégral Undo sur résiliation dans `src/contexts/UndoRedoEngine.test.tsx`.
+- 68 suites de tests Vitest, 649 tests au vert (100 % passants).
 
 ---
 

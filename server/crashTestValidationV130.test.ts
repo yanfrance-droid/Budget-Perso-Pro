@@ -411,7 +411,7 @@ describe('Crash-Test de validation finale v1.3.0 (Sauvegarde SQLite, Export/Impo
       });
 
       // Génération des échéances
-      generateMonthlyOccurrences(db, '2026-10'); // Octobre (promo 25 €)
+      generateMonthlyOccurrences(db, '2026-10', '2026-10'); // Octobre (promo 25 €)
       generateMonthlyOccurrences(db, '2026-11'); // Novembre (post-promo 55 €)
 
       // 2. Génération du classeur Excel en mémoire

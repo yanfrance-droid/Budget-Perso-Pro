@@ -41,10 +41,10 @@ describe('recurrenceService - Propagation et Suppression sécurisée (CRITIQUE-0
       accountId: 'acc1'
     });
 
-    // 2. Générer les occurrences pour janvier, février et mars 2026
-    generateMonthlyOccurrences(db, '2026-01');
-    generateMonthlyOccurrences(db, '2026-02');
-    generateMonthlyOccurrences(db, '2026-03');
+    // 2. Générer les occurrences pour janvier, février et mars 2026 (avec simulation du mois de référence)
+    generateMonthlyOccurrences(db, '2026-01', '2026-01');
+    generateMonthlyOccurrences(db, '2026-02', '2026-01');
+    generateMonthlyOccurrences(db, '2026-03', '2026-01');
 
     let txs = getTransactions(db);
     expect(txs.length).toBe(3);
@@ -104,10 +104,10 @@ describe('recurrenceService - Propagation et Suppression sécurisée (CRITIQUE-0
     });
 
     // 2. Générer occurrences janvier (passé), février (passé impayé), mars (mois courant) et avril (futur)
-    generateMonthlyOccurrences(db, '2026-01');
-    generateMonthlyOccurrences(db, '2026-02');
-    generateMonthlyOccurrences(db, '2026-03');
-    generateMonthlyOccurrences(db, '2026-04');
+    generateMonthlyOccurrences(db, '2026-01', '2026-01');
+    generateMonthlyOccurrences(db, '2026-02', '2026-01');
+    generateMonthlyOccurrences(db, '2026-03', '2026-01');
+    generateMonthlyOccurrences(db, '2026-04', '2026-01');
 
     let txs = getTransactions(db);
     expect(txs.length).toBe(4);
@@ -166,7 +166,7 @@ describe('recurrenceService - Propagation et Suppression sécurisée (CRITIQUE-0
       accountId: 'acc1'
     });
 
-    const count = generateMonthlyOccurrences(db, '2026-05');
+    const count = generateMonthlyOccurrences(db, '2026-05', '2026-05');
     expect(count).toBe(2);
 
     const txs = getTransactions(db, { month: '2026-05' });
@@ -369,7 +369,7 @@ describe('recurrenceService - Propagation et Suppression sécurisée (CRITIQUE-0
       });
 
       // Générer octobre et novembre
-      generateMonthlyOccurrences(db, '2026-10');
+      generateMonthlyOccurrences(db, '2026-10', '2026-10');
       generateMonthlyOccurrences(db, '2026-11');
       generateMonthlyOccurrences(db, '2026-12');
 
@@ -423,9 +423,9 @@ describe('recurrenceService - Propagation et Suppression sécurisée (CRITIQUE-0
         accountId: 'acc1'
       });
 
-      generateMonthlyOccurrences(db, '2026-08');
-      generateMonthlyOccurrences(db, '2026-09');
-      generateMonthlyOccurrences(db, '2026-10');
+      generateMonthlyOccurrences(db, '2026-08', '2026-08');
+      generateMonthlyOccurrences(db, '2026-09', '2026-08');
+      generateMonthlyOccurrences(db, '2026-10', '2026-08');
 
       // Pointer août et septembre
       const augTx = getTransactions(db, { month: '2026-08' })[0];
@@ -475,6 +475,25 @@ describe('recurrenceService - Propagation et Suppression sécurisée (CRITIQUE-0
       // La base ne doit avoir AUCUNE transaction en octobre 2026
       expect(getTransactions(db, { month: '2026-10' }).length).toBe(0);
       expect(getTransactions(db, { month: '2026-09' }).length).toBe(0);
+    });
+
+    it('Invariant 4 : generateMonthlyOccurrences refuse strictement de générer le passé (< mois système courant)', () => {
+      saveRecurrenceTemplate(db, {
+        type: 'fixed_expense',
+        amount: 30,
+        recurrenceDay: 5,
+        startDate: '2026-01',
+        accountId: 'acc1',
+        label: 'Abonnement passif'
+      });
+
+      // Appel sur un mois passé (ex: juillet 2026 alors que le système est en novembre 2026)
+      const count = generateMonthlyOccurrences(db, '2026-07');
+      expect(count).toBe(0);
+
+      // Aucune transaction créée
+      const txs = getTransactions(db, { month: '2026-07' });
+      expect(txs.length).toBe(0);
     });
   });
 });

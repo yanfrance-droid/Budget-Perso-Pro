@@ -114,22 +114,22 @@ describe('Lot 2 : Suivi des Engagements, Bascule Tarifaire Post-Promo & Alertes 
         label: 'Box Internet Promo 1 an',
         startDate: '2026-01',
         isActive: true,
-        commitment_end_date: '2026-10-31',
+        commitment_end_date: '2026-11-30',
         price_after_promo: 45,
         notice_period_days: 30
       });
 
-      // 1. Mois sous promo (Octobre 2026)
-      generateMonthlyOccurrences(db, '2026-10');
-      const txsOct = getTransactions(db, { month: '2026-10' });
-      expect(txsOct).toHaveLength(1);
-      expect(txsOct[0].amount).toBe(20);
-
-      // 2. Mois post-promo (Novembre 2026) -> bascule automatique sur price_after_promo (45 €) !
+      // 1. Mois sous promo (Novembre 2026)
       generateMonthlyOccurrences(db, '2026-11');
       const txsNov = getTransactions(db, { month: '2026-11' });
       expect(txsNov).toHaveLength(1);
-      expect(txsNov[0].amount).toBe(45);
+      expect(txsNov[0].amount).toBe(20);
+
+      // 2. Mois post-promo (Décembre 2026) -> bascule automatique sur price_after_promo (45 €) !
+      generateMonthlyOccurrences(db, '2026-12');
+      const txsDec = getTransactions(db, { month: '2026-12' });
+      expect(txsDec).toHaveLength(1);
+      expect(txsDec[0].amount).toBe(45);
     });
 
     it('supporte le format de date YYYY-MM pour commitment_end_date', () => {
@@ -142,17 +142,17 @@ describe('Lot 2 : Suivi des Engagements, Bascule Tarifaire Post-Promo & Alertes 
         label: 'Assurance Promo',
         startDate: '2026-01',
         isActive: true,
-        commitment_end_date: '2026-10', // Format mois
+        commitment_end_date: '2026-11', // Format mois
         price_after_promo: 25
       });
 
-      generateMonthlyOccurrences(db, '2026-10');
-      const txsOct = getTransactions(db, { month: '2026-10' });
-      expect(txsOct[0].amount).toBe(15);
-
       generateMonthlyOccurrences(db, '2026-11');
       const txsNov = getTransactions(db, { month: '2026-11' });
-      expect(txsNov[0].amount).toBe(25);
+      expect(txsNov[0].amount).toBe(15);
+
+      generateMonthlyOccurrences(db, '2026-12');
+      const txsDec = getTransactions(db, { month: '2026-12' });
+      expect(txsDec[0].amount).toBe(25);
     });
 
     it('met à jour les occurrences futures non pointées quand on modifie le palier d\'un template', () => {

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { apiClient } from '../services/apiClient';
 import type { Account, Category, Transaction, Loan, RecurrenceTemplate, IncomePayer } from '../db/database';
 import { useAuth } from './AuthContext';
+import { getCurrentMonth } from '../utils/dateUtils';
 
 export interface DashboardSettings {
   manualBalance: string;
@@ -742,8 +743,10 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
 
           // 3. Synchronisation UNIQUE des mois futurs (0 mois passé)
-          const baseMonth = fromDate ? fromDate.slice(0, 7) : (tmplCopy.startDate ? tmplCopy.startDate.slice(0, 7) : undefined);
-          await apiClient.recurrence.syncRollingHorizon(baseMonth, 0, 12);
+          const sysMonth = getCurrentMonth();
+          const targetBase = fromDate ? fromDate.slice(0, 7) : (tmplCopy.startDate ? tmplCopy.startDate.slice(0, 7) : sysMonth);
+          const safeBaseMonth = targetBase < sysMonth ? sysMonth : targetBase;
+          await apiClient.recurrence.syncRollingHorizon(safeBaseMonth, 0, 12);
           await refreshAll();
         },
         redo: async () => {
@@ -791,6 +794,11 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const generateMonthlyOccurrences = async (month: string): Promise<number> => {
+    const sysMonth = getCurrentMonth();
+    if (month < sysMonth) {
+      // Verrou absolu côté client : le passé est strictement 100% lecture seule
+      return 0;
+    }
     const res = await apiClient.recurrence.generate(month);
     if (res.generated > 0) {
       const updatedTxs = await apiClient.transactions.get();
@@ -804,7 +812,9 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     pastMonths = 0,
     futureMonths = 12
   ): Promise<{ totalCreated: number; monthsProcessed: string[] }> => {
-    const res = await apiClient.recurrence.syncRollingHorizon(currentMonth, pastMonths, futureMonths);
+    const sysMonth = getCurrentMonth();
+    const safeMonth = (!currentMonth || currentMonth < sysMonth) ? sysMonth : currentMonth;
+    const res = await apiClient.recurrence.syncRollingHorizon(safeMonth, 0, futureMonths);
     if (res.totalCreated > 0) {
       const updatedTxs = await apiClient.transactions.get();
       setTransactions(updatedTxs);

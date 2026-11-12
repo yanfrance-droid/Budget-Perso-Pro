@@ -70,7 +70,8 @@ export default function Savings() {
   const categories = (serverData?.categories || []).filter(c => c.type === 'transfer');
   const accounts = serverData?.accounts || [];
 
-  const [selectedMonth, setSelectedMonth] = useState(() => getCurrentMonth());
+  const currentMonth = getCurrentMonth();
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonth);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
 
@@ -535,12 +536,12 @@ export default function Savings() {
     });
   };
 
-  // Génération automatique idempotente des occurrences à l'affichage ou au changement de mois
+  // Génération automatique des occurrences uniquement si selectedMonth >= currentMonth (passé 100% lecture seule)
   useEffect(() => {
-    if (selectedMonth && serverData) {
+    if (selectedMonth && serverData && selectedMonth >= currentMonth) {
       serverData.generateMonthlyOccurrences(selectedMonth).catch(console.error);
     }
-  }, [selectedMonth, serverData]);
+  }, [selectedMonth, currentMonth, serverData]);
 
   // Récupération des opérations d'épargne antérieures non régularisées (planned ou pending avant le mois réel en cours)
   const pastUnpaidSavings = useMemo(() => {

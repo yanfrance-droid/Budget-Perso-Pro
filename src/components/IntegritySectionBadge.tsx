@@ -40,6 +40,12 @@ export const IntegritySectionBadge: React.FC<IntegritySectionBadgeProps> = ({ ty
 
   const isCompliant = section.isFullyCompliant;
   const hasAccepted = section.acceptedCount > 0;
+  const hasDuplicates = section.duplicateCount > 0;
+  const displayCount = hasDuplicates ? (section.totalFound + section.duplicateCount) : section.totalFound;
+
+  const duplicateDetails = section.duplicateItems.length > 0
+    ? ` [Doublons : ${section.duplicateItems.map(d => `${d.label} (${d.amount.toFixed(2)} €)`).join(', ')}]`
+    : '';
 
   return (
     <div
@@ -48,7 +54,9 @@ export const IntegritySectionBadge: React.FC<IntegritySectionBadgeProps> = ({ ty
       title={
         isCompliant
           ? `${section.title} : 100 % conforme (${section.totalFound}/${section.totalExpected} instanciées${hasAccepted ? `, ${section.acceptedCount} écart(s) accepté(s)` : ''})`
-          : `${section.title} : ${section.missingCount} contrat(s) manquant(s) sur ce mois (${section.missingAmount.toFixed(2)} €)`
+          : section.missingCount > 0
+          ? `${section.title} : ${section.missingCount} contrat(s) manquant(s) sur ce mois (${section.missingAmount.toFixed(2)} €)`
+          : `${section.title} : ${section.duplicateCount} doublon(s)${duplicateDetails} (${displayCount} lignes pour ${section.totalExpected} contrats attendus)`
       }
       style={{
         display: 'inline-flex',
@@ -76,8 +84,12 @@ export const IntegritySectionBadge: React.FC<IntegritySectionBadgeProps> = ({ ty
         <AlertTriangle size={13} color="#dc2626" />
       )}
       <span>
-        {section.title} : {section.totalFound}/{section.totalExpected}
-        {!isCompliant && ` (${section.missingCount} manquante${section.missingCount > 1 ? 's' : ''})`}
+        {section.title} : {displayCount}/{section.totalExpected}
+        {!isCompliant && (
+          section.missingCount > 0
+            ? ` (${section.missingCount} manquante${section.missingCount > 1 ? 's' : ''})`
+            : ` (${section.duplicateCount} doublon${section.duplicateCount > 1 ? 's' : ''})`
+        )}
         {isCompliant && hasAccepted && ` (${section.acceptedCount} accepté)`}
       </span>
     </div>

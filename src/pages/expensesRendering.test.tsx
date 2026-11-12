@@ -73,7 +73,7 @@ describe('Vérification du rendu réel des composants FixedExpenses et VariableE
 
     render(<FixedExpenses />);
 
-    expect(screen.getByText(/Charges fixes/i)).toBeDefined();
+    expect(screen.getAllByText(/Charges fixes/i).length).toBeGreaterThan(0);
     expect(screen.getByText('Loyer')).toBeDefined();
   });
 

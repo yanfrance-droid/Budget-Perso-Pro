@@ -266,32 +266,44 @@ export function shiftMonthKey(baseMonth: string, offset: number): string {
 }
 
 /**
+ * Retourne le mois civil courant du système au format YYYY-MM.
+ */
+export function getSystemCurrentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
  * Synchronise et matérialise l'ensemble des occurrences contractuelles et récurrentes
  * sur un horizon temporel glissant de manière strictement idempotente.
- * RÈGLE D'OR : Le passé (< mois courant) est strictement gelé et immuable (pastMonths = 0 par défaut).
- * Seuls le mois en cours et les mois futurs (futureMonths = 12, M à M+12) sont synchronisés.
+ * RÈGLE D'OR : Le passé (< mois courant système) est strictement gelé et immuable.
+ * Même si un mois passé est passé en paramètre, le point de départ est impérativement
+ * ramené au minimum au mois courant système (minAllowedMonth).
  */
 export function syncRollingHorizon(
   db: DatabaseSync,
   currentMonth: string,
   pastMonths = 0,
-  futureMonths = 12
+  futureMonths = 12,
+  minAllowedMonth: string = getSystemCurrentMonth()
 ): { totalCreated: number; totalGenerated: number; monthsProcessed: string[]; monthsSynced: string[] } {
   if (!/^\d{4}-\d{2}$/.test(currentMonth)) {
     throw new Error('Le mois de référence doit être au format YYYY-MM.');
   }
 
+  // Clamping absolu : l'horizon glissant ne peut jamais démarrer dans le passé (< minAllowedMonth)
+  const safeBaseMonth = currentMonth < minAllowedMonth ? minAllowedMonth : currentMonth;
+
   const monthsSynced: string[] = [];
   let totalGenerated = 0;
 
-  // Interdiction formelle de régénérer le passé : le passé (< currentMonth) est gelé
-  // offset commence TOUJOURS à 0 (currentMonth) jusqu'à futureMonths
+  // Interdiction formelle de régénérer le passé : offset commence TOUJOURS à 0 (safeBaseMonth) jusqu'à futureMonths
   const startOffset = 0;
 
   for (let offset = startOffset; offset <= futureMonths; offset++) {
-    const targetMonth = shiftMonthKey(currentMonth, offset);
+    const targetMonth = shiftMonthKey(safeBaseMonth, offset);
     monthsSynced.push(targetMonth);
-    totalGenerated += generateMonthlyOccurrences(db, targetMonth);
+    totalGenerated += generateMonthlyOccurrences(db, targetMonth, minAllowedMonth);
   }
 
   return {
@@ -302,9 +314,18 @@ export function syncRollingHorizon(
   };
 }
 
-export function generateMonthlyOccurrences(db: DatabaseSync, targetMonth: string): number {
+export function generateMonthlyOccurrences(
+  db: DatabaseSync,
+  targetMonth: string,
+  minAllowedMonth: string = getSystemCurrentMonth()
+): number {
   if (!/^\d{4}-\d{2}$/.test(targetMonth)) {
     throw new Error('Le mois cible doit être au format YYYY-MM.');
+  }
+
+  // Verrou temporel absolu : le passé (< minAllowedMonth) est sanctuarisé en lecture seule
+  if (targetMonth < minAllowedMonth) {
+    return 0;
   }
 
   return withTransaction(db, () => {

@@ -96,11 +96,11 @@ export default function Dashboard() {
   const serverDataRef = useRef(serverData);
   serverDataRef.current = serverData;
 
-  // Génération automatique des échéances récurrentes pour le mois courant et le mois sélectionné
+  // Génération automatique des échéances récurrentes pour le mois courant et les mois futurs uniquement (passé 100% lecture seule)
   useEffect(() => {
     if (serverData && typeof serverData.generateMonthlyOccurrences === 'function') {
       serverData.generateMonthlyOccurrences(currentMonth).catch(console.error);
-      if (selectedMonth && selectedMonth !== currentMonth) {
+      if (selectedMonth && selectedMonth > currentMonth) {
         serverData.generateMonthlyOccurrences(selectedMonth).catch(console.error);
       }
     }

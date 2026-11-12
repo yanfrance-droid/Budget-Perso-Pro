@@ -31,21 +31,22 @@ export default function Incomes() {
   const incomePayers = serverData?.incomePayers || [];
 
   const [formData, setFormData] = useState<Partial<Transaction>>({});
-  const [selectedMonth, setSelectedMonth] = useState(() => getCurrentMonth());
+  const currentMonth = getCurrentMonth();
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonth);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
 
-  // Génération automatique des échéances récurrentes pour le mois sélectionné & notification du Watchdog universel
+  // Notification du Watchdog universel & génération des échéances uniquement si selectedMonth >= currentMonth (passé 100% lecture seule)
   React.useEffect(() => {
     if (selectedMonth) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('pbp-active-month-changed', { detail: { month: selectedMonth } }));
       }
-      if (serverData) {
+      if (serverData && selectedMonth >= currentMonth) {
         serverData.generateMonthlyOccurrences(selectedMonth).catch(console.error);
       }
     }
-  }, [selectedMonth, serverData]);
+  }, [selectedMonth, currentMonth, serverData]);
 
   const monthIncomes = useMemo(() => {
     if (!incomes) return [];

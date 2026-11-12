@@ -282,10 +282,13 @@ export function restoreTransaction(
         WHERE id = ?
       `).run(new Date().toISOString(), restoredTx.templateId);
 
-      const restoredMonth = restoredTx.date ? restoredTx.date.slice(0, 7) : new Date().toISOString().slice(0, 7);
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const restoredMonth = restoredTx.date ? restoredTx.date.slice(0, 7) : currentMonth;
       const nextMonth = shiftMonthKey(restoredMonth, 1);
-      // Synchronisation exclusive des mois futurs (M+1 à M+12) : 0 mois passé, 11 mois futurs à partir de nextMonth
-      syncRollingHorizon(db, nextMonth, 0, 11);
+      // Synchronisation exclusive des mois futurs (>= mois courant civil) : interdiction formelle de synchroniser dans le passé
+      const startSyncMonth = nextMonth < currentMonth ? currentMonth : nextMonth;
+      syncRollingHorizon(db, startSyncMonth, 0, 11);
     }
 
     return restoredTx;

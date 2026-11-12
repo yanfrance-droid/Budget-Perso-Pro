@@ -208,24 +208,24 @@ describe('Suite de tests d\'intégration du Backend Serveur (SQLite natif)', () 
         recurrenceDay: 12,
         accountId: acc.id!,
         label: 'Abonnement Internet',
-        startDate: '2026-10',
+        startDate: '2026-11',
         isActive: true
       });
 
       // Première génération
-      const count1 = generateMonthlyOccurrences(db, '2026-10');
+      const count1 = generateMonthlyOccurrences(db, '2026-11');
       expect(count1).toBe(1);
 
-      const txs = getTransactions(db, { month: '2026-10' });
+      const txs = getTransactions(db, { month: '2026-11' });
       expect(txs.length).toBe(1);
       expect(txs[0].amount).toBe(45.0);
       expect(txs[0].label).toBe('Abonnement Internet');
       expect(txs[0].status).toBe('planned');
 
       // Deuxième exécution : ne doit pas recréer de doublon
-      const count2 = generateMonthlyOccurrences(db, '2026-10');
+      const count2 = generateMonthlyOccurrences(db, '2026-11');
       expect(count2).toBe(0);
-      const txsAfter = getTransactions(db, { month: '2026-10' });
+      const txsAfter = getTransactions(db, { month: '2026-11' });
       expect(txsAfter.length).toBe(1);
     });
   });

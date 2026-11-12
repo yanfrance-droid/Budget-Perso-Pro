@@ -53,7 +53,7 @@ export const ContractIntegrityBanner: React.FC<ContractIntegrityBannerProps> = (
     if (activeFilterSection === 'fixed_expense') return [fixedExpenses];
     if (activeFilterSection === 'variable_expense') return [variableExpenses];
     if (activeFilterSection === 'income') return [incomes];
-    return [fixedExpenses, variableExpenses, incomes].filter(s => s.missingCount > 0);
+    return [fixedExpenses, variableExpenses, incomes].filter(s => s.missingCount > 0 || s.duplicateCount > 0 || s.surplusCount > 0);
   }, [activeFilterSection, fixedExpenses, variableExpenses, incomes]);
 
   const handleSyncAll = useCallback(async () => {
@@ -61,7 +61,9 @@ export const ContractIntegrityBanner: React.FC<ContractIntegrityBannerProps> = (
     setIsSyncing(true);
     setFeedback(null);
     try {
-      const res = await serverData.syncRollingHorizon(activeMonth, 0, 12);
+      const currentMonth = getCurrentMonth();
+      const safeSyncMonth = activeMonth < currentMonth ? currentMonth : activeMonth;
+      const res = await serverData.syncRollingHorizon(safeSyncMonth, 0, 12);
       setFeedback(`Synchronisation réussie : ${res.totalCreated} occurrence(s) générée(s) sur ${res.monthsProcessed.length} mois.`);
       setTimeout(() => setFeedback(null), 4000);
     } catch (err: any) {
@@ -74,6 +76,12 @@ export const ContractIntegrityBanner: React.FC<ContractIntegrityBannerProps> = (
 
   const handleRegenerateSingle = useCallback(async (templateId: string, label: string) => {
     if (!serverData) return;
+    const currentMonth = getCurrentMonth();
+    if (activeMonth < currentMonth) {
+      setFeedback(`Action impossible : le mois ${formatDateFr(activeMonth)} est antérieur au mois en cours et verrouillé en lecture seule.`);
+      setTimeout(() => setFeedback(null), 4000);
+      return;
+    }
     setIsSyncing(true);
     try {
       await serverData.generateSingleOccurrence(templateId, activeMonth);
@@ -126,6 +134,9 @@ export const ContractIntegrityBanner: React.FC<ContractIntegrityBannerProps> = (
     const isCompliant = section.isFullyCompliant;
     const hasAccepted = section.acceptedCount > 0;
 
+    const hasDuplicates = section.duplicateCount > 0 || section.surplusCount > 0;
+    const displayCount = hasDuplicates ? section.totalTransactionsCount : section.totalFound;
+
     return (
       <button
         key={filterKey}
@@ -164,8 +175,9 @@ export const ContractIntegrityBanner: React.FC<ContractIntegrityBannerProps> = (
           <AlertTriangle size={12} color={isSelected ? '#fff' : '#dc2626'} />
         )}
         <span>
-          {section.title} : {section.totalFound}/{section.totalExpected}
-          {!isCompliant && ` (-${section.missingCount})`}
+          {section.title} : {displayCount}/{section.totalExpected}
+          {!isCompliant && section.missingCount > 0 && ` (-${section.missingCount})`}
+          {!isCompliant && section.missingCount === 0 && hasDuplicates && ` (+${section.duplicateCount || section.surplusCount})`}
           {isCompliant && hasAccepted && ` (${section.acceptedCount} acc.)`}
         </span>
       </button>
@@ -275,15 +287,50 @@ export const ContractIntegrityBanner: React.FC<ContractIntegrityBannerProps> = (
             fontSize: '0.8rem'
           }}>
             <div style={{ fontWeight: 700, marginBottom: '0.5rem', color: '#7f1d1d' }}>
-              Arbitrage des contrats manquants pour {formattedMonth} :
+              Détail des anomalies contractuelles pour {formattedMonth} :
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {displayedMissingSections.map(sec => (
                 <div key={sec.type} style={{ backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #fee2e2', padding: '0.6rem 0.85rem' }}>
                   <div style={{ fontWeight: 700, color: '#991b1b', marginBottom: '0.35rem', fontSize: '0.8rem' }}>
-                    {sec.title} ({sec.missingCount} manquant{sec.missingCount > 1 ? 's' : ''} — {sec.missingAmount.toFixed(2)} €)
+                    {sec.title} (
+                      {sec.missingCount > 0 && `${sec.missingCount} manquant${sec.missingCount > 1 ? 's' : ''} — ${sec.missingAmount.toFixed(2)} €`}
+                      {sec.missingCount > 0 && sec.duplicateCount > 0 && ', '}
+                      {sec.duplicateCount > 0 && `${sec.duplicateCount} doublon${sec.duplicateCount > 1 ? 's' : ''}`}
+                    )
                   </div>
+                  {sec.duplicateItems.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: sec.missingItems.length > 0 ? '0.5rem' : 0 }}>
+                      {sec.duplicateItems.map((dup, idx) => (
+                        <div
+                          key={dup.templateId || `${dup.label}_${idx}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '0.75rem',
+                            padding: '0.35rem 0.55rem',
+                            backgroundColor: '#fff1f2',
+                            borderRadius: '4px',
+                            border: '1px solid #fecdd3',
+                            fontSize: '0.74rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <span style={{ color: '#e11d48' }}>⚠️</span>
+                            <strong style={{ color: '#9f1239' }}>Doublon : {dup.label}</strong>
+                            <span style={{ fontWeight: 600, color: '#be123c' }}>
+                              ({dup.amount.toFixed(2)} €)
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: '#881337' }}>
+                              — {dup.count} occurrences{dup.dates && dup.dates.length > 0 ? ` le ${dup.dates.map(d => formatDateFr(d)).join(', ')}` : ''}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     {sec.missingItems.map(item => (
                       <div 
