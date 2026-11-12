@@ -37,7 +37,7 @@ import {
   exportLoanCapitalHistory, 
   importLoanCapitalHistory 
 } from './services/loanCapitalHistoryService.ts';
-import { getAllRecurrenceTemplates, saveRecurrenceTemplate, generateMonthlyOccurrences, deleteRecurrenceTemplate } from './services/recurrenceService.ts';
+import { getAllRecurrenceTemplates, saveRecurrenceTemplate, generateMonthlyOccurrences, generateSingleOccurrence, deleteRecurrenceTemplate, syncRollingHorizon, shiftMonthKey } from './services/recurrenceService.ts';
 import { getAllPlannedExpenses, savePlannedExpense, deletePlannedExpense } from './services/plannedExpenseService.ts';
 import { importBackupData, exportBackupData } from './services/migrationService.ts';
 import { generateFullExportExcelWorkbook } from './services/excelExportService.ts';
@@ -349,13 +349,23 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
           const body = await readBody().catch(() => ({}));
           let restored: any;
           try {
-            restored = restoreTransaction(db, id);
+            restored = restoreTransaction(db, id, body);
           } catch (restoreErr: any) {
             // Si la transaction n'existe plus en base (ex: purge physique),
             // mais qu'un objet complet de secours est transmis, on la recrée avec son ID d'origine
             if (body && (body.id || body.amount !== undefined)) {
               const txToSave = { ...body, id, deleted_at: null };
               restored = saveTransaction(db, txToSave);
+              if (restored?.templateId) {
+                db.prepare(`
+                  UPDATE recurrence_templates
+                  SET isActive = 1, endDate = NULL, disabledFromMonth = NULL, updatedAt = ?
+                  WHERE id = ?
+                `).run(new Date().toISOString(), restored.templateId);
+                const baseMonth = restored.date ? restored.date.slice(0, 7) : new Date().toISOString().slice(0, 7);
+                const nextMonth = shiftMonthKey(baseMonth, 1);
+                syncRollingHorizon(db, nextMonth, 0, 11);
+              }
             } else {
               throw restoreErr;
             }
@@ -557,6 +567,26 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
         const body = await readBody();
         const count = generateMonthlyOccurrences(db, body.month);
         return sendJson(200, { generated: count });
+      }
+      if (pathname === '/api/recurrence-templates/sync-horizon' && req.method === 'POST') {
+        const body = await readBody();
+        const baseMonth = body?.currentMonth || new Date().toISOString().slice(0, 7);
+        const past = body?.pastMonths !== undefined ? Number(body.pastMonths) : 0;
+        const future = body?.futureMonths !== undefined ? Number(body.futureMonths) : 12;
+        const result = syncRollingHorizon(db, baseMonth, past, future);
+        return sendJson(200, result);
+      }
+      if (pathname.match(/^\/api\/recurrence-templates\/[^/]+\/generate-month$/) && req.method === 'POST') {
+        const parts = pathname.split('/');
+        const templateId = parts[3];
+        const body = await readBody();
+        const targetMonth = body?.month || new Date().toISOString().slice(0, 7);
+        try {
+          const result = generateSingleOccurrence(db, templateId, targetMonth, true);
+          return sendJson(200, result);
+        } catch (err: any) {
+          return sendJson(400, { error: err.message });
+        }
       }
 
       // 7b. Planned Expenses (Dépenses prévisionnelles / wishlist isolée)

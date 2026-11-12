@@ -257,6 +257,51 @@ export function computeOccurrenceDate(year: number, month: number, recurrenceDay
   return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
 }
 
+export function shiftMonthKey(baseMonth: string, offset: number): string {
+  const [yearStr, monthStr] = baseMonth.split('-');
+  const y = parseInt(yearStr, 10);
+  const m = parseInt(monthStr, 10);
+  const d = new Date(Date.UTC(y, m - 1 + offset, 1));
+  return d.toISOString().slice(0, 7);
+}
+
+/**
+ * Synchronise et matérialise l'ensemble des occurrences contractuelles et récurrentes
+ * sur un horizon temporel glissant de manière strictement idempotente.
+ * RÈGLE D'OR : Le passé (< mois courant) est strictement gelé et immuable (pastMonths = 0 par défaut).
+ * Seuls le mois en cours et les mois futurs (futureMonths = 12, M à M+12) sont synchronisés.
+ */
+export function syncRollingHorizon(
+  db: DatabaseSync,
+  currentMonth: string,
+  pastMonths = 0,
+  futureMonths = 12
+): { totalCreated: number; totalGenerated: number; monthsProcessed: string[]; monthsSynced: string[] } {
+  if (!/^\d{4}-\d{2}$/.test(currentMonth)) {
+    throw new Error('Le mois de référence doit être au format YYYY-MM.');
+  }
+
+  const monthsSynced: string[] = [];
+  let totalGenerated = 0;
+
+  // Interdiction formelle de régénérer le passé : le passé (< currentMonth) est gelé
+  // offset commence TOUJOURS à 0 (currentMonth) jusqu'à futureMonths
+  const startOffset = 0;
+
+  for (let offset = startOffset; offset <= futureMonths; offset++) {
+    const targetMonth = shiftMonthKey(currentMonth, offset);
+    monthsSynced.push(targetMonth);
+    totalGenerated += generateMonthlyOccurrences(db, targetMonth);
+  }
+
+  return {
+    totalCreated: totalGenerated,
+    totalGenerated,
+    monthsProcessed: monthsSynced,
+    monthsSynced
+  };
+}
+
 export function generateMonthlyOccurrences(db: DatabaseSync, targetMonth: string): number {
   if (!/^\d{4}-\d{2}$/.test(targetMonth)) {
     throw new Error('Le mois cible doit être au format YYYY-MM.');
@@ -278,16 +323,21 @@ export function generateMonthlyOccurrences(db: DatabaseSync, targetMonth: string
 
       // Vérifier si une occurrence existe déjà pour ce template dans ce mois (qu'elle soit active ou soft-deleted)
       const existingStmt = db.prepare(`
-        SELECT id, status, deleted_at FROM transactions
-        WHERE templateId = ? AND date LIKE ?
+        SELECT id, status, deleted_at, templateId FROM transactions
+        WHERE (templateId = ? OR (accountId = ? AND recurrenceDay = ? AND label = ?))
+          AND date LIKE ?
       `);
-      const existing = existingStmt.get(t.id!, `${targetMonth}%`) as any;
+      const existing = existingStmt.get(t.id!, t.accountId, t.recurrenceDay, t.label, `${targetMonth}%`) as any;
       if (existing) {
+        // Si elle n'avait pas encore son templateId rattaché, la rattacher
+        if (!existing.templateId && !existing.deleted_at) {
+          db.prepare('UPDATE transactions SET templateId = ? WHERE id = ?').run(t.id, existing.id);
+        }
         // Anti-Zombie : Si l'occurrence existante a été supprimée par l'utilisateur (soft-deleted), NE PAS LA RECRÉER NI LA RESSUSCITER
         if (existing.deleted_at) {
           continue;
         }
-        // Si l'occurrence existante est au statut planned alors que le modèle est désormais désactivé durablement, on la synchronise
+        // Sanctuarisation : ne JAMAIS altérer le statut d'une transaction existante si elle est 'cleared', 'pending' ou personnalisée
         if (isExplicitlyDisabled && existing.status === 'planned') {
           const updateStmt = db.prepare('UPDATE transactions SET status = \'disabled\', isCustomized = 1 WHERE id = ?');
           updateStmt.run(existing.id);
@@ -324,34 +374,128 @@ export function generateMonthlyOccurrences(db: DatabaseSync, targetMonth: string
   });
 }
 
+/**
+ * Génère ou réactive l'occurrence d'un template spécifique pour un mois donné (YYYY-MM).
+ * Si l'occurrence était supprimée (soft-deleted) et forceUnDelete est actif, elle est réactivée.
+ */
+export function generateSingleOccurrence(
+  db: DatabaseSync,
+  templateId: string,
+  targetMonth: string,
+  forceUnDelete = true
+): { success: boolean; transaction: any } {
+  if (!/^\d{4}-\d{2}$/.test(targetMonth)) {
+    throw new Error('Le mois cible doit être au format YYYY-MM.');
+  }
+
+  return withTransaction(db, () => {
+    const tmplStmt = db.prepare('SELECT * FROM recurrence_templates WHERE id = ?');
+    const t = tmplStmt.get(templateId) as any;
+    if (!t) {
+      throw new Error(`Modèle de récurrence ${templateId} introuvable.`);
+    }
+
+    const existingStmt = db.prepare(`
+      SELECT id, status, deleted_at, templateId FROM transactions
+      WHERE (templateId = ? OR (accountId = ? AND recurrenceDay = ? AND label = ?))
+        AND date LIKE ?
+    `);
+    const existing = existingStmt.get(templateId, t.accountId, Number(t.recurrenceDay), t.label, `${targetMonth}%`) as any;
+
+    if (existing) {
+      if (!existing.templateId && !existing.deleted_at) {
+        db.prepare('UPDATE transactions SET templateId = ? WHERE id = ?').run(templateId, existing.id);
+      }
+      if (existing.deleted_at && forceUnDelete) {
+        db.prepare('UPDATE transactions SET deleted_at = NULL, templateId = ? WHERE id = ?').run(templateId, existing.id);
+        const restored = db.prepare('SELECT * FROM transactions WHERE id = ?').get(existing.id);
+        return { success: true, transaction: restored };
+      }
+      return { success: true, transaction: existing };
+    }
+
+    // Construction de l'occurrence
+    const [year, month] = targetMonth.split('-').map(Number);
+    const occurrenceDate = computeOccurrenceDate(year, month, Number(t.recurrenceDay));
+    const occurrenceAmount = computeEffectiveRecurrenceAmount({
+      amount: Number(t.amount),
+      commitment_end_date: t.commitment_end_date,
+      price_after_promo: t.price_after_promo !== null ? Number(t.price_after_promo) : null
+    }, occurrenceDate, targetMonth);
+
+    const isExplicitlyDisabled = !t.isActive || Boolean(t.disabledFromMonth && targetMonth >= t.disabledFromMonth);
+    const occurrenceStatus: 'planned' | 'disabled' = isExplicitlyDisabled ? 'disabled' : 'planned';
+
+    const saved = saveTransaction(db, {
+      date: occurrenceDate,
+      expectedDate: occurrenceDate,
+      recurrenceDay: Number(t.recurrenceDay),
+      type: t.type,
+      amount: occurrenceAmount,
+      status: occurrenceStatus,
+      isCustomized: isExplicitlyDisabled ? 1 : 0,
+      accountId: t.accountId,
+      destinationAccountId: t.destinationAccountId,
+      categoryId: t.categoryId,
+      label: t.label,
+      notes: t.notes,
+      templateId: t.id,
+      payerId: t.payerId
+    });
+
+    return { success: true, transaction: saved };
+  });
+}
+
 export function deleteRecurrenceTemplate(db: DatabaseSync, id: string, fromDate?: string): void {
   withTransaction(db, () => {
-    // Supprime le modèle récurrent
-    const stmt = db.prepare('DELETE FROM recurrence_templates WHERE id = ?');
-    stmt.run(id);
+    const now = Date.now();
 
     if (fromDate) {
-      // Si une date de début est spécifiée, supprimer toutes les occurrences à partir de cette date
-      const cleanStmt = db.prepare(`
-        DELETE FROM transactions
-        WHERE templateId = ? AND date >= ?
-      `);
-      cleanStmt.run(id, fromDate);
+      // Normaliser la date charnière (si format YYYY-MM, étendre au 1er jour YYYY-MM-01)
+      const effectiveFromDate = fromDate.length === 7 ? `${fromDate}-01` : fromDate;
 
-      // Détacher les éventuelles transactions passées restantes
-      const detachStmt = db.prepare(`
+      // 1. Sur le mois sélectionné et les mois futurs (date >= effectiveFromDate) :
+      // - Si status = 'planned' : purge physique pure
+      db.prepare(`
+        DELETE FROM transactions
+        WHERE templateId = ? AND date >= ? AND status = 'planned'
+      `).run(id, effectiveFromDate);
+
+      // - Si status != 'planned' (ex: cleared ou pending sur le mois sélectionné M) :
+      //   SUPPRESSION ATOMIQUE EN 1 CLIC : soft-delete immédiat pour disparition instantanée de l'écran dès le 1er clic !
+      db.prepare(`
+        UPDATE transactions
+        SET deleted_at = ?, templateId = NULL
+        WHERE templateId = ? AND date >= ? AND deleted_at IS NULL
+      `).run(now, id, effectiveFromDate);
+
+      // 2. Sur les mois passés strictement antérieurs (date < effectiveFromDate) :
+      // INTANGIBLES ET SANCTUARISÉS : deleted_at reste NULL, la transaction reste active et visible dans le passé.
+      // On détache simplement le templateId pour préserver les contraintes relationnelles.
+      db.prepare(`
+        UPDATE transactions
+        SET templateId = NULL
+        WHERE templateId = ? AND date < ?
+      `).run(id, effectiveFromDate);
+    } else {
+      // Suppression globale sans date de début :
+      // Supprimer les projections prévisionnelles (planned)
+      db.prepare(`
+        DELETE FROM transactions
+        WHERE templateId = ? AND status = 'planned'
+      `).run(id);
+
+      // Conserver les écritures réelles (cleared, pending) actives dans le Grand Livre (deleted_at reste NULL)
+      db.prepare(`
         UPDATE transactions
         SET templateId = NULL
         WHERE templateId = ?
-      `);
-      detachStmt.run(id);
-    } else {
-      // Suppression définitive absolue : supprimer TOUTES les transactions de ce template sur tous les mois et toutes les années
-      const cleanStmt = db.prepare(`
-        DELETE FROM transactions
-        WHERE templateId = ?
-      `);
-      cleanStmt.run(id);
+      `).run(id);
     }
+
+    // 3. Supprime le modèle récurrent
+    const stmt = db.prepare('DELETE FROM recurrence_templates WHERE id = ?');
+    stmt.run(id);
   });
 }

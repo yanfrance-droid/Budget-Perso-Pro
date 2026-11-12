@@ -397,14 +397,13 @@ export default function Dashboard() {
   // 1. Situation bancaire actuelle (système / mois réel en cours)
   // -------------------------------------------------------------
   const currentMonthTx = activeTransactions.filter(t => {
-    if (t.recurrenceDay && !t.templateId) return currentMonth >= t.date.substring(0, 7);
     return t.date.startsWith(currentMonth);
   });
   const currentNonClearedTx = currentMonthTx.filter(t => t.status !== 'cleared');
 
   // Charges impayées / en retard des mois antérieurs par rapport au mois système actuel (pour la situation bancaire)
   const pastUnpaidExpensesCurrent = activeTransactions.filter(t => {
-    if (t.date >= `${currentMonth}-01` || t.status === 'cleared' || (t.recurrenceDay && !t.templateId)) {
+    if (t.date >= `${currentMonth}-01` || t.status === 'cleared') {
       return false;
     }
     if (!(EXPENSE_TYPES as readonly string[]).includes(t.type)) {
@@ -488,7 +487,6 @@ export default function Dashboard() {
   // 2. Charges et budget du mois sélectionné (selectedMonth)
   // -------------------------------------------------------------
   const selectedMonthTx = activeTransactions.filter(t => {
-    if (t.recurrenceDay && !t.templateId) return selectedMonth >= t.date.substring(0, 7);
     return t.date.startsWith(selectedMonth);
   });
   const selectedNonClearedTx = selectedMonthTx.filter(t => t.status !== 'cleared');
@@ -764,7 +762,7 @@ export default function Dashboard() {
   // Revenus prévus du mois sélectionné (pour le calcul du taux d'endettement)
   const totalIncomesPlannedSelected = useMemo(() => {
     return transactions
-      .filter(t => t.type === 'income' && t.status !== 'disabled' && (t.date.startsWith(selectedMonth) || (t.recurrenceDay && !t.templateId)))
+      .filter(t => t.type === 'income' && t.status !== 'disabled' && t.date.startsWith(selectedMonth))
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   }, [transactions, selectedMonth]);
 

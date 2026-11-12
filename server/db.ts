@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { repairOrphans, purgeExpiredDeletedTransactions } from './services/maintenanceService.ts';
+import { syncRollingHorizon } from './services/recurrenceService.ts';
 import { writeTechnicalLog } from './services/loggerService.ts';
 
 export interface ServerConfig {
@@ -59,6 +60,23 @@ export function runStartupMaintenance(db: DatabaseSync): { repaired: number; pur
     } else {
       writeTechnicalLog('INFO', 'Maintenance au démarrage : base de données vérifiée et intègre.');
     }
+
+    // Synchronisation automatique de l'horizon glissant des récurrences (M-1 à M+12)
+    try {
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      // Synchronisation automatique de l'horizon glissant des récurrences (M à M+12, passé strictement gelé)
+      const horizonResult = syncRollingHorizon(db, currentMonth, 0, 12);
+      if (horizonResult.totalCreated > 0) {
+        writeTechnicalLog(
+          'INFO',
+          `Horizon glissant : ${horizonResult.totalCreated} occurrence(s) de récurrence générée(s) sur ${horizonResult.monthsProcessed.length} mois.`
+        );
+      }
+    } catch (horizonErr: any) {
+      writeTechnicalLog('WARN', `Avertissement horizon glissant au démarrage : ${horizonErr.message}`);
+    }
+
     return { repaired: repairResult.repaired, purged };
   } catch (err: any) {
     writeTechnicalLog('WARN', `Avertissement maintenance au démarrage : ${err.message}`);
@@ -211,6 +229,13 @@ export function runMigrations(db: DatabaseSync) {
     console.error("Migration initPreExistingFutureExpenses error:", e);
   }
 
+  // Auto-réhabilitation idempotente des charges récurrentes orphelines (recurrenceDay sans templateId)
+  try {
+    rehabilitateOrphanRecurrentTransactions(db);
+  } catch (e) {
+    console.error("Migration rehabilitateOrphanRecurrentTransactions error:", e);
+  }
+
   // Migration des index de performance pour filtres fréquents et intégrité
   try {
     db.exec(`
@@ -302,6 +327,88 @@ export function initPreExistingFutureExpenses(
 
     db.exec(`RELEASE ${spName};`);
     return { updatedCount, executed: true };
+  } catch (err) {
+    db.exec(`ROLLBACK TO ${spName}; RELEASE ${spName};`);
+    throw err;
+  }
+}
+
+/**
+ * Migration & auto-réparation idempotente des charges récurrentes orphelines :
+ * Détecte les transactions distinctes possédant recurrenceDay IS NOT NULL mais sans templateId valide.
+ * Insère automatiquement ces modèles dans recurrence_templates et met à jour les transactions existantes.
+ */
+export function rehabilitateOrphanRecurrentTransactions(db: DatabaseSync): { rehabilitatedCount: number; updatedTxsCount: number } {
+  const orphans = db.prepare(`
+    SELECT DISTINCT label, type, amount, recurrenceDay, accountId, categoryId, notes, payerId, substr(date, 1, 7) as startMonth
+    FROM transactions
+    WHERE deleted_at IS NULL
+      AND recurrenceDay IS NOT NULL
+      AND (templateId IS NULL OR templateId = '')
+  `).all() as any[];
+
+  if (orphans.length === 0) {
+    return { rehabilitatedCount: 0, updatedTxsCount: 0 };
+  }
+
+  let rehabilitatedCount = 0;
+  let updatedTxsCount = 0;
+
+  const spName = `sp_rehab_rec_${Date.now()}`;
+  db.exec(`SAVEPOINT ${spName};`);
+  try {
+    for (const orph of orphans) {
+      // Vérifier si un template actif ou inactif avec le même label, type, recurrenceDay et accountId existe déjà
+      const existingTmpl = db.prepare(`
+        SELECT id FROM recurrence_templates
+        WHERE label = ? AND type = ? AND recurrenceDay = ? AND accountId = ?
+        LIMIT 1
+      `).get(orph.label, orph.type, orph.recurrenceDay, orph.accountId) as { id: string } | undefined;
+
+      let templateId: string;
+      if (existingTmpl) {
+        templateId = existingTmpl.id;
+      } else {
+        templateId = crypto.randomUUID();
+        const nowIso = new Date().toISOString();
+        db.prepare(`
+          INSERT INTO recurrence_templates (
+            id, type, amount, recurrenceDay, accountId, categoryId, label, notes, startDate, isActive, payerId, createdAt, updatedAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+        `).run(
+          templateId,
+          orph.type,
+          Number(orph.amount) || 0,
+          Number(orph.recurrenceDay),
+          orph.accountId,
+          orph.categoryId || null,
+          orph.label || '',
+          orph.notes || null,
+          orph.startMonth || '2026-11',
+          orph.payerId || null,
+          nowIso,
+          nowIso
+        );
+        rehabilitatedCount++;
+      }
+
+      // Lier toutes les transactions correspondantes au templateId
+      const updateStmt = db.prepare(`
+        UPDATE transactions
+        SET templateId = ?
+        WHERE deleted_at IS NULL
+          AND label = ?
+          AND type = ?
+          AND recurrenceDay = ?
+          AND accountId = ?
+          AND (templateId IS NULL OR templateId = '')
+      `);
+      const updateRes = updateStmt.run(templateId, orph.label, orph.type, orph.recurrenceDay, orph.accountId) as { changes?: number };
+      updatedTxsCount += Number(updateRes?.changes || 0);
+    }
+
+    db.exec(`RELEASE ${spName};`);
+    return { rehabilitatedCount, updatedTxsCount };
   } catch (err) {
     db.exec(`ROLLBACK TO ${spName}; RELEASE ${spName};`);
     throw err;

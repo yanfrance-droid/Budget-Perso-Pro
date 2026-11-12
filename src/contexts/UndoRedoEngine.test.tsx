@@ -620,4 +620,71 @@ describe('Moteur Undo/Redo Universel (Transactions + Comptes)', () => {
       amount: 39.99
     }));
   });
+
+  it('12. Snapshot Intégral Undo sur résiliation de contrat : restaure fidèlement les transactions avec leur statut exact (cleared, pending)', async () => {
+    let dbTemplates: any[] = [
+      { id: 'tmpl-fibre', label: 'Internet Fibre Pro', amount: 39.99, recurrenceDay: 10, startDate: '2026-09', isActive: 1 }
+    ];
+    vi.spyOn(apiClient.recurrence, 'getAll').mockImplementation(async () => JSON.parse(JSON.stringify(dbTemplates)));
+    vi.spyOn(apiClient.recurrence, 'delete').mockImplementation(async (id: string) => {
+      dbTemplates = dbTemplates.filter(t => t.id !== id);
+      dbTransactions = dbTransactions.filter(t => !(t.templateId === id && t.status === 'planned'));
+      dbTransactions.forEach(t => {
+        if (t.templateId === id) (t as any).templateId = undefined;
+      });
+      return { success: true };
+    });
+    vi.spyOn(apiClient.recurrence, 'save').mockImplementation(async (tmpl: any) => {
+      const idx = dbTemplates.findIndex(t => t.id === tmpl.id);
+      if (idx >= 0) dbTemplates[idx] = { ...dbTemplates[idx], ...tmpl };
+      else dbTemplates.push(tmpl);
+      return JSON.parse(JSON.stringify(tmpl));
+    });
+    vi.spyOn(apiClient.recurrence, 'syncRollingHorizon').mockResolvedValue({ totalCreated: 0, monthsProcessed: [] } as any);
+
+    // Initialiser les transactions du contrat : octobre (cleared), novembre (pending), décembre (planned)
+    dbTransactions.push(
+      { id: 'tx-oct', templateId: 'tmpl-fibre', label: 'Internet Fibre Pro', amount: 39.99, type: 'fixed_expense', status: 'cleared', date: '2026-10-10', accountId: 'acc-1' },
+      { id: 'tx-nov', templateId: 'tmpl-fibre', label: 'Internet Fibre Pro', amount: 39.99, type: 'fixed_expense', status: 'pending', date: '2026-11-10', accountId: 'acc-1' },
+      { id: 'tx-dec', templateId: 'tmpl-fibre', label: 'Internet Fibre Pro', amount: 39.99, type: 'fixed_expense', status: 'planned', date: '2026-12-10', accountId: 'acc-1' }
+    );
+
+    const { result } = renderHook(() => useServerData(), { wrapper });
+
+    await act(async () => {
+      await result.current.refreshAll();
+    });
+
+    expect(result.current.recurrenceTemplates.some(t => t.id === 'tmpl-fibre')).toBe(true);
+
+    // 1. Résiliation du contrat à partir de novembre
+    await act(async () => {
+      await result.current.deleteRecurrenceTemplate('tmpl-fibre', '2026-11-01');
+    });
+
+    expect(result.current.canUndo).toBe(true);
+    expect(result.current.undoStack[0].label).toContain('Résiliation contrat « Internet Fibre Pro »');
+
+    // 2. Undo -> Restauration intégrale
+    await act(async () => {
+      await result.current.undo();
+    });
+
+    // Le template est réactivé
+    expect(dbTemplates.some(t => t.id === 'tmpl-fibre')).toBe(true);
+
+    // Les transactions ont été restaurées avec leurs statuts d'origine EXACTS
+    const oct = dbTransactions.find(t => t.id === 'tx-oct')!;
+    const nov = dbTransactions.find(t => t.id === 'tx-nov')!;
+    const dec = dbTransactions.find(t => t.id === 'tx-dec')!;
+
+    expect(oct.status).toBe('cleared');
+    expect(oct.templateId).toBe('tmpl-fibre');
+
+    expect(nov.status).toBe('pending');
+    expect(nov.templateId).toBe('tmpl-fibre');
+
+    expect(dec.status).toBe('planned');
+    expect(dec.templateId).toBe('tmpl-fibre');
+  });
 });

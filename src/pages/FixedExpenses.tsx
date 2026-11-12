@@ -13,6 +13,7 @@ const FIXED_EXPENSE_STATUS_OPTIONS = [
 
 import { useServerDataOptional } from '../contexts/ServerDataContext';
 import { getCurrentMonth, getCurrentDate, formatDateFr } from '../utils/dateUtils';
+import { IntegritySectionBadge } from '../components/IntegritySectionBadge';
 
 export default function FixedExpenses() {
   const serverData = useServerDataOptional();
@@ -145,10 +146,15 @@ export default function FixedExpenses() {
     );
   };
 
-  // Génération automatique des échéances pour le mois sélectionné
+  // Génération automatique des échéances pour le mois sélectionné & notification du Watchdog universel
   useEffect(() => {
-    if (selectedMonth && serverData) {
-      serverData.generateMonthlyOccurrences(selectedMonth).catch(console.error);
+    if (selectedMonth) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('pbp-active-month-changed', { detail: { month: selectedMonth } }));
+      }
+      if (serverData) {
+        serverData.generateMonthlyOccurrences(selectedMonth).catch(console.error);
+      }
     }
   }, [selectedMonth, serverData]);
 
@@ -604,18 +610,18 @@ export default function FixedExpenses() {
     }
   };
 
-  const handleConfirmPermanentDelete = async () => {
+  const handleConfirmTerminateContract = async () => {
     if (!deleteModalState.expense?.templateId) return;
     try {
       if (serverData) {
-        // Suppression définitive absolue sur tous les mois et toutes les années
-        await serverData.deleteRecurrenceTemplate(deleteModalState.expense.templateId);
-        await serverData.deleteTransaction(deleteModalState.expense.id);
+        // Résiliation du contrat à partir du mois sélectionné :
+        // Purge les occurrences prévisionnelles futures (planned), conserve intact tout le passé pointé
+        await serverData.deleteRecurrenceTemplate(deleteModalState.expense.templateId, `${selectedMonth}-01`);
       }
       setDeleteModalState({ isOpen: false });
     } catch (err: any) {
-      console.error("Erreur lors de la suppression définitive :", err);
-      alert(err.message || "Erreur lors de la suppression définitive.");
+      console.error("Erreur lors de la résiliation du contrat :", err);
+      alert(err.message || "Erreur lors de la résiliation du contrat.");
     }
   };
 
@@ -645,8 +651,11 @@ export default function FixedExpenses() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h1 style={{ margin: 0 }}>Charges fixes</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+          <h1 style={{ margin: 0 }}>Charges fixes</h1>
+          <IntegritySectionBadge type="fixed_expense" month={selectedMonth} />
+        </div>
         <Button onClick={() => handleOpen()} icon={<Plus size={16} />}>Ajouter une charge</Button>
       </div>
 
@@ -1011,36 +1020,36 @@ export default function FixedExpenses() {
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            {/* Option 1 : Supprimer définitivement */}
-            <div style={{ border: '1px solid #fee2e2', backgroundColor: '#fff5f5', borderRadius: '6px', padding: '0.75rem' }}>
-              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--danger-color)', marginBottom: '0.25rem' }}>
-                Option 1 — Supprimer définitivement (sur tous les mois et toutes les années)
-              </div>
-              <div style={{ fontSize: '0.8rem', color: '#7f1d1d', marginBottom: '0.5rem' }}>
-                Supprime définitivement le modèle récurrent ainsi que toutes ses échéances sur tous les mois passés, présents et futurs.
-              </div>
-              <Button
-                variant="primary"
-                style={{ backgroundColor: 'var(--danger-color)' }}
-                onClick={handleConfirmPermanentDelete}
-              >
-                Supprimer définitivement sur tous les mois
-              </Button>
-            </div>
-
-            {/* Option 2 : Désactiver uniquement ce mois */}
-            <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '0.75rem' }}>
-              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                Option 2 — Supprimer cette charge pour ce mois uniquement
+            {/* Choix 1 : Supprimer ce mois uniquement */}
+            <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '0.75rem', backgroundColor: '#f8fafc' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem', color: '#1e293b' }}>
+                Choix 1 — Supprimer pour ce mois de {formatDateFr(selectedMonth)} uniquement
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                Supprime cette échéance de {selectedMonth}. La charge disparaît complètement de ce mois.
+                Supprime cette échéance ponctuelle. Le contrat reste actif et continuera à être généré normalement sur les mois suivants.
               </div>
               <Button
                 variant="outline"
                 onClick={handleConfirmDeactivateMonthOnly}
               >
-                Supprimer uniquement ce mois ({selectedMonth})
+                Supprimer uniquement ce mois ({formatDateFr(selectedMonth)})
+              </Button>
+            </div>
+
+            {/* Choix 2 : Résilier le contrat */}
+            <div style={{ border: '1px solid #fed7aa', backgroundColor: '#fff7ed', borderRadius: '6px', padding: '0.75rem' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#c2410c', marginBottom: '0.25rem' }}>
+                Choix 2 — Résilier le contrat (à partir de {formatDateFr(selectedMonth)})
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#9a3412', marginBottom: '0.5rem' }}>
+                Arrête définitivement ce contrat à compter de {formatDateFr(selectedMonth)}. Les échéances futures prévisionnelles sont supprimées, et l'intégralité des factures passées déjà enregistrées reste strictement conservée.
+              </div>
+              <Button
+                variant="primary"
+                style={{ backgroundColor: '#ea580c', borderColor: '#c2410c' }}
+                onClick={handleConfirmTerminateContract}
+              >
+                Résilier le contrat à partir de {formatDateFr(selectedMonth)}
               </Button>
             </div>
 

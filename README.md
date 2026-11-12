@@ -1,9 +1,9 @@
-# Personal Budget Pro (v1.4.2)
+# Personal Budget Pro (v1.5.0)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/Node.js-v24_Alpine-green.svg)](https://nodejs.org/)
 [![Database](https://img.shields.io/badge/SQLite-node:sqlite_WAL-blueviolet.svg)](https://sqlite.org/)
-[![Tests](https://img.shields.io/badge/Tests-627%20passing-brightgreen.svg)](package.json)
+[![Tests](https://img.shields.io/badge/Tests-644%20passing-brightgreen.svg)](package.json)
 [![RAM Footprint](https://img.shields.io/badge/RAM-%3C_60_Mo-success.svg)](#2-stack-technique--architecture)
 
 **Personal Budget Pro** est une application web auto-hébergée (*self-hosted*) de gestion budgétaire, d'anticipation de trésorerie (*cash-flow*) et de pilotage d'endettement.

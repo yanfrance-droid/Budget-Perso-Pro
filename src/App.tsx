@@ -19,6 +19,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ServerDataProvider, useServerDataOptional } from './contexts/ServerDataContext';
 import { UndoRedoControls } from './components/ui/UndoRedoControls';
 import { AuthModal } from './components/auth/AuthModal';
+import { ContractIntegrityBanner } from './components/ContractIntegrityBanner';
 import { useUIPreferences } from './contexts/UIPreferencesContext';
 
 function getPageTitle(pathname: string): string {
@@ -271,6 +272,8 @@ function AppContent() {
               {serverData && <UndoRedoControls />}
             </div>
           </header>
+
+          {serverData && <ContractIntegrityBanner />}
 
           <main className="main-content">
             <Routes>

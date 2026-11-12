@@ -1,8 +1,8 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-11 (Version 1.4.2 — Sentinelle anti-découvert & pending échues)  
-> **Statut QA :** 65 suites de tests Vitest, 627 tests au vert (100 % passants).
+> **Dernière mise à jour :** 2026-11-12 (Version 1.5.0 — Refonte des Récurrences, Invariants Temporels & Snapshot Undo)  
+> **Statut QA :** 68 suites de tests Vitest, 644 tests au vert (100 % passants).
 
 ---
 
@@ -110,6 +110,12 @@ La base SQLite contient 12 tables relationnelles initialisées et migrées dans 
 
 ### 4.2. Cycle de Vie des Charges Récurrentes & Règle Anti-Zombie
 - **Génération déterministe :** Réalisée par `generateMonthlyOccurrences` dans [`server/services/recurrenceService.ts`](file:///c:/Users/Yann/.gemini/antigravity-ide/scratch/personal-budget-pro/server/services/recurrenceService.ts).
+- **Résiliation Atomique en 1 Clic (Choix 2) :**
+  - Lorsque l'utilisateur résilie un contrat à partir du mois sélectionné $M$ (`deleteRecurrenceTemplate(db, id, fromDate)`) :
+    * Les occurrences futures prévisionnelles (`date >= fromDate AND status = 'planned'`) sont physiquement purgées (`DELETE`).
+    * La transaction du mois sélectionné $M$ (même si elle est déjà pointée `cleared` ou `pending`) est passée en soft-delete (`deleted_at = now`, `templateId = NULL`) afin de disparaître immédiatement de l'écran en un seul clic, sans obliger à un second clic de suppression.
+    * Le passé strict (`date < fromDate`) est sanctuarisé avec `deleted_at = NULL` et détaché (`templateId = NULL`).
+    * Le snapshot d'Undo capture l'ensemble de ces transactions : un seul clic sur "Annuler" restaure l'ensemble à l'identique (template réactivé, transaction de $M$ réactivée avec son statut exact `cleared`/`pending`, occurrences futures repeuplées).
 - **Anti-Zombie :**
   - Une charge récurrente passée en soft-delete ou désactivée sur un mois précis ne ressuscite JAMAIS lors des générations suivantes.
   - La suppression définitive d'un modèle récurrent purge l'ensemble des transactions liées sur tous les mois et toutes les années.
@@ -179,10 +185,22 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 > 6. **Undo de suppression :** Toujours injecter le snapshot complet de la transaction (`targetCopy`) dans l'action Undo pour permettre sa recréation en cas de purge physique en base.
 > 7. **Assiette du matelas de sécurité / précaution :** L'assiette mensuelle pour calculer le nombre de mois de couverture en épargne de précaution ne doit en aucun cas inclure les flux d'épargne volontaire (virements vers l'épargne). Elle repose exclusivement sur les dépenses contraintes pures (fixes, variables de subsistance, crédits).
 > 8. **Suivi des fins de contrat et tacite reconduction :** La date d'échéance `contract_end_date` est stockée sur `recurrence_templates`. La sentinelle `auditContractExpirations` surveille les 30 jours précédant l'expiration (et les contrats déjà échus) pour éviter les reconductions tacites automatiques.
+> 9. **Immuabilité stricte du passé (< mois courant) :** `syncRollingHorizon` ne doit jamais tenter de régénérer ou repeupler des mois échus (`pastMonths = 0` imposé et `startOffset = Math.max(0, -Math.max(0, pastMonths))`). Le passé est sanctuarisé pour éviter d'insérer des opérations prévisionnelles dans des périodes déjà clôturées.
+> 10. **Préservation du statut lors du Undo / Restauration :** Lors de la restauration d'une transaction via l'Undo ou `/api/transactions/:id/restore`, le statut réel d'origine (`cleared`, `pending`, etc.) doit être transmis et restauré sans jamais être écrasé par `'planned'`. De plus, la synchronisation post-restauration ne doit s'exécuter qu'à partir de $M+1$ (`nextMonth`) pour ne pas altérer le mois en cours $M$.
+> 11. **Dédoublement d'historique (Undo/Redo) :** La suppression d'un contrat récurrent (`deleteRecurrenceTemplate`) prenant déjà en charge la purge des occurrences associées et l'enregistrement de l'action dans l'historique, il ne faut jamais appeler en doublon `deleteTransaction` pour la même ligne.
+> 12. **Suppression atomique en 1 clic sur résiliation (Choix 2) :** Lorsqu'un contrat est résilié à partir du mois sélectionné $M$, l'occurrence du mois $M$ doit disparaître immédiatement de l'écran en un seul clic (via soft-delete `deleted_at = now, templateId = NULL` si déjà `cleared`/`pending`). Cela évite le bug du double-clic et garantit qu'une seule action Undo est générée par suppression.
 
 ---
 
 ## 7. Historique Récent des Versions Majeures
+
+- **v1.5.0 :** Implémentation du Watchdog d'Intégrité Universel des Contrats & Récurrences, résolution définitive de la récurrence et résilience Undo/Redo :
+  - *Watchdog d'Intégrité Granulaire & Arbitrable (`contractIntegrityEngine.ts`, `ContractIntegrityBanner.tsx`, `IntegritySectionBadge.tsx`) :* Détection automatique des écarts contractuels entre modèles actifs et occurrences réelles, pastilles d'intégrité par rubrique (Revenus, Fixes, Variables), bouton d'action pour régénérer à la volée une occurrence manquante ou accepter l'écart d'intégrité pour le mois courant.
+  - *Verrouillage Temporel du Passé :* Paramétrage strict de l'horizon glissant avec `pastMonths = 0` par défaut (`syncRollingHorizon`) et verrou mathématique `startOffset = Math.max(0, -Math.max(0, pastMonths))` empêchant toute régénération de transactions sur les mois antérieurs au mois actif.
+  - *Suppression Atomique en 1 Clic sur Résiliation :* Dans `deleteRecurrenceTemplate(db, id, fromDate)`, les occurrences prévisionnelles futures sont purgées physiquement tandis que la charge du mois courant sélectionné $M$ est immédiatement soft-deletée (`deleted_at = now`), garantissant la disparition immédiate en 1 clic sans forcer un double-clic ni dédoubler la pile d'Undo.
+  - *Intégrité des Statuts à l'Undo/Redo & Snapshot Intégral :* Sauvegarde et réapplication systématique du statut d'origine (`cleared`, `pending`) lors de l'Undo/Rétablissement avec capture exhaustive des transactions filles, interdisant toute rétrogradation en statut prévisionnel.
+  - *Réhabilitation de la Base Locale SQLite :* Restauration des 31 templates récurrents (avec `startDate = '2026-01'`), réinsertion des 3 charges fixes manquantes d'octobre 2026 au statut `cleared`, rattachement des 23 charges fixes d'octobre et 23 de novembre à leurs templates respectifs, normalisation des variables `Gazoil` et `Gazoil prévision` (68 suites, 644 tests au vert).
+- **v1.4.2 :** Fix de la sentinelle Crash-Test (`src/engine/insightsEngine.ts`) pour projeter à la date du jour les opérations au statut `pending` dont la date est échue (627 tests).
 
 - **v1.4.0 :** Implémentation complète des Paliers 1 et 2 du module Crédits & Prêts :
   - *Palier 1 :* Jauge macro d'amortissement pour les prêts immobiliers (`mortgage`), électrochoc du coût caché réel sur chaque fiche de prêt (facture réelle restante et perte sèche banque en intérêts + assurance via `estimateLoanPayoffClient`), badge compte à rebours contractuel dynamique (`⏳ Plus que X mensualités (mois AAAA)`), micro-barre bicolore de découpe de mensualité (capital utile vs coût banque), et carte KPI de synthèse globale du coût résiduel des crédits.

@@ -6,6 +6,7 @@ import {
   syncLoanCapitalForTransaction,
   withTransaction
 } from './loanService.ts';
+import { syncRollingHorizon, shiftMonthKey } from './recurrenceService.ts';
 
 export interface TransactionData {
   id?: string;
@@ -247,23 +248,44 @@ export function deleteTransaction(db: DatabaseSync, id: string): void {
   });
 }
 
-export function restoreTransaction(db: DatabaseSync, id: string): TransactionData {
+export function restoreTransaction(
+  db: DatabaseSync,
+  id: string,
+  fallbackData?: Partial<TransactionData>
+): TransactionData {
   return withTransaction(db, () => {
     const existing = getTransactionById(db, id);
     if (!existing) {
+      if (fallbackData && (fallbackData.id || fallbackData.amount !== undefined)) {
+        return saveTransaction(db, { ...fallbackData, id, deleted_at: null });
+      }
       throw new Error(`Transaction ${id} introuvable.`);
     }
-    if (!existing.deleted_at) {
-      return existing; // Déjà active
-    }
 
-    // 1. Restaurer la transaction (remise à NULL de deleted_at)
-    db.prepare('UPDATE transactions SET deleted_at = NULL WHERE id = ?').run(id);
+    // 1. Restaurer la transaction en préservant rigoureusement son statut initial
+    // Si fallbackData.status est fourni, le respecter prioritairement ; sinon conserver existing.status.
+    const finalStatus = fallbackData?.status || existing.status;
+    db.prepare('UPDATE transactions SET deleted_at = NULL, status = ? WHERE id = ?').run(finalStatus, id);
     const restoredTx = getTransactionById(db, id)!;
 
     // 2. Resynchroniser le capital du crédit si la mensualité était réglée
     if (restoredTx.type === 'loan_payment' && restoredTx.status === 'cleared') {
       syncLoanCapitalForTransaction(db, null, restoredTx);
+    }
+
+    // 3. Réactivation automatique du contrat récurrent et régénération STRICTEMENT sur les mois futurs (M+1 à M+12)
+    // S'assurer que le mois courant/restauré M n'est JAMAIS écrasé ou altéré en 'planned'
+    if (restoredTx.templateId) {
+      db.prepare(`
+        UPDATE recurrence_templates
+        SET isActive = 1, endDate = NULL, disabledFromMonth = NULL, updatedAt = ?
+        WHERE id = ?
+      `).run(new Date().toISOString(), restoredTx.templateId);
+
+      const restoredMonth = restoredTx.date ? restoredTx.date.slice(0, 7) : new Date().toISOString().slice(0, 7);
+      const nextMonth = shiftMonthKey(restoredMonth, 1);
+      // Synchronisation exclusive des mois futurs (M+1 à M+12) : 0 mois passé, 11 mois futurs à partir de nextMonth
+      syncRollingHorizon(db, nextMonth, 0, 11);
     }
 
     return restoredTx;

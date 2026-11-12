@@ -104,8 +104,8 @@ describe('Vérification du rendu réel des composants FixedExpenses et VariableE
     // Vérifier que le modal de suppression s'ouvre sans erreur
     await waitFor(() => {
       expect(screen.getByText(/Supprimer la charge récurrente/i)).toBeDefined();
-      expect(screen.getByText(/Option 1 — Supprimer définitivement/i)).toBeDefined();
-      expect(screen.getByText(/Option 2 — Supprimer cette charge pour ce mois uniquement/i)).toBeDefined();
+      expect(screen.getByText(/Choix 1 — Supprimer pour ce mois de/i)).toBeDefined();
+      expect(screen.getByText(/Choix 2 — Résilier le contrat/i)).toBeDefined();
     });
   });
 });

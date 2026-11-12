@@ -278,7 +278,17 @@ export const apiClient = {
         body: JSON.stringify({ month })
       });
       return res.generated;
-    }
+    },
+    syncRollingHorizon: (currentMonth?: string, pastMonths?: number, futureMonths?: number) =>
+      request<{ totalCreated: number; monthsProcessed: string[] }>('/api/recurrence-templates/sync-horizon', {
+        method: 'POST',
+        body: JSON.stringify({ currentMonth, pastMonths, futureMonths })
+      }),
+    generateSingleOccurrence: (templateId: string, month: string) =>
+      request<{ success: boolean; transaction: any }>(`/api/recurrence-templates/${templateId}/generate-month`, {
+        method: 'POST',
+        body: JSON.stringify({ month })
+      })
   },
 
   // 6b. Dépenses prévisionnelles

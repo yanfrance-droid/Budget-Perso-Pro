@@ -51,7 +51,14 @@ export interface ServerDataContextType {
   saveRecurrenceTemplate: (template: Partial<RecurrenceTemplate>) => Promise<RecurrenceTemplate>;
   deleteRecurrenceTemplate: (id: string, fromDate?: string) => Promise<void>;
   generateMonthlyOccurrences: (month: string) => Promise<number>;
+  generateSingleOccurrence: (templateId: string, month: string) => Promise<any>;
+  syncRollingHorizon: (currentMonth?: string, pastMonths?: number, futureMonths?: number) => Promise<{ totalCreated: number; monthsProcessed: string[] }>;
   saveDashboardSettings: (settings: Partial<DashboardSettings>) => Promise<void>;
+
+  // Arbitrage du Watchdog d'intégrité contractuelle
+  acceptedExceptions: Record<string, boolean>;
+  acceptIntegrityException: (templateId: string, month: string) => Promise<void>;
+  revokeIntegrityException: (templateId: string, month: string) => Promise<void>;
 
   // Moteur Undo/Redo universel façon Excel
   undoStack: HistoryAction[];
@@ -75,6 +82,7 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [recurrenceTemplates, setRecurrenceTemplates] = useState<RecurrenceTemplate[]>([]);
+  const [acceptedExceptions, setAcceptedExceptions] = useState<Record<string, boolean>>({});
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings>({
     manualBalance: '0',
     card1: '0',
@@ -97,6 +105,8 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   accountsRef.current = accounts;
   const transactionsRef = useRef<Transaction[]>([]);
   transactionsRef.current = transactions;
+  const recurrenceTemplatesRef = useRef<RecurrenceTemplate[]>([]);
+  recurrenceTemplatesRef.current = recurrenceTemplates;
   const dashboardSettingsRef = useRef<DashboardSettings>(dashboardSettings);
   dashboardSettingsRef.current = dashboardSettings;
 
@@ -115,12 +125,19 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const recordHistoryAction = useCallback((action: Omit<HistoryAction, 'id' | 'timestamp'>) => {
     if (isExecutingHistoryRef.current) return;
-    const fullAction: HistoryAction = {
-      ...action,
-      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `act-${Date.now()}-${Math.random()}`,
-      timestamp: Date.now()
-    };
-    setUndoStack(prev => [fullAction, ...prev].slice(0, MAX_STACK_SIZE));
+    const now = Date.now();
+    setUndoStack(prev => {
+      // Déduplication défensive : ignorer l'enregistrement consécutif identique dans un intervalle court (< 1000ms)
+      if (prev.length > 0 && prev[0].label === action.label && (now - prev[0].timestamp) < 1000) {
+        return prev;
+      }
+      const fullAction: HistoryAction = {
+        ...action,
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `act-${now}-${Math.random()}`,
+        timestamp: now
+      };
+      return [fullAction, ...prev].slice(0, MAX_STACK_SIZE);
+    });
     setRedoStack([]); // Toute nouvelle action utilisateur vide la redoStack
   }, []);
 
@@ -153,6 +170,18 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           };
           return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
         });
+
+        if (settings['integrity_accepted_exceptions']) {
+          try {
+            const parsed = JSON.parse(settings['integrity_accepted_exceptions']);
+            setAcceptedExceptions(parsed && typeof parsed === 'object' ? parsed : {});
+          } catch {
+            setAcceptedExceptions({});
+          }
+        } else {
+          setAcceptedExceptions({});
+        }
+
         setLastSyncTime(new Date());
         setError(null);
       }
@@ -538,6 +567,7 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             throw restoreErr;
           }
         }
+
         await refreshAll();
       },
       redo: async () => {
@@ -671,12 +701,93 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteRecurrenceTemplate = async (id: string, fromDate?: string): Promise<void> => {
+    const targetTmpl = recurrenceTemplatesRef.current.find(t => t.id === id);
+    const tmplCopy = targetTmpl ? { ...targetTmpl } : null;
+
+    // Capture intégrale du snapshot de TOUTES les transactions actuellement rattachées à ce template
+    const affectedTxs = transactionsRef.current
+      .filter(t => t.templateId === id)
+      .map(t => ({ ...t }));
+
     await apiClient.recurrence.delete(id, fromDate);
     setRecurrenceTemplates(prev => prev.filter(t => t.id !== id));
     try {
       const freshTxs = await apiClient.transactions.get();
       setTransactions(freshTxs);
     } catch {}
+
+    if (tmplCopy) {
+      recordHistoryAction({
+        label: `Résiliation contrat « ${tmplCopy.label || 'Sans nom'} »`,
+        undo: async () => {
+          // 1. Restaurer le modèle récurrent
+          await apiClient.recurrence.save({
+            ...tmplCopy,
+            isActive: true,
+            endDate: null,
+            disabledFromMonth: null
+          });
+
+          // 2. Restaurer TOUTES les transactions impactées avec leur statut d'origine EXACT (cleared, pending, planned)
+          for (const tx of affectedTxs) {
+            try {
+              await apiClient.transactions.save({
+                ...tx,
+                templateId: tmplCopy.id,
+                deleted_at: null
+              });
+            } catch (err) {
+              console.warn('Erreur restauration transaction contractuelle :', err);
+            }
+          }
+
+          // 3. Synchronisation UNIQUE des mois futurs (0 mois passé)
+          const baseMonth = fromDate ? fromDate.slice(0, 7) : (tmplCopy.startDate ? tmplCopy.startDate.slice(0, 7) : undefined);
+          await apiClient.recurrence.syncRollingHorizon(baseMonth, 0, 12);
+          await refreshAll();
+        },
+        redo: async () => {
+          await apiClient.recurrence.delete(id, fromDate);
+          await refreshAll();
+        }
+      });
+    }
+  };
+
+  const generateSingleOccurrence = async (templateId: string, month: string): Promise<any> => {
+    const res = await apiClient.recurrence.generateSingleOccurrence(templateId, month);
+    if (res.success) {
+      const freshTxs = await apiClient.transactions.get();
+      setTransactions(freshTxs);
+    }
+    return res;
+  };
+
+  const acceptIntegrityException = async (templateId: string, month: string): Promise<void> => {
+    const key = `${templateId}_${month}`;
+    const next = { ...acceptedExceptions, [key]: true };
+    setAcceptedExceptions(next);
+    try {
+      await apiClient.settings.save({
+        integrity_accepted_exceptions: JSON.stringify(next)
+      });
+    } catch (e) {
+      console.warn('Erreur persistance exception d\'intégrité :', e);
+    }
+  };
+
+  const revokeIntegrityException = async (templateId: string, month: string): Promise<void> => {
+    const key = `${templateId}_${month}`;
+    const next = { ...acceptedExceptions };
+    delete next[key];
+    setAcceptedExceptions(next);
+    try {
+      await apiClient.settings.save({
+        integrity_accepted_exceptions: JSON.stringify(next)
+      });
+    } catch (e) {
+      console.warn('Erreur révocation exception d\'intégrité :', e);
+    }
   };
 
   const generateMonthlyOccurrences = async (month: string): Promise<number> => {
@@ -686,6 +797,19 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setTransactions(updatedTxs);
     }
     return res.generated;
+  };
+
+  const syncRollingHorizon = async (
+    currentMonth?: string,
+    pastMonths = 0,
+    futureMonths = 12
+  ): Promise<{ totalCreated: number; monthsProcessed: string[] }> => {
+    const res = await apiClient.recurrence.syncRollingHorizon(currentMonth, pastMonths, futureMonths);
+    if (res.totalCreated > 0) {
+      const updatedTxs = await apiClient.transactions.get();
+      setTransactions(updatedTxs);
+    }
+    return res;
   };
 
   const saveDashboardSettings = async (settings: Partial<DashboardSettings>): Promise<void> => {
@@ -759,7 +883,12 @@ export const ServerDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         saveRecurrenceTemplate,
         deleteRecurrenceTemplate,
         generateMonthlyOccurrences,
+        generateSingleOccurrence,
+        syncRollingHorizon,
         saveDashboardSettings,
+        acceptedExceptions,
+        acceptIntegrityException,
+        revokeIntegrityException,
         undoStack,
         redoStack,
         canUndo: undoStack.length > 0,

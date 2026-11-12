@@ -14,6 +14,7 @@ const INCOME_STATUS_OPTIONS = [
 
 import { useServerDataOptional } from '../contexts/ServerDataContext';
 import { getCurrentMonth, getCurrentDate } from '../utils/dateUtils';
+import { IntegritySectionBadge } from '../components/IntegritySectionBadge';
 
 export default function Incomes() {
   const serverData = useServerDataOptional();
@@ -34,10 +35,15 @@ export default function Incomes() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
 
-  // Génération automatique des échéances récurrentes pour le mois sélectionné
+  // Génération automatique des échéances récurrentes pour le mois sélectionné & notification du Watchdog universel
   React.useEffect(() => {
-    if (selectedMonth && serverData) {
-      serverData.generateMonthlyOccurrences(selectedMonth).catch(console.error);
+    if (selectedMonth) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('pbp-active-month-changed', { detail: { month: selectedMonth } }));
+      }
+      if (serverData) {
+        serverData.generateMonthlyOccurrences(selectedMonth).catch(console.error);
+      }
     }
   }, [selectedMonth, serverData]);
 
@@ -466,8 +472,11 @@ export default function Incomes() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h1 style={{ margin: 0 }}>Revenus</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+          <h1 style={{ margin: 0 }}>Revenus</h1>
+          <IntegritySectionBadge type="income" month={selectedMonth} />
+        </div>
         <Button onClick={() => handleOpen()} icon={<Plus size={16} />}>Ajouter un revenu</Button>
       </div>
 
