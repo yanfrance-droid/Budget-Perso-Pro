@@ -6,6 +6,26 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.6.2] - 2026-11-13
+
+### Changed
+- **Bandeaux d'en-tête teintés doux pour les 4 cartes « Serveur & Synchro » (`src/pages/Settings.tsx`) :**
+  - Ajout d'un bandeau complet sur chaque en-tête de carte avec fond pastel (8 % d'opacité), bordure assortie (20 % d'opacité) et titre coloré gras contrasté pour une surbrillance douce et instantanément lisible :
+    - *Base centralisée SQLite & Accès distant VPN* : bandeau bleu doux `rgba(59, 130, 246, 0.08)`, titre en bleu franc `#1d4ed8`.
+    - *Ressources système & Réseau Proxmox* : bandeau émeraude doux `rgba(16, 185, 129, 0.08)`, titre en vert franc `#047857`.
+    - *Santé & Optimisation du fichier SQLite* : bandeau bleu océan doux `rgba(2, 132, 199, 0.08)`, titre en bleu océan `#0284c7`.
+    - *Journal des événements techniques (Logs)* : bandeau violet doux `rgba(139, 92, 246, 0.08)`, titre en violet franc `#6d28d9`.
+- **Refonte ergonomique des boutons de navigation supérieure des Paramètres :**
+  - Remplacement de l'ancien style transparent/bleu dur par un système de boutons à palette thématique douce et logique :
+    - État inactif : fond doux surélevé (`--card-bg`), bordure subtile, texte net et accueillant (fini l'aspect fil de fer vide).
+    - État actif : fond pastel teinté (10 % d'opacité), bordure thématique fine, texte richement coloré et ombre portée délicate.
+    - Ajout de l'icône manquante `<Tag size={16} />` sur l'onglet *Catégories de budget*.
+- **Pérennité & Fiabilité des Tests :**
+  - Robustesse du test `Settings.test.tsx` face aux exécutions nocturnes à 23h (tolérance de collision d'horodatage sur le chiffre 23).
+  - 100 % des 70 suites de tests validées (675 tests au vert).
+
+---
+
 ## [1.6.1] - 2026-11-13
 
 ### Changed

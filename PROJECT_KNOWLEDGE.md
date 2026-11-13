@@ -1,7 +1,7 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-13 (Version 1.6.1 — Mise en valeur visuelle et ergonomique des rubriques & boutons Serveur & Synchro)  
+> **Dernière mise à jour :** 2026-11-13 (Version 1.6.2 — Bandeaux d'en-tête teintés doux & Palette ergonomique de navigation)  
 > **Statut QA :** 70 suites de tests Vitest, 675 tests au vert (100 % passants).
 
 ---
@@ -231,6 +231,12 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 ---
 
 ## 7. Historique Récent des Versions Majeures
+
+- **v1.6.2 :** Bandeaux d'en-tête teintés doux pour les 4 cartes « Serveur & Synchro » et boutons de navigation supérieure ergonomiques (`src/pages/Settings.tsx`) :
+  - *Bandeaux d'en-tête de carte à surbrillance douce :* Chaque carte possède désormais un bandeau d'en-tête dédié teinté d'un pastel doux (8 % d'opacité) avec liseré coordonné et titre gras contrasté (`#1d4ed8` en bleu pour le serveur central, `#047857` en vert pour Proxmox, `#0284c7` en bleu océan pour la santé SQLite, et `#6d28d9` en violet pour les logs).
+  - *Refonte des onglets de navigation supérieure :* Élimination de l'effet fil de fer vide ; les boutons inactifs bénéficient d'un fond accueillant et net, et l'onglet actif s'illumine d'un fond pastel thématique, d'une bordure fine et d'un texte franc lisible sans agressivité.
+  - *Harmonisation iconographique :* Ajout de l'icône `Tag` sur le bouton *Catégories de budget*.
+  - *Non-régression & Tests :* 70 suites de tests Vitest (675 tests au vert), build 100 % réussi.
 
 - **v1.6.1 :** Mise en valeur visuelle et ergonomique de l'onglet « Serveur & Synchro » (`src/pages/Settings.tsx`) :
   - *Découpage en 4 cartes distinctes :* Fin du bloc monolithique au profit de 4 conteneurs indépendants dotés d'accents doux et d'icônes sur pastilles colorées (`Base centralisée SQLite & Accès distant VPN` en bleu `#3b82f6`, `Ressources système & Réseau Proxmox` en vert `#10b981`, `Santé & Optimisation du fichier SQLite` en bleu ciel `#0284c7`, et `Journal des événements techniques (Logs)` en violet `#8b5cf6`).

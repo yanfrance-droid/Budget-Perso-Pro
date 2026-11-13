@@ -224,7 +224,7 @@ describe('Settings page - Protection des requêtes de maintenance', () => {
     expect(doctorSpy).toHaveBeenCalledTimes(1);
     const healthElements = await screen.findAllByText(/Base de données 100 % saine et intègre/i);
     expect(healthElements.length).toBeGreaterThan(0);
-    expect(screen.getByText(/23/i)).toBeDefined();
+    expect(screen.getAllByText(/23/i).length).toBeGreaterThan(0);
   });
 
   it('5. Déclenche le flux complet Dry-Run et application Healer pour ANOM-13 avec sélection de l\'option corbeille (soft-delete)', async () => {
