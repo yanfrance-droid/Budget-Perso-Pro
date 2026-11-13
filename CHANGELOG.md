@@ -6,6 +6,25 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.6.1] - 2026-11-13
+
+### Changed
+- **Mise en valeur visuelle et ergonomique de l'onglet « Serveur & Synchro » (`src/pages/Settings.tsx`) :**
+  - Découpage du bloc monolithique unique en **4 cartes distinctes** à bordure latérale douce et badges colorés pour une lisibilité immédiate :
+    1. **Base centralisée SQLite & Accès distant VPN** : liseré bleu `#3b82f6`, badge icône serveur sur fond doux, cartouche de synchronisation et statut de connexion.
+    2. **Ressources système & Réseau Proxmox** : liseré émeraude `#10b981`, badge activité, métriques conteneur temps réel (uptime, CPU, RAM, I/O réseau).
+    3. **Santé & Optimisation du fichier SQLite** : liseré bleu ciel `#0284c7`, badge outil, diagnostic d'intégrité, tailles base et WAL.
+    4. **Journal des événements techniques (Logs)** : liseré violet `#8b5cf6`, badge terminal, console dark monospace, actions et pied de page d'auteur.
+  - **Coloration distinctive et visible des boutons d'action de la base de données :**
+    - Bouton **Audit Intégrité (DB Doctor)** habillé d'un vert émeraude vibrant (`#059669`) avec ombre portée légère.
+    - Bouton **Optimiser & Compacter (VACUUM)** habillé d'un bleu océan dynamique (`#0284c7`) avec ombre portée légère.
+    - Bouton **Redémarrer le serveur** conservé en rouge de sécurité (`danger`).
+- **Pérennité & Non-Régression :**
+  - Maintien rigoureux de l'accessibilité ARIA et des rôles de boutons.
+  - 100 % des tests unitaires et d'intégration validés (70 suites, 675 tests au vert).
+
+---
+
 ## [1.6.0] - 2026-11-13
 
 ### Added

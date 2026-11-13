@@ -1582,10 +1582,22 @@ export default function Settings() {
             <Card title="Serveur personnel Proxmox & Synchronisation multi-appareils" value="" />
           </div>
 
-          <div className="card" style={{ padding: '1.5rem' }}>
+          {/* CARTE 1 : BASE CENTRALISÉE SQLITE & ACCÈS DISTANT VPN */}
+          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #3b82f6' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Server size={24} color="var(--primary-color)" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <Server size={22} color="#3b82f6" />
+                </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Base centralisée SQLite & Accès distant VPN</h3>
                   <span style={{ 
@@ -1706,13 +1718,31 @@ export default function Settings() {
               </div>
             )}
 
-            {/* BLOC 1 : SANTÉ & RESSOURCES SYSTÈME / RÉSEAU */}
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginBottom: '2rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <Activity size={20} color="var(--primary-color)" />
-                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Ressources système & Réseau Proxmox</h4>
+          </div>
+
+          {/* CARTE 2 : RESSOURCES SYSTÈME & RÉSEAU PROXMOX */}
+          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #10b981' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <Activity size={22} color="#10b981" />
                 </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Ressources système & Réseau Proxmox</h4>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #888)', marginTop: '0.15rem' }}>
+                    Métriques et performances temps réel du conteneur
+                  </div>
+                </div>
+              </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #888)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#22c55e', display: 'inline-block' }} />
                   <span>Métriques temps réel du conteneur</span>
@@ -1956,12 +1986,28 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* BLOC 2 : SANTÉ & MAINTENANCE DE LA BASE SQLITE */}
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginBottom: '2rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
-                <Wrench size={20} color="var(--primary-color)" />
-                <h4 style={{ margin: 0, fontSize: '1.05rem' }}>Santé & Optimisation du fichier SQLite</h4>
+          {/* CARTE 3 : SANTÉ & OPTIMISATION DU FICHIER SQLITE */}
+          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #0284c7' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '1.25rem' }}>
+              <div style={{
+                width: 42,
+                height: 42,
+                borderRadius: '10px',
+                backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Wrench size={22} color="#0284c7" />
               </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Santé & Optimisation du fichier SQLite</h4>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #888)', marginTop: '0.15rem' }}>
+                  Diagnostic d'intégrité, compactions WAL et réparation assistée
+                </div>
+              </div>
+            </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
                 <div style={{ padding: '0.85rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
@@ -1987,27 +2033,41 @@ export default function Settings() {
 
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 <Button
-                  variant="outline"
-                  icon={<Database size={16} />}
-                  onClick={handleVacuum}
-                  disabled={isVacuuming || isCheckingMaintenance}
-                >
-                  {isVacuuming ? 'Optimisation en cours...' : 'Optimiser & Compacter (VACUUM)'}
-                </Button>
-                <Button
-                  variant="outline"
+                  variant="primary"
                   icon={<ShieldCheck size={16} />}
                   onClick={handleRunDoctorAudit}
                   disabled={isDoctorAuditing}
+                  style={{
+                    backgroundColor: '#059669',
+                    borderColor: '#059669',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)'
+                  }}
                 >
                   {isDoctorAuditing ? 'Diagnostic...' : 'Audit Intégrité (DB Doctor)'}
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={<Database size={16} />}
+                  onClick={handleVacuum}
+                  disabled={isVacuuming || isCheckingMaintenance}
+                  style={{
+                    backgroundColor: '#0284c7',
+                    borderColor: '#0284c7',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 4px rgba(2, 132, 199, 0.25)'
+                  }}
+                >
+                  {isVacuuming ? 'Optimisation en cours...' : 'Optimiser & Compacter (VACUUM)'}
                 </Button>
                 <Button
                   variant="danger"
                   icon={<Power size={16} />}
                   onClick={() => setIsRestartModalOpen(true)}
                   disabled={isRestarting}
-                  style={{ marginLeft: 'auto' }}
+                  style={{ marginLeft: 'auto', fontWeight: 600 }}
                 >
                   {isRestarting ? 'Redémarrage...' : 'Redémarrer le serveur'}
                 </Button>
@@ -2249,15 +2309,31 @@ export default function Settings() {
                   </div>
                 </div>
               </Modal>
-            </div>
+          </div>
 
-            {/* BLOC 3 : JOURNAL TECHNIQUE DU SERVEUR */}
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginBottom: '2rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <Terminal size={20} color="var(--primary-color)" />
-                  <h4 style={{ margin: 0, fontSize: '1.05rem' }}>Journal des événements techniques (Logs)</h4>
+          {/* CARTE 4 : JOURNAL DES ÉVÉNEMENTS TECHNIQUES (LOGS) */}
+          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #8b5cf6' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <Terminal size={22} color="#8b5cf6" />
                 </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Journal des événements techniques (Logs)</h4>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #888)', marginTop: '0.15rem' }}>
+                    Audit tournant et traçabilité des opérations serveur
+                  </div>
+                </div>
+              </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <Button
                     variant="outline"
@@ -2321,7 +2397,6 @@ export default function Settings() {
                   </div>
                 )}
               </div>
-            </div>
 
             {/* PIED DE PAGE : MENTION AUTEUR & VISION */}
             <div style={{ 
