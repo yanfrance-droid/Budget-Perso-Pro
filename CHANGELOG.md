@@ -6,6 +6,24 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.6.3] - 2026-11-13
+
+### Changed
+- **Bandeaux d'en-tête pleins et contrastés pour les 4 cartes « Serveur & Synchro » (`src/pages/Settings.tsx`) :**
+  - Remplacement des fonds translucides à 8 % par de **vrais bandeaux pleins, riches et immédiatement visibles** avec typographie blanche immaculée et pastille d'icône translucide :
+    - *Base centralisée SQLite & Accès distant VPN* : bandeau bleu roi `#1d4ed8`, titre blanc pur, boutons de session en verre translucide avec texte blanc.
+    - *Ressources système & Réseau Proxmox* : bandeau vert émeraude franc `#059669`, titre blanc pur, badge "Actif & Surveillé" intégré.
+    - *Santé & Optimisation du fichier SQLite* : bandeau bleu océan dynamique `#0284c7`, titre blanc pur.
+    - *Journal des événements techniques (Logs)* : bandeau violet franc `#7c3aed`, titre blanc pur et boutons d'action du journal en verre translucide blanc.
+- **Refonte haute visibilité des boutons de navigation supérieure :**
+  - Les boutons inactifs passent sur un fond doux surélevé (`#f1f5f9`), une bordure fine et conservent leur icône thématisée en couleur.
+  - Le bouton actif s'illumine en **couleur pleine (Solid Badge)** avec texte blanc immaculé (`#ffffff`) et ombre portée douce, rendant l'onglet sélectionné 100 % indiscutable.
+- **Éradication du cache persistant mobile & en-têtes HTTP anti-cache (`server/app.ts`) :**
+  - Injection des en-têtes `Cache-Control: no-cache, no-store, must-revalidate` sur la racine et les pages `.html`.
+  - Résout définitivement le problème de mise en cache agressive sur smartphones (iPhone / Android) où les anciens bundles restaient affichés après une mise à jour serveur.
+
+---
+
 ## [1.6.2] - 2026-11-13
 
 ### Changed

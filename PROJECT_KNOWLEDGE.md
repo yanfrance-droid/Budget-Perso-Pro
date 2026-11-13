@@ -1,7 +1,7 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-13 (Version 1.6.2 — Bandeaux d'en-tête teintés doux & Palette ergonomique de navigation)  
+> **Dernière mise à jour :** 2026-11-13 (Version 1.6.3 — Bandeaux pleins haute visibilité, Navigation Solid Badge & En-têtes HTTP anti-cache mobile)  
 > **Statut QA :** 70 suites de tests Vitest, 675 tests au vert (100 % passants).
 
 ---
@@ -231,6 +231,12 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 ---
 
 ## 7. Historique Récent des Versions Majeures
+
+- **v1.6.3 :** Bandeaux pleins haute visibilité pour les 4 cartes « Serveur & Synchro », Navigation Solid Badge et En-têtes HTTP anti-cache mobile (`src/pages/Settings.tsx` & `server/app.ts`) :
+  - *Bandeaux de cartes pleins et contrastés :* Fin des teintes pâles translucides ; chaque en-tête de carte est désormais un bandeau plein et éclatant avec texte et icônes blanc pur (Bleu roi `#1d4ed8`, Vert émeraude `#059669`, Bleu océan `#0284c7`, Violet `#7c3aed`), offrant une visibilité immédiate et sans équivoque sur PC et smartphone.
+  - *Navigation supérieure en Solid Badge :* L'onglet sélectionné passe en couleur pleine saturée avec texte blanc pur `#ffffff` et ombre portée dédiée, tandis que les onglets inactifs restent en gris doux clair `#f1f5f9` avec leur icône thématique colorée.
+  - *En-têtes HTTP Anti-Cache Mobile (`server/app.ts`) :* Envoi systématique de `Cache-Control: no-cache, no-store, must-revalidate` sur les fichiers `.html`, forçant Safari iOS et Chrome Android à télécharger instantanément le bundle Vite le plus récent sans nécessiter de purge manuelle de l'historique mobile.
+  - *Non-régression :* Validation stricte des 70 suites de tests Vitest (675 tests au vert), persistance des 496 opérations SQLite.
 
 - **v1.6.2 :** Bandeaux d'en-tête teintés doux pour les 4 cartes « Serveur & Synchro » et boutons de navigation supérieure ergonomiques (`src/pages/Settings.tsx`) :
   - *Bandeaux d'en-tête de carte à surbrillance douce :* Chaque carte possède désormais un bandeau d'en-tête dédié teinté d'un pastel doux (8 % d'opacité) avec liseré coordonné et titre gras contrasté (`#1d4ed8` en bleu pour le serveur central, `#047857` en vert pour Proxmox, `#0284c7` en bleu océan pour la santé SQLite, et `#6d28d9` en violet pour les logs).

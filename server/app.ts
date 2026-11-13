@@ -1020,7 +1020,17 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
 
         const contentType = mimeTypes[ext] || 'application/octet-stream';
         const content = fs.readFileSync(filePath);
-        res.writeHead(200, { 'Content-Type': contentType });
+        const headers: Record<string, string> = { 'Content-Type': contentType };
+
+        if (ext === '.html') {
+          headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+          headers['Pragma'] = 'no-cache';
+          headers['Expires'] = '0';
+        } else {
+          headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+        }
+
+        res.writeHead(200, headers);
         res.end(content);
         return;
       }

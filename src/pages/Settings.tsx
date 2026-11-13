@@ -831,14 +831,14 @@ export default function Settings() {
     }
   };
 
-  const getNavBtnStyle = (sectionKey: string, activeColor: string, activeBg: string) => {
+  const getNavBtnStyle = (sectionKey: string, activeColor: string) => {
     const isActive = activeSection === sectionKey;
     return {
-      backgroundColor: isActive ? activeBg : 'var(--card-bg, #ffffff)',
-      borderColor: isActive ? activeColor : 'var(--border-color, #e2e8f0)',
-      color: isActive ? activeColor : 'var(--text-main, #334155)',
-      fontWeight: isActive ? 600 : 500,
-      boxShadow: isActive ? `0 2px 4px ${activeBg}` : '0 1px 2px rgba(0,0,0,0.02)',
+      backgroundColor: isActive ? activeColor : 'var(--bg-secondary, #f1f5f9)',
+      borderColor: isActive ? activeColor : 'var(--border-color, #cbd5e1)',
+      color: isActive ? '#ffffff' : 'var(--text-main, #334155)',
+      fontWeight: isActive ? 700 : 600,
+      boxShadow: isActive ? `0 2px 6px ${activeColor}55` : '0 1px 2px rgba(0,0,0,0.03)',
       transition: 'all 0.15s ease'
     };
   };
@@ -852,64 +852,64 @@ export default function Settings() {
         <Button 
           variant={activeSection === 'accounts' ? 'primary' : 'outline'}
           onClick={() => setActiveSection('accounts')}
-          icon={<Wallet size={16} />}
-          style={getNavBtnStyle('accounts', '#2563eb', 'rgba(37, 99, 235, 0.1)')}
+          icon={<Wallet size={16} color={activeSection === 'accounts' ? '#ffffff' : '#2563eb'} />}
+          style={getNavBtnStyle('accounts', '#2563eb')}
         >
           Comptes bancaires ({accounts.length})
         </Button>
         <Button 
           variant={activeSection === 'payers' ? 'primary' : 'outline'}
           onClick={() => setActiveSection('payers')}
-          icon={<Building size={16} />}
-          style={getNavBtnStyle('payers', '#0d9488', 'rgba(13, 148, 136, 0.1)')}
+          icon={<Building size={16} color={activeSection === 'payers' ? '#ffffff' : '#0d9488'} />}
+          style={getNavBtnStyle('payers', '#0d9488')}
         >
           Organismes verseurs ({incomePayers.length})
         </Button>
         <Button 
           variant={activeSection === 'categories' ? 'primary' : 'outline'}
           onClick={() => setActiveSection('categories')}
-          icon={<Tag size={16} />}
-          style={getNavBtnStyle('categories', '#6366f1', 'rgba(99, 102, 241, 0.1)')}
+          icon={<Tag size={16} color={activeSection === 'categories' ? '#ffffff' : '#6366f1'} />}
+          style={getNavBtnStyle('categories', '#6366f1')}
         >
           Catégories de budget
         </Button>
         <Button 
           variant={activeSection === 'loans_history' ? 'primary' : 'outline'}
           onClick={() => setActiveSection('loans_history')}
-          icon={<TrendingDown size={16} />}
-          style={getNavBtnStyle('loans_history', '#d97706', 'rgba(217, 119, 6, 0.1)')}
+          icon={<TrendingDown size={16} color={activeSection === 'loans_history' ? '#ffffff' : '#d97706'} />}
+          style={getNavBtnStyle('loans_history', '#d97706')}
         >
           Historique des crédits
         </Button>
         <Button 
           variant={activeSection === 'backup' ? 'primary' : 'outline'}
           onClick={() => setActiveSection('backup')}
-          icon={<Download size={16} />}
-          style={getNavBtnStyle('backup', '#059669', 'rgba(5, 150, 105, 0.1)')}
+          icon={<Download size={16} color={activeSection === 'backup' ? '#ffffff' : '#059669'} />}
+          style={getNavBtnStyle('backup', '#059669')}
         >
           Sauvegardes & Restauration
         </Button>
         <Button 
           variant={activeSection === 'preferences' ? 'primary' : 'outline'}
           onClick={() => setActiveSection('preferences')}
-          icon={<Palette size={16} />}
-          style={getNavBtnStyle('preferences', '#c026d3', 'rgba(192, 38, 211, 0.1)')}
+          icon={<Palette size={16} color={activeSection === 'preferences' ? '#ffffff' : '#c026d3'} />}
+          style={getNavBtnStyle('preferences', '#c026d3')}
         >
           Apparence & Confidentialité
         </Button>
         <Button 
           variant={activeSection === 'server' ? 'primary' : 'outline'}
           onClick={() => setActiveSection('server')}
-          icon={<Server size={16} />}
-          style={getNavBtnStyle('server', '#0284c7', 'rgba(2, 132, 199, 0.1)')}
+          icon={<Server size={16} color={activeSection === 'server' ? '#ffffff' : '#0284c7'} />}
+          style={getNavBtnStyle('server', '#0284c7')}
         >
           Serveur & Synchro
         </Button>
         <Button 
           variant={activeSection === 'help' ? 'primary' : 'outline'}
           onClick={() => setActiveSection('help')}
-          icon={<HelpCircle size={16} />}
-          style={getNavBtnStyle('help', '#7c3aed', 'rgba(124, 58, 237, 0.1)')}
+          icon={<HelpCircle size={16} color={activeSection === 'help' ? '#ffffff' : '#7c3aed'} />}
+          style={getNavBtnStyle('help', '#7c3aed')}
         >
           Aide & Documentation
         </Button>
@@ -1605,7 +1605,7 @@ export default function Settings() {
           </div>
 
           {/* CARTE 1 : BASE CENTRALISÉE SQLITE & ACCÈS DISTANT VPN */}
-          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #3b82f6' }}>
+          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '5px solid #1d4ed8' }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -1613,40 +1613,43 @@ export default function Settings() {
               flexWrap: 'wrap',
               gap: '1rem',
               marginBottom: '1.25rem',
-              padding: '0.85rem 1rem',
-              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+              padding: '1rem 1.25rem',
+              backgroundColor: '#1d4ed8',
               borderRadius: '8px',
-              border: '1px solid rgba(59, 130, 246, 0.2)'
+              color: '#ffffff',
+              boxShadow: '0 2px 6px rgba(29, 78, 216, 0.25)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
                 <div style={{
-                  width: 42,
-                  height: 42,
+                  width: 44,
+                  height: 44,
                   borderRadius: '10px',
-                  backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0
                 }}>
-                  <Server size={22} color="#1d4ed8" />
+                  <Server size={24} color="#ffffff" />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#1d4ed8', fontWeight: 700 }}>Base centralisée SQLite & Accès distant VPN</h3>
+                  <h3 style={{ margin: 0, fontSize: '1.18rem', color: '#ffffff', fontWeight: 700 }}>Base centralisée SQLite & Accès distant VPN</h3>
                   <span style={{ 
                     fontSize: '0.85rem', 
-                    color: serverData?.error ? '#ef4444' : (serverData ? 'var(--success-color, #22c55e)' : 'var(--text-secondary, #888)'), 
+                    color: serverData?.error ? '#fca5a5' : '#86efac', 
                     display: 'flex', 
                     alignItems: 'center', 
                     gap: '0.35rem', 
-                    marginTop: '0.2rem' 
+                    marginTop: '0.25rem',
+                    fontWeight: 600
                   }}>
                     <span style={{ 
                       width: 8, 
                       height: 8, 
                       borderRadius: '50%', 
-                      backgroundColor: serverData?.error ? '#ef4444' : (serverData ? '#22c55e' : '#f59e0b'), 
-                      display: 'inline-block' 
+                      backgroundColor: serverData?.error ? '#ef4444' : '#22c55e', 
+                      display: 'inline-block',
+                      boxShadow: '0 0 4px #ffffff'
                     }} />
                     {serverData?.error 
                       ? 'Serveur déconnecté (Injoignable)' 
@@ -1657,13 +1660,14 @@ export default function Settings() {
 
               {isAuthenticated && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary, #666)' }}>
-                    Session : <strong>{user?.username || 'Administrateur'}</strong>
+                  <span style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.9)' }}>
+                    Session : <strong style={{ color: '#ffffff' }}>{user?.username || 'Administrateur'}</strong>
                   </span>
                   <Button 
                     variant="outline" 
                     icon={<Lock size={15} />}
                     onClick={handleOpenPasswordModal}
+                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', borderColor: 'rgba(255, 255, 255, 0.35)', color: '#ffffff', fontWeight: 600 }}
                   >
                     Mot de passe
                   </Button>
@@ -1672,6 +1676,7 @@ export default function Settings() {
                     icon={<KeyRound size={15} />}
                     onClick={handleShowRecoveryKey}
                     disabled={recoveryKeyLoading}
+                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', borderColor: 'rgba(255, 255, 255, 0.35)', color: '#ffffff', fontWeight: 600 }}
                   >
                     {recoveryKeyLoading ? 'Clé...' : 'Clé de secours'}
                   </Button>
@@ -1679,6 +1684,7 @@ export default function Settings() {
                     variant="outline" 
                     icon={<LogOut size={15} />}
                     onClick={logout}
+                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', borderColor: 'rgba(255, 255, 255, 0.35)', color: '#ffffff', fontWeight: 600 }}
                   >
                     Déconnexion
                   </Button>
@@ -1754,7 +1760,7 @@ export default function Settings() {
           </div>
 
           {/* CARTE 2 : RESSOURCES SYSTÈME & RÉSEAU PROXMOX */}
-          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #10b981' }}>
+          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '5px solid #059669' }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -1762,33 +1768,44 @@ export default function Settings() {
               flexWrap: 'wrap',
               gap: '0.75rem',
               marginBottom: '1.25rem',
-              padding: '0.85rem 1rem',
-              backgroundColor: 'rgba(16, 185, 129, 0.08)',
+              padding: '1rem 1.25rem',
+              backgroundColor: '#059669',
               borderRadius: '8px',
-              border: '1px solid rgba(16, 185, 129, 0.2)'
+              color: '#ffffff',
+              boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
                 <div style={{
-                  width: 42,
-                  height: 42,
+                  width: 44,
+                  height: 44,
                   borderRadius: '10px',
-                  backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0
                 }}>
-                  <Activity size={22} color="#047857" />
+                  <Activity size={24} color="#ffffff" />
                 </div>
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#047857' }}>Ressources système & Réseau Proxmox</h4>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #666)', marginTop: '0.15rem' }}>
+                  <h4 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 700, color: '#ffffff' }}>Ressources système & Réseau Proxmox</h4>
+                  <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.85)', marginTop: '0.2rem' }}>
                     Métriques et performances temps réel du conteneur
                   </div>
                 </div>
               </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #666)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block' }} />
+              <div style={{
+                fontSize: '0.8rem',
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                padding: '0.35rem 0.75rem',
+                borderRadius: '20px',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                fontWeight: 600
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#86efac', display: 'inline-block' }} />
                 <span>Actif & Surveillé</span>
               </div>
             </div>
@@ -2031,32 +2048,33 @@ export default function Settings() {
             </div>
 
           {/* CARTE 3 : SANTÉ & OPTIMISATION DU FICHIER SQLITE */}
-          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #0284c7' }}>
+          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '5px solid #0284c7' }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.85rem',
               marginBottom: '1.25rem',
-              padding: '0.85rem 1rem',
-              backgroundColor: 'rgba(2, 132, 199, 0.08)',
+              padding: '1rem 1.25rem',
+              backgroundColor: '#0284c7',
               borderRadius: '8px',
-              border: '1px solid rgba(2, 132, 199, 0.2)'
+              color: '#ffffff',
+              boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)'
             }}>
               <div style={{
-                width: 42,
-                height: 42,
+                width: 44,
+                height: 44,
                 borderRadius: '10px',
-                backgroundColor: 'rgba(2, 132, 199, 0.15)',
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0
               }}>
-                <Wrench size={22} color="#0284c7" />
+                <Wrench size={24} color="#ffffff" />
               </div>
               <div>
-                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0284c7' }}>Santé & Optimisation du fichier SQLite</h4>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #666)', marginTop: '0.15rem' }}>
+                <h4 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 700, color: '#ffffff' }}>Santé & Optimisation du fichier SQLite</h4>
+                <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.85)', marginTop: '0.2rem' }}>
                   Diagnostic d'intégrité, compactions WAL et réparation assistée
                 </div>
               </div>
@@ -2365,7 +2383,7 @@ export default function Settings() {
           </div>
 
           {/* CARTE 4 : JOURNAL DES ÉVÉNEMENTS TECHNIQUES (LOGS) */}
-          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #8b5cf6' }}>
+          <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '5px solid #7c3aed' }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -2373,58 +2391,61 @@ export default function Settings() {
               flexWrap: 'wrap',
               gap: '0.75rem',
               marginBottom: '1rem',
-              padding: '0.85rem 1rem',
-              backgroundColor: 'rgba(139, 92, 246, 0.08)',
+              padding: '1rem 1.25rem',
+              backgroundColor: '#7c3aed',
               borderRadius: '8px',
-              border: '1px solid rgba(139, 92, 246, 0.2)'
+              color: '#ffffff',
+              boxShadow: '0 2px 6px rgba(124, 58, 237, 0.25)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
                 <div style={{
-                  width: 42,
-                  height: 42,
+                  width: 44,
+                  height: 44,
                   borderRadius: '10px',
-                  backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0
                 }}>
-                  <Terminal size={22} color="#6d28d9" />
+                  <Terminal size={24} color="#ffffff" />
                 </div>
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#6d28d9' }}>Journal des événements techniques (Logs)</h4>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #666)', marginTop: '0.15rem' }}>
+                  <h4 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 700, color: '#ffffff' }}>Journal des événements techniques (Logs)</h4>
+                  <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.85)', marginTop: '0.2rem' }}>
                     Audit tournant et traçabilité des opérations serveur
                   </div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <Button
-                    variant="outline"
-                    icon={<RefreshCw size={14} />}
-                    onClick={fetchTechnicalLogs}
-                    disabled={isLoadingLogs}
-                  >
-                    {isLoadingLogs ? '...' : 'Actualiser'}
+                <Button
+                  variant="outline"
+                  icon={<RefreshCw size={14} />}
+                  onClick={fetchTechnicalLogs}
+                  disabled={isLoadingLogs}
+                  style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', borderColor: 'rgba(255, 255, 255, 0.3)', color: '#ffffff', fontWeight: 600 }}
+                >
+                  {isLoadingLogs ? '...' : 'Actualiser'}
+                </Button>
+                <a
+                  href={apiClient.maintenance.getDownloadLogsUrl()}
+                  download
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Button variant="outline" icon={<Download size={14} />} style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', borderColor: 'rgba(255, 255, 255, 0.3)', color: '#ffffff', fontWeight: 600 }}>
+                    Télécharger (.log)
                   </Button>
-                  <a
-                    href={apiClient.maintenance.getDownloadLogsUrl()}
-                    download
-                    style={{ textDecoration: 'none' }}
-                  >
-                    <Button variant="outline" icon={<Download size={14} />}>
-                      Télécharger (.log)
-                    </Button>
-                  </a>
-                  <Button
-                    variant="outline"
-                    icon={<Trash2 size={14} />}
-                    onClick={handleClearTechnicalLogs}
-                  >
-                    Effacer
-                  </Button>
-                </div>
+                </a>
+                <Button
+                  variant="outline"
+                  icon={<Trash2 size={14} />}
+                  onClick={handleClearTechnicalLogs}
+                  style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', borderColor: 'rgba(255, 255, 255, 0.3)', color: '#ffffff', fontWeight: 600 }}
+                >
+                  Effacer
+                </Button>
               </div>
+            </div>
 
               <p style={{ color: 'var(--text-secondary, #666)', fontSize: '0.85rem', marginBottom: '0.75rem', lineHeight: 1.4 }}>
                 Historique des démarrages serveur, requêtes HTTP, avertissements et erreurs SQLite. Rotation automatique active (taille max 5 Mo).
