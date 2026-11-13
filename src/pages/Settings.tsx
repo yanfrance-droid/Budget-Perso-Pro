@@ -13,7 +13,7 @@ import LoanCapitalHistoryManager from '../components/settings/LoanCapitalHistory
 import { calculateRealBalance } from '../engine/calculations';
 import { useServerDataOptional } from '../contexts/ServerDataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { apiClient } from '../services/apiClient';
+import { apiClient, type DoctorReport, type HealerResult, type HealerActionPlan } from '../services/apiClient';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { resolvePrimaryAccountId, getAccountTypeLabel } from '../services/accountPresentation';
 
@@ -118,14 +118,18 @@ export default function Settings() {
   } | null>(null);
   const [isCheckingMaintenance, setIsCheckingMaintenance] = useState(false);
   const [isVacuuming, setIsVacuuming] = useState(false);
-  const [isCheckingOrphans, setIsCheckingOrphans] = useState(false);
-  const [isRepairingOrphans, setIsRepairingOrphans] = useState(false);
+  // États DB Doctor & Safe Healer
+  const [doctorReport, setDoctorReport] = useState<DoctorReport | null>(null);
+  const [isDoctorAuditing, setIsDoctorAuditing] = useState(false);
+  const [healerResult, setHealerResult] = useState<HealerResult | null>(null);
+  const [isHealerPreviewing, setIsHealerPreviewing] = useState(false);
+  const [isHealerApplying, setIsHealerApplying] = useState(false);
+  const [isDryRunModalOpen, setIsDryRunModalOpen] = useState(false);
+  const [selectedTargetAccount, setSelectedTargetAccount] = useState<string>('');
+  const [selectedTargetLoan, setSelectedTargetLoan] = useState<string>('');
+  const [pastPlannedResolution, setPastPlannedResolution] = useState<'clear' | 'trash'>('clear');
   const [isRestoringDbFile, setIsRestoringDbFile] = useState(false);
   const dbFileInputRef = useRef<HTMLInputElement>(null);
-  const [orphanReport, setOrphanReport] = useState<{
-    orphanTransactionsCount: number;
-    details: string[];
-  } | null>(null);
   const [maintenanceMessage, setMaintenanceMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // États Changement de mot de passe & Clé de secours
@@ -378,38 +382,82 @@ export default function Settings() {
     }
   };
 
-  const handleCheckOrphans = async () => {
-    setIsCheckingOrphans(true);
+  const handleRunDoctorAudit = async () => {
+    setIsDoctorAuditing(true);
     setMaintenanceMessage(null);
     try {
-      const res = await apiClient.maintenance.checkOrphans();
-      setOrphanReport({
-        orphanTransactionsCount: res.orphanTransactionsCount,
-        details: res.details
-      });
-      if (res.orphanTransactionsCount === 0) {
-        setMaintenanceMessage({ type: 'success', text: 'Aucune anomalie orpheline détectée. La base est parfaitement cohérente.' });
+      const report = await apiClient.maintenance.getDoctorAudit();
+      setDoctorReport(report);
+      if (report.totalAnomalies === 0 && report.sqliteIntegrity === 'ok') {
+        setMaintenanceMessage({ type: 'success', text: 'Diagnostic DB Doctor : Base de données 100 % saine et intègre (0 anomalie).' });
       }
     } catch (err: any) {
-      setMaintenanceMessage({ type: 'error', text: err.message || 'Échec du contrôle des orphelins.' });
+      setMaintenanceMessage({ type: 'error', text: err.message || 'Échec du diagnostic DB Doctor.' });
     } finally {
-      setIsCheckingOrphans(false);
+      setIsDoctorAuditing(false);
     }
   };
 
-  const handleRepairOrphans = async () => {
-    setIsRepairingOrphans(true);
+  const buildHealerPlans = (): HealerActionPlan[] => {
+    if (!doctorReport || doctorReport.anomalies.length === 0) return [];
+    return doctorReport.anomalies.map(anom => {
+      const plan: HealerActionPlan = {
+        ruleId: anom.id,
+        targetIds: anom.affectedIds
+      };
+      if (anom.id === 'ANOM-04' || anom.id === 'ANOM-05') {
+        plan.userParameters = { targetAccountId: selectedTargetAccount };
+      } else if (anom.id === 'ANOM-03') {
+        plan.userParameters = { targetLoanId: selectedTargetLoan || undefined };
+      } else if (anom.id === 'ANOM-13') {
+        plan.userParameters = { pastPlannedResolution };
+      }
+      return plan;
+    });
+  };
+
+  const handlePreviewHealer = async () => {
+    if (!doctorReport || doctorReport.anomalies.length === 0) return;
+
+    // Vérification des arbitrages obligatoires
+    const hasAccountAnom = doctorReport.anomalies.some(a => a.id === 'ANOM-04' || a.id === 'ANOM-05');
+    if (hasAccountAnom && !selectedTargetAccount) {
+      alert('Veuillez sélectionner un compte bancaire cible pour réassigner les opérations concernées (ANOM-04 / ANOM-05).');
+      return;
+    }
+
+    setIsHealerPreviewing(true);
     setMaintenanceMessage(null);
     try {
-      const res = await apiClient.maintenance.repairOrphans();
-      setMaintenanceMessage({ type: 'success', text: res.message });
-      setOrphanReport(null);
+      const plans = buildHealerPlans();
+      const res = await apiClient.maintenance.previewHealer(plans);
+      setHealerResult(res);
+      setIsDryRunModalOpen(true);
+    } catch (err: any) {
+      setMaintenanceMessage({ type: 'error', text: err.message || 'Échec de la simulation Dry-Run.' });
+    } finally {
+      setIsHealerPreviewing(false);
+    }
+  };
+
+  const handleApplyHealer = async () => {
+    if (!doctorReport || doctorReport.anomalies.length === 0) return;
+    setIsHealerApplying(true);
+    try {
+      const plans = buildHealerPlans();
+      const res = await apiClient.maintenance.applyHealer(plans);
+      setIsDryRunModalOpen(false);
       await serverData?.refreshAll();
       await fetchMaintenanceStatus();
+      await handleRunDoctorAudit();
+      setMaintenanceMessage({
+        type: 'success',
+        text: `Réparation appliquée avec succès (${res.totalModifications} modification(s)). Sauvegarde de sécurité créée.`
+      });
     } catch (err: any) {
-      setMaintenanceMessage({ type: 'error', text: err.message || 'Échec de la réparation des orphelins.' });
+      setMaintenanceMessage({ type: 'error', text: err.message || 'Échec de la réparation Healer.' });
     } finally {
-      setIsRepairingOrphans(false);
+      setIsHealerApplying(false);
     }
   };
 
@@ -1949,10 +1997,10 @@ export default function Settings() {
                 <Button
                   variant="outline"
                   icon={<ShieldCheck size={16} />}
-                  onClick={handleCheckOrphans}
-                  disabled={isCheckingOrphans}
+                  onClick={handleRunDoctorAudit}
+                  disabled={isDoctorAuditing}
                 >
-                  {isCheckingOrphans ? 'Diagnostic...' : 'Vérifier la cohérence & orphelins'}
+                  {isDoctorAuditing ? 'Diagnostic...' : 'Audit Intégrité (DB Doctor)'}
                 </Button>
                 <Button
                   variant="danger"
@@ -1965,28 +2013,242 @@ export default function Settings() {
                 </Button>
               </div>
 
-              {/* Rapport de détection des orphelins */}
-              {orphanReport && orphanReport.orphanTransactionsCount > 0 && (
-                <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', borderRadius: '6px' }}>
-                  <div style={{ fontWeight: 600, color: '#b45309', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <AlertTriangle size={18} />
-                    {orphanReport.orphanTransactionsCount} incohérence(s) orpheline(s) détectée(s) :
+              {/* PANNEAU DB DOCTOR & SAFE HEALER */}
+              {doctorReport && (
+                <div style={{ 
+                  marginTop: '1.25rem', 
+                  padding: '1.25rem', 
+                  backgroundColor: 'var(--bg-secondary, #fafafa)', 
+                  border: `1px solid ${doctorReport.status === 'healthy' ? '#10b981' : doctorReport.status === 'warning' ? '#f59e0b' : '#ef4444'}`, 
+                  borderRadius: '8px' 
+                }}>
+                  {/* Entête Santé */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      {doctorReport.status === 'healthy' && <CheckCircle size={22} color="#10b981" />}
+                      {doctorReport.status === 'warning' && <AlertTriangle size={22} color="#f59e0b" />}
+                      {doctorReport.status === 'critical' && <AlertCircle size={22} color="#ef4444" />}
+                      <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                        {doctorReport.status === 'healthy' ? 'Base de données 100 % saine et intègre' : `${doctorReport.totalAnomalies} anomalie(s) détectée(s)`}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      SQLite quick_check: <strong>{doctorReport.sqliteIntegrity}</strong> • Audit: {new Date(doctorReport.timestamp).toLocaleTimeString()}
+                    </div>
                   </div>
-                  <ul style={{ margin: '0 0 0.85rem 1.25rem', padding: 0, fontSize: '0.85rem', color: '#92400e' }}>
-                    {orphanReport.details.map((d, idx) => (
-                      <li key={idx}>{d}</li>
-                    ))}
-                  </ul>
-                  <Button
-                    variant="primary"
-                    icon={<Wrench size={16} />}
-                    onClick={handleRepairOrphans}
-                    disabled={isRepairingOrphans}
-                  >
-                    {isRepairingOrphans ? 'Réparation...' : 'Réparer et réaligner les orphelins'}
-                  </Button>
+
+                  {/* Cartouche Métriques & Ventilation Dynamique des 30 Contrats */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
+                    gap: '0.6rem', 
+                    marginBottom: '1rem',
+                    fontSize: '0.85rem'
+                  }}>
+                    <div style={{ padding: '0.6rem', backgroundColor: 'var(--card-bg, #fff)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ color: 'var(--text-secondary)' }}>Transactions actives</div>
+                      <div style={{ fontWeight: 600, fontSize: '1.05rem', marginTop: '0.2rem' }}>{doctorReport.metrics.totalActiveTransactions}</div>
+                    </div>
+                    <div style={{ padding: '0.6rem', backgroundColor: 'var(--card-bg, #fff)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ color: 'var(--text-secondary)' }}>Comptes bancaires</div>
+                      <div style={{ fontWeight: 600, fontSize: '1.05rem', marginTop: '0.2rem' }}>{doctorReport.metrics.totalAccounts}</div>
+                    </div>
+                    <div style={{ padding: '0.6rem', backgroundColor: 'var(--card-bg, #fff)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ color: 'var(--text-secondary)' }}>Prêts & Crédits</div>
+                      <div style={{ fontWeight: 600, fontSize: '1.05rem', marginTop: '0.2rem' }}>{doctorReport.metrics.totalLoans}</div>
+                    </div>
+                    <div style={{ padding: '0.6rem', backgroundColor: 'var(--card-bg, #fff)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ color: 'var(--text-secondary)' }}>Contrats récurrents ({doctorReport.metrics.totalRecurrenceTemplates})</div>
+                      <div style={{ fontSize: '0.8rem', marginTop: '0.2rem', lineHeight: '1.3' }}>
+                        • <strong>{doctorReport.metrics.activeFixedTemplates}</strong> fixes actives<br/>
+                        • <strong>{doctorReport.metrics.activeIncomeTemplates}</strong> revenus actifs<br/>
+                        • <strong>{doctorReport.metrics.activeVariableTemplates}</strong> variables actives<br/>
+                        • <strong>{doctorReport.metrics.inactiveTemplates}</strong> désactivée(s)
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Liste des anomalies ou message sain */}
+                  {doctorReport.totalAnomalies === 0 ? (
+                    <div style={{ padding: '0.75rem', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#065f46', borderRadius: '6px', fontSize: '0.9rem' }}>
+                      Aucune incohérence relationnelle, aucun orphelin et aucun doublon. Votre base SQLite fonctionne à plein régime.
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontWeight: 600, marginBottom: '0.6rem', fontSize: '0.95rem' }}>
+                        Détail des anomalies nécessitant un traitement ou un arbitrage :
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+                        {doctorReport.anomalies.map((anom) => (
+                          <div key={anom.id} style={{ padding: '0.75rem', backgroundColor: 'var(--card-bg, #fff)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                              <span style={{ fontWeight: 600, color: anom.severity === 'blocker' || anom.severity === 'critical' ? '#dc2626' : '#d97706' }}>
+                                [{anom.id}] {anom.name} ({anom.count})
+                              </span>
+                              <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px', backgroundColor: anom.severity === 'blocker' ? '#fee2e2' : '#fef3c7', color: anom.severity === 'blocker' ? '#991b1b' : '#92400e', fontWeight: 600 }}>
+                                {anom.severity.toUpperCase()}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
+                              {anom.description}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--primary-color)', fontStyle: 'italic' }}>
+                              Politique : {anom.remediationPolicy}
+                            </div>
+
+                            {/* Contrôles d'arbitrage assisté selon le type d'anomalie */}
+                            {(anom.id === 'ANOM-04' || anom.id === 'ANOM-05') && (
+                              <div style={{ marginTop: '0.6rem', padding: '0.5rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '4px' }}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                                  Compte bancaire cible obligatoire pour réassignation :
+                                </label>
+                                <select 
+                                  value={selectedTargetAccount} 
+                                  onChange={e => setSelectedTargetAccount(e.target.value)}
+                                  style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                                >
+                                  <option value="">-- Sélectionnez un compte bancaire --</option>
+                                  {(serverData?.accounts || []).map(acc => (
+                                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.type})</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            {anom.id === 'ANOM-03' && (
+                              <div style={{ marginTop: '0.6rem', padding: '0.5rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '4px' }}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                                  Action sur les mensualités de prêt :
+                                </label>
+                                <select 
+                                  value={selectedTargetLoan} 
+                                  onChange={e => setSelectedTargetLoan(e.target.value)}
+                                  style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                                >
+                                  <option value="">Détacher (linkedId = NULL, recommandé)</option>
+                                  {(serverData?.loans || []).map(loan => (
+                                    <option key={loan.id} value={loan.id}>Rattacher à : {loan.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            {anom.id === 'ANOM-13' && (
+                              <div style={{ marginTop: '0.6rem', padding: '0.5rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '4px' }}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                                  Résolution des échéances passées prévues :
+                                </label>
+                                <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem' }}>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                                    <input 
+                                      type="radio" 
+                                      name="pastPlannedRes" 
+                                      checked={pastPlannedResolution === 'clear'} 
+                                      onChange={() => setPastPlannedResolution('clear')} 
+                                    />
+                                    Pointer comme Payé (cleared)
+                                  </label>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                                    <input 
+                                      type="radio" 
+                                      name="pastPlannedRes" 
+                                      checked={pastPlannedResolution === 'trash'} 
+                                      onChange={() => setPastPlannedResolution('trash')} 
+                                    />
+                                    Mettre à la corbeille (soft-delete)
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Bouton de simulation Dry-Run */}
+                      <Button
+                        variant="primary"
+                        icon={<Eye size={16} />}
+                        onClick={handlePreviewHealer}
+                        disabled={isHealerPreviewing}
+                      >
+                        {isHealerPreviewing ? 'Simulation en cours...' : 'Simuler la réparation (Dry-Run)'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
+
+              {/* MODALE DRY-RUN HEALER */}
+              <Modal
+                isOpen={isDryRunModalOpen}
+                onClose={() => setIsDryRunModalOpen(false)}
+                title="Simulation de réparation sécurisée (Dry-Run)"
+              >
+                <div>
+                  <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
+                    <div style={{ fontWeight: 600 }}>
+                      {healerResult?.totalModifications || 0} modification(s) chirurgicale(s) projetée(s)
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                      Cette simulation n'a modifié aucun octet en base. Le tableau ci-dessous liste l'intégralité des ajustements réels.
+                    </div>
+                  </div>
+
+                  {healerResult?.diffs && healerResult.diffs.length > 0 && (
+                    <div style={{ maxHeight: '250px', overflowY: 'auto', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                      <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: 'var(--bg-secondary)', textAlign: 'left' }}>
+                            <th style={{ padding: '0.5rem' }}>Table</th>
+                            <th style={{ padding: '0.5rem' }}>ID</th>
+                            <th style={{ padding: '0.5rem' }}>Champ</th>
+                            <th style={{ padding: '0.5rem' }}>Avant</th>
+                            <th style={{ padding: '0.5rem' }}>Après</th>
+                            <th style={{ padding: '0.5rem' }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {healerResult.diffs.map((diff, idx) => (
+                            <tr key={idx} style={{ borderTop: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '0.5rem', fontFamily: 'monospace' }}>{diff.table}</td>
+                              <td style={{ padding: '0.5rem', fontFamily: 'monospace' }}>{diff.recordId.slice(0, 8)}...</td>
+                              <td style={{ padding: '0.5rem', fontWeight: 500 }}>{diff.field}</td>
+                              <td style={{ padding: '0.5rem', color: '#ef4444' }}>{String(diff.oldValue ?? 'NULL')}</td>
+                              <td style={{ padding: '0.5rem', color: '#10b981' }}>{String(diff.newValue ?? 'NULL')}</td>
+                              <td style={{ padding: '0.5rem', fontWeight: 600 }}>{diff.action}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div style={{ 
+                    marginBottom: '1.25rem', 
+                    padding: '0.75rem', 
+                    backgroundColor: healerResult?.postAudit.totalAnomalies === 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', 
+                    borderRadius: '6px' 
+                  }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: healerResult?.postAudit.totalAnomalies === 0 ? '#065f46' : '#92400e' }}>
+                      Contre-audit projeté : {healerResult?.postAudit.totalAnomalies === 0 ? 'Base 100 % saine (0 anomalie restante)' : `${healerResult?.postAudit.totalAnomalies} anomalie(s) restante(s)`}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                    <Button variant="outline" onClick={() => setIsDryRunModalOpen(false)}>
+                      Annuler
+                    </Button>
+                    <Button
+                      variant="primary"
+                      icon={<Wrench size={16} />}
+                      onClick={handleApplyHealer}
+                      disabled={isHealerApplying}
+                    >
+                      {isHealerApplying ? 'Application...' : 'Confirmer et appliquer la réparation'}
+                    </Button>
+                  </div>
+                </div>
+              </Modal>
             </div>
 
             {/* BLOC 3 : JOURNAL TECHNIQUE DU SERVEUR */}
@@ -2323,6 +2585,13 @@ export default function Settings() {
                   <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.98rem' }}>🧹 Maintenance, Compactage (VACUUM) & Purge</h4>
                   <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary, #666)', lineHeight: 1.5 }}>
                     L'administrateur peut à tout moment compacter la base via le bouton VACUUM (vidage du WAL et réorganisation des B-Trees) ou purger l'ensemble des fichiers d'instantanés anciens sans jamais impacter la base active <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>budget.db</code>.
+                  </p>
+                </div>
+
+                <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.98rem' }}>🩺 Diagnostic d'Intégrité (DB Doctor) & Réparations Sécurisées (Safe Healer)</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary, #666)', lineHeight: 1.5 }}>
+                    Le moteur <strong>DB Doctor</strong> ausculte la base SQLite en 100 % lecture seule (contrôle B-Tree natif et 13 règles forensic de cohérence financière : liens orphelins, doublons, remboursements décorrélés, comptes supprimés). Le démarrage système est strictement passif (<strong>Safe Boot</strong>). En cas d'anomalie, le <strong>DB Healer</strong> permet de tester les corrections à blanc (<code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>Dry-Run</code> avec restitution du diff complet) avant toute application chirurgicale sécurisée par une sauvegarde préalable <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>VACUUM INTO</code>.
                   </p>
                 </div>
 

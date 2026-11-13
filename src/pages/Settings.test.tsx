@@ -4,7 +4,7 @@ import { cleanup } from '@testing-library/react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import Settings from './Settings';
-import { apiClient } from '../services/apiClient';
+import { apiClient, type DoctorReport } from '../services/apiClient';
 
 let mockIsAuthenticated = false;
 let mockServerData: any = null;
@@ -183,6 +183,199 @@ describe('Settings page - Protection des requêtes de maintenance', () => {
       fireEvent.click(downloadBtn);
     });
     expect(downloadExcelSpy).toHaveBeenCalledWith({ startDate: '2026-06-01', endDate: '2026-12-31' });
+  });
+
+  it('4. Déclenche le diagnostic DB Doctor et affiche l état de santé dans l onglet Serveur', async () => {
+    mockIsAuthenticated = true;
+    const doctorSpy = vi.spyOn(apiClient.maintenance, 'getDoctorAudit').mockResolvedValue({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      sqliteIntegrity: 'ok',
+      totalAnomalies: 0,
+      anomalies: [],
+      metrics: {
+        totalActiveTransactions: 496,
+        totalAccounts: 4,
+        totalLoans: 8,
+        totalRecurrenceTemplates: 30,
+        totalPlannedExpenses: 1,
+        activeFixedTemplates: 23,
+        activeIncomeTemplates: 4,
+        activeVariableTemplates: 1,
+        inactiveTemplates: 2
+      }
+    });
+
+    render(<Settings />);
+
+    const serverBtns = screen.getAllByRole('button', { name: /Serveur & Synchro/i });
+    const navBtn = serverBtns.find(b => b.classList.contains('btn-outline')) || serverBtns[0];
+    await act(async () => {
+      fireEvent.click(navBtn);
+    });
+
+    const doctorBtn = screen.getByRole('button', { name: /Audit Intégrité \(DB Doctor\)/i });
+    expect(doctorBtn).toBeDefined();
+
+    await act(async () => {
+      fireEvent.click(doctorBtn);
+    });
+
+    expect(doctorSpy).toHaveBeenCalledTimes(1);
+    const healthElements = await screen.findAllByText(/Base de données 100 % saine et intègre/i);
+    expect(healthElements.length).toBeGreaterThan(0);
+    expect(screen.getByText(/23/i)).toBeDefined();
+  });
+
+  it('5. Déclenche le flux complet Dry-Run et application Healer pour ANOM-13 avec sélection de l\'option corbeille (soft-delete)', async () => {
+    mockIsAuthenticated = true;
+    const mockAuditWithAnom: DoctorReport = {
+      status: 'warning',
+      timestamp: new Date().toISOString(),
+      sqliteIntegrity: 'ok',
+      totalAnomalies: 1,
+      anomalies: [
+        {
+          id: 'ANOM-13',
+          name: 'Dépense active restée au statut prévu dans un mois passé clos',
+          severity: 'warning',
+          count: 1,
+          description: "1 transaction(s) active(s) restée(s) 'planned' avant le mois courant (2026-11).",
+          remediationPolicy: 'Alerte temporelle : choix utilisateur assisté (pointer en payé ou purger si caduque).',
+          affectedIds: ['tx-old-planned-1']
+        }
+      ],
+      metrics: {
+        totalActiveTransactions: 496,
+        totalAccounts: 4,
+        totalLoans: 8,
+        totalRecurrenceTemplates: 30,
+        totalPlannedExpenses: 1,
+        activeFixedTemplates: 23,
+        activeIncomeTemplates: 4,
+        activeVariableTemplates: 1,
+        inactiveTemplates: 2
+      }
+    };
+
+    const mockHealthyAudit: DoctorReport = {
+      ...mockAuditWithAnom,
+      status: 'healthy',
+      totalAnomalies: 0,
+      anomalies: []
+    };
+
+    let auditCallCount = 0;
+    const doctorSpy = vi.spyOn(apiClient.maintenance, 'getDoctorAudit').mockImplementation(async () => {
+      auditCallCount++;
+      return auditCallCount === 1 ? mockAuditWithAnom : mockHealthyAudit;
+    });
+
+    const previewSpy = vi.spyOn(apiClient.maintenance, 'previewHealer').mockResolvedValue({
+      dryRun: true,
+      success: true,
+      totalModifications: 1,
+      diffs: [
+        {
+          table: 'transactions',
+          recordId: 'tx-old-planned-1',
+          field: 'deleted_at',
+          oldValue: null,
+          newValue: '1731528000',
+          action: 'SOFT_DELETE'
+        }
+      ],
+      preAudit: mockAuditWithAnom,
+      postAudit: mockHealthyAudit
+    });
+
+    const applySpy = vi.spyOn(apiClient.maintenance, 'applyHealer').mockResolvedValue({
+      dryRun: false,
+      success: true,
+      backupPath: '/tmp/safety_test.db',
+      totalModifications: 1,
+      diffs: [
+        {
+          table: 'transactions',
+          recordId: 'tx-old-planned-1',
+          field: 'deleted_at',
+          oldValue: null,
+          newValue: '1731528000',
+          action: 'SOFT_DELETE'
+        }
+      ],
+      preAudit: mockAuditWithAnom,
+      postAudit: mockHealthyAudit
+    });
+
+    render(<Settings />);
+
+    // 1. Navigation vers l'onglet Serveur
+    const serverBtns = screen.getAllByRole('button', { name: /Serveur & Synchro/i });
+    const navBtn = serverBtns.find(b => b.classList.contains('btn-outline')) || serverBtns[0];
+    await act(async () => {
+      fireEvent.click(navBtn);
+    });
+
+    // 2. Déclencher l'audit initial
+    const doctorBtn = screen.getByRole('button', { name: /Audit Intégrité \(DB Doctor\)/i });
+    await act(async () => {
+      fireEvent.click(doctorBtn);
+    });
+    expect(doctorSpy).toHaveBeenCalledTimes(1);
+
+    // 3. Vérifier la présence de l'anomalie ANOM-13
+    expect(screen.getByText(/Dépense active restée au statut prévu/i)).toBeDefined();
+
+    // 4. Sélectionner le radio button "Mettre à la corbeille (soft-delete)"
+    const trashRadio = screen.getByLabelText(/Mettre à la corbeille/i);
+    await act(async () => {
+      fireEvent.click(trashRadio);
+    });
+
+    // 5. Clic sur "Simuler la réparation (Dry-Run)"
+    const previewBtn = screen.getByRole('button', { name: /Simuler la réparation \(Dry-Run\)/i });
+    await act(async () => {
+      fireEvent.click(previewBtn);
+    });
+
+    // Vérifier l'appel à previewHealer avec le bon plan et paramètre 'trash'
+    expect(previewSpy).toHaveBeenCalledWith([
+      {
+        ruleId: 'ANOM-13',
+        targetIds: ['tx-old-planned-1'],
+        userParameters: { pastPlannedResolution: 'trash' }
+      }
+    ]);
+
+    // 6. Vérifier le contenu de la modale Dry-Run (titre, colonnes de diff, valeurs)
+    expect(screen.getByText(/Simulation de réparation sécurisée \(Dry-Run\)/i)).toBeDefined();
+    expect(screen.getByText('Table')).toBeDefined();
+    expect(screen.getByText('ID')).toBeDefined();
+    expect(screen.getByText('Champ')).toBeDefined();
+    expect(screen.getByText('Avant')).toBeDefined();
+    expect(screen.getByText('Après')).toBeDefined();
+    expect(screen.getByText('Action')).toBeDefined();
+    expect(screen.getByText('SOFT_DELETE')).toBeDefined();
+
+    // 7. Clic sur "Confirmer et appliquer la réparation"
+    const applyBtn = screen.getByRole('button', { name: /Confirmer et appliquer la réparation/i });
+    await act(async () => {
+      fireEvent.click(applyBtn);
+    });
+
+    // Vérifier l'appel à applyHealer
+    expect(applySpy).toHaveBeenCalledWith([
+      {
+        ruleId: 'ANOM-13',
+        targetIds: ['tx-old-planned-1'],
+        userParameters: { pastPlannedResolution: 'trash' }
+      }
+    ]);
+
+    // 8. Vérifier la notification de succès et la fermeture de la modale
+    const successMsg = await screen.findByText(/Réparation appliquée avec succès/i);
+    expect(successMsg).toBeDefined();
   });
 
   describe('Gestion explicite du compte courant principal et des comptes secondaires', () => {

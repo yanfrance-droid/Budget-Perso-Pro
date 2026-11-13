@@ -1,8 +1,8 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-12 (Version 1.5.0 — Verrouillage Temporel en Lecture Seule, Watchdog Historique Universel & Undo Atomique)  
-> **Statut QA :** 68 suites de tests Vitest, 649 tests au vert (100 % passants).
+> **Dernière mise à jour :** 2026-11-13 (Version 1.6.0 — Moteur d'Intégrité DB Doctor & Safe Healer, Safe Boot & Réparations Transactionnelles)  
+> **Statut QA :** 70 suites de tests Vitest, 675 tests au vert (100 % passants).
 
 ---
 
@@ -154,6 +154,33 @@ La base SQLite contient 12 tables relationnelles initialisées et migrées dans 
 
 ---
 
+### 4.4. Moteur d'Intégrité DB Doctor & Safe Healer (Diagnostic Forensic & Réparations Transactionnelles)
+
+- **Sécurisation du Boot Système (Safe Boot) :**
+  - Éradication totale des mutations silencieuses au démarrage (`server/db.ts`) : retrait de l'appel automatique à `repairOrphans(db)` dans `runStartupMaintenance` (signature `{ repaired: 0, purged }` préservée pour rétrocompatibilité).
+  - Retrait de l'appel automatique à `rehabilitateOrphanRecurrentTransactions(db)` dans `runMigrations`. Le démarrage et les migrations sont 100 % passifs, non-destructifs et déterministes.
+- **Moteur DB Doctor (`server/services/dbDoctorService.ts`) :**
+  - **100 % Lecture Seule :** Zéro écriture, zéro effet de bord, analyse complète sans mutation via 13 requêtes SQL forensic (`ANOM-01` à `ANOM-13`) et vérification B-Tree native (`PRAGMA quick_check(1)`).
+  - **Ventilation Dynamique en Temps Réel :** Calcul SQL direct des compteurs de `recurrence_templates` (23 charges fixes actives, 4 revenus récurrents, 1 dépense variable active, 2 contrats inactifs/désactivés) sans aucune valeur codée en dur.
+  - **Exposition Sécurisée :** Route `GET /api/maintenance/doctor` avec authentification et support de l'audit temporel contextuel (`?referenceMonth=YYYY-MM`).
+- **Moteur DB Healer (`server/services/dbHealerService.ts`) :**
+  - **Protocole Tripartite & Sauvegarde Préalable :**
+    * Mode **Dry-Run 100 % passif** (`POST /api/maintenance/doctor/dry-run`) : exécuté au sein d'un Savepoint SQLite éphémère (`SAVEPOINT sp_healer_preview`) immédiatement annulé par `ROLLBACK TO` pour simuler les mutations au bit près sans modifier un seul octet en base.
+    * Mode **Application Chirurgicale** (`POST /api/maintenance/healer`) : création préalable obligatoire d'une copie physique SQLite conforme (`VACUUM INTO`), exécution sous transaction isolée (`SAVEPOINT sp_healer_apply`) avec activation stricte des clés étrangères (`PRAGMA foreign_keys = ON;`), validation d'intégrité relationnelle (`PRAGMA foreign_key_check`), et contre-audit post-réparation certifiant l'éradication des anomalies avant commit final.
+  - **Politiques de Traitement & Arbitrage Assisté :**
+    * *ANOM-03 (Mensualité de prêt orpheline) :* Rattachement ciblé à un prêt valide (`userParameters.targetLoanId`) ou dissociation propre (`linkedId = NULL`).
+    * *ANOM-04 & ANOM-05 (Virement sans destinataire & Transaction sans compte) :* **Zéro auto-réassignation aveugle**. Exige impérativement un `targetAccountId` explicite choisi par l'utilisateur.
+    * *ANOM-08 (Transaction liée à un contrat supprimé) :* Détachement propre (`templateId = NULL`) sans altération des charges variables désactivées légitimes.
+    * *ANOM-09 (Doublon actif de template dans le même mois) :* Politique anti-extinction totale avec élection d'un gagnant unique selon la hiérarchie stricte d'états (`cleared` > `pending` > `isCustomized` > `planned`) et purge douce uniquement des excédents au statut `planned`.
+    * *ANOM-13 (Dépenses prévues dans un mois passé clos) :* Arbitrage explicite guidé entre pointage en payé (`clear`) ou mise à la corbeille douce (`trash`).
+- **Interface Utilisateur Dédiée (`src/pages/Settings.tsx`) :**
+  - Rubrique Maintenance modernisée avec badge d'état de santé instantané (Vert émeraude / Ambré / Rouge).
+  - Cartouche KPI des métriques globales et répartition dynamique des contrats.
+  - Modale Dry-Run interactive affichant la table comparative des diffs (`Table`, `ID`, `Champ`, `Avant`, `Après`, `Action`) avant toute confirmation de l'utilisateur.
+  - Rafraîchissement automatique des états (`serverData?.refreshAll()`) et ré-audit instantané après réparation.
+
+---
+
 ## 5. Environnement de Déploiement & Exploitation
 
 ### 5.1. Cible de Production
@@ -196,11 +223,21 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 > 9. **Immuabilité stricte du passé (< mois courant) :** `syncRollingHorizon` ne doit jamais tenter de régénérer ou repeupler des mois échus (`pastMonths = 0` imposé et `startOffset = Math.max(0, -Math.max(0, pastMonths))`). Le passé est sanctuarisé pour éviter d'insérer des opérations prévisionnelles dans des périodes déjà clôturées.
 > 10. **Préservation du statut lors du Undo / Restauration :** Lors de la restauration d'une transaction via l'Undo ou `/api/transactions/:id/restore`, le statut réel d'origine (`cleared`, `pending`, etc.) doit être transmis et restauré sans jamais être écrasé par `'planned'`. De plus, la synchronisation post-restauration ne doit s'exécuter qu'à partir de $M+1$ (`nextMonth`) pour ne pas altérer le mois en cours $M$.
 > 11. **Dédoublement d'historique (Undo/Redo) :** La suppression d'un contrat récurrent (`deleteRecurrenceTemplate`) prenant déjà en charge la purge des occurrences associées et l'enregistrement de l'action dans l'historique, il ne faut jamais appeler en doublon `deleteTransaction` pour la même ligne.
+> 13. **Safe Boot absolu (Zéro mutation silencieuse) :** Ne JAMAIS réintroduire de réparation automatique ou de réhabilitation au démarrage (`runStartupMaintenance`, `runMigrations`). Toute correction de base doit être diagnostiquée par le DB Doctor et validée explicitement par l'utilisateur via le DB Healer.
+> 14. **Sanctuarisation des modèles de récurrence désactivés :** Les 30 modèles de récurrence (incluant les charges variables désactivées comme *Axa scolaire* et *Axa trotinette*) sont des contrats légitimes. Le Doctor et le Healer ne doivent JAMAIS purger ou altérer les transactions rattachées à des modèles désactivés.
+> 15. **Interdiction de réassignation aveugle :** Ne jamais coder de réassignation automatique d'une transaction sans compte valide vers un compte par défaut (`ANOM-04`, `ANOM-05`). Un choix explicite de compte cible par l'utilisateur est strictement requis pour préserver l'intégrité comptable.
 > 12. **Suppression atomique en 1 clic sur résiliation (Choix 2) :** Lorsqu'un contrat est résilié à partir du mois sélectionné $M$, l'occurrence du mois $M$ doit disparaître immédiatement de l'écran en un seul clic (via soft-delete `deleted_at = now, templateId = NULL` si déjà `cleared`/`pending`). Cela évite le bug du double-clic et garantit qu'une seule action Undo est générée par suppression.
 
 ---
 
 ## 7. Historique Récent des Versions Majeures
+
+- **v1.6.0 :** Moteur d'Intégrité DB Doctor & Safe Healer, Safe Boot & Réparations Transactionnelles Sécurisées :
+  - *Safe Boot (Démarrage 100 % passif) :* Neutralisation définitive des réparations silencieuses au boot et lors des migrations (`repairOrphans` et `rehabilitateOrphanRecurrentTransactions` retirés de `runStartupMaintenance` et `runMigrations`).
+  - *Moteur DB Doctor 100 % Lecture Seule (`server/services/dbDoctorService.ts`, `GET /api/maintenance/doctor`) :* Audit forensic B-Tree (`PRAGMA quick_check(1)`) et détection des 13 anomalies structurelles réelles (`ANOM-01` à `ANOM-13`), métriques en temps réel avec ventilation SQL dynamique des 30 contrats (23 fixes, 4 revenus, 1 variable active, 2 inactifs).
+  - *Moteur DB Healer Transactionnel (`server/services/dbHealerService.ts`, `POST /api/maintenance/doctor/dry-run`, `POST /api/maintenance/healer`) :* Mode simulation Dry-Run 100 % passif via Savepoint éphémère annulé immédiatement, mode application avec sauvegarde physique préalable atomique (`VACUUM INTO`), validation des contraintes de clés étrangères (`PRAGMA foreign_key_check`), et contre-audit post-application certifiant l'assainissement complet de la base.
+  - *Interface Utilisateur Moderne (`src/pages/Settings.tsx`) :* Rubrique Maintenance avec badge d'intégrité, métriques dynamiques sans valeurs en dur, arbitrages guidés (comptes, prêts, soldage des échéances passées closes `ANOM-13`), et modale interactive de restitution du diff avant validation.
+  - *Couverture QA Exhaustive :* 70 suites de tests Vitest, 675 tests au vert (100 % passants).
 
 - **v1.5.0 :** Implémentation du Watchdog d'Intégrité Universel des Contrats & Récurrences, verrouillage strict du passé en lecture seule et résilience Undo/Redo atomique :
   - *Verrouillage Temporel du Passé (< mois civil courant) :* Neutralisation des `useEffect` clients lors de la consultation des mois antérieurs et verrou strict côté backend (`generateMonthlyOccurrences`, `syncRollingHorizon`) bloquant toute création de charges prévisionnelles parasites dans le passé et évitant l'apparition de faux impayés antérieurs.

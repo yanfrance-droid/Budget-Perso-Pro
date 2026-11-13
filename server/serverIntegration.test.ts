@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import http from 'node:http';
+import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { initDatabase } from './db.ts';
 import { createServer } from './app.ts';
@@ -763,6 +764,79 @@ describe('Server & API Integration - SQLite Centralized Backend', () => {
       expect(res.status).toBe(413);
       const data = await res.json();
       expect(data.error).toContain('trop volumineux');
+    });
+
+    it('exécute le cycle complet DB Doctor & Safe Healer (GET doctor, POST dry-run, POST healer) avec sauvegarde et non-régression', async () => {
+      apiClient.setToken(token);
+
+      // 1. Audit initial : vérifier le rapport sain et la présence des métriques
+      const initialReport = await apiClient.maintenance.getDoctorAudit();
+      expect(initialReport.status).toBe('healthy');
+      expect(initialReport.sqliteIntegrity).toBe('ok');
+      expect(initialReport.totalAnomalies).toBe(0);
+      expect(initialReport.metrics.activeFixedTemplates).toBeDefined();
+
+      // 2. Création contrôlée d'une anomalie ANOM-08 (transaction liée à un template inexistant)
+      const testAccountId = 'acc-test-doc';
+      db.prepare("INSERT INTO accounts (id, name, type, initialBalance, referenceDate) VALUES (?, ?, ?, ?, ?)").run(testAccountId, 'Compte Test Doc', 'checking', 1000, '2026-11-01');
+      const testTxId = 'tx-test-orphan-tmpl';
+      db.prepare(`
+        INSERT INTO transactions (id, accountId, date, amount, type, status, templateId, deleted_at)
+        VALUES (?, ?, '2026-11-15', 50, 'fixed_expense', 'cleared', 'tmpl-inexistant-xyz', NULL)
+      `).run(testTxId, testAccountId);
+
+      // 3. Vérifier que DB Doctor détecte l'anomalie
+      const auditedReport = await apiClient.maintenance.getDoctorAudit();
+      expect(auditedReport.totalAnomalies).toBeGreaterThan(0);
+      const anom08 = auditedReport.anomalies.find(a => a.id === 'ANOM-08');
+      expect(anom08).toBeDefined();
+      expect(anom08?.affectedIds).toContain(testTxId);
+
+      // 4. Exécuter la simulation Dry-Run (POST /api/maintenance/doctor/dry-run)
+      const plans = [{ ruleId: 'ANOM-08', targetIds: [testTxId] }];
+      const dryRunRes = await apiClient.maintenance.previewHealer(plans);
+      expect(dryRunRes.dryRun).toBe(true);
+      expect(dryRunRes.success).toBe(true);
+      expect(dryRunRes.diffs.length).toBe(1);
+      expect(dryRunRes.diffs[0].table).toBe('transactions');
+      expect(dryRunRes.diffs[0].recordId).toBe(testTxId);
+      expect(dryRunRes.diffs[0].field).toBe('templateId');
+      expect(dryRunRes.diffs[0].oldValue).toBe('tmpl-inexistant-xyz');
+      expect(dryRunRes.diffs[0].newValue).toBeNull();
+      expect(dryRunRes.diffs[0].action).toBe('UPDATE');
+
+      // Prouver que la base n'a PAS été modifiée (Dry-Run 100 % passif)
+      const txCheckBefore = db.prepare("SELECT templateId FROM transactions WHERE id = ?").get(testTxId) as { templateId: string };
+      expect(txCheckBefore.templateId).toBe('tmpl-inexistant-xyz');
+
+      // 5. Exécuter l'application réelle (POST /api/maintenance/healer)
+      let backupPathToDelete: string | undefined;
+      try {
+        const applyRes = await apiClient.maintenance.applyHealer(plans);
+        expect(applyRes.dryRun).toBe(false);
+        expect(applyRes.success).toBe(true);
+        expect(applyRes.totalModifications).toBe(1);
+        expect(applyRes.backupPath).toBeDefined();
+        backupPathToDelete = applyRes.backupPath;
+
+        // Prouver que la base a été mutée proprement
+        const txCheckAfter = db.prepare("SELECT templateId FROM transactions WHERE id = ?").get(testTxId) as { templateId: string | null };
+        expect(txCheckAfter.templateId).toBeNull();
+
+        // Prouver que le ré-audit post-application est sain
+        const postAuditReport = await apiClient.maintenance.getDoctorAudit();
+        expect(postAuditReport.status).toBe('healthy');
+        expect(postAuditReport.totalAnomalies).toBe(0);
+      } finally {
+        // Sécurité propreté disque : suppression impérative du fichier de sauvegarde de test
+        if (backupPathToDelete && fs.existsSync(backupPathToDelete)) {
+          try {
+            fs.unlinkSync(backupPathToDelete);
+          } catch {
+            // ignorer si déjà supprimé
+          }
+        }
+      }
     });
   });
 });

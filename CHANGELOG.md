@@ -6,6 +6,39 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.6.0] - 2026-11-13
+
+### Added
+- **Moteur DB Doctor 100 % Lecture Seule (`server/services/dbDoctorService.ts`) :**
+  - Audit forensic d'intégrité SQLite B-Tree (`PRAGMA quick_check(1)`) et détection des 13 anomalies structurelles réelles (`ANOM-01` à `ANOM-13`).
+  - Zéro écriture, zéro effet de bord, analyse complète sans mutation.
+  - Métriques d'intégrité temps réel avec ventilation SQL dynamique des 30 modèles de récurrence (23 charges fixes, 4 revenus, 1 dépense variable active, 2 contrats inactifs) et 496 transactions actives.
+  - Exposition sécurisée via la route API `GET /api/maintenance/doctor` avec support du paramètre `referenceMonth`.
+- **Moteur DB Healer Transactionnel & Réparations Sécurisées (`server/services/dbHealerService.ts`) :**
+  - Mode simulation **Dry-Run 100 % passif** (`POST /api/maintenance/doctor/dry-run`) via Savepoint isolé avec rollback immédiat, restituant la table de diff exacte (`table`, `recordId`, `field`, `oldValue`, `newValue`, `action`) et le contre-audit prévisionnel.
+  - Mode application chirurgicale sécurisée (`POST /api/maintenance/healer`) avec sauvegarde physique préalable atomique (`VACUUM INTO`), transaction isolée (`SAVEPOINT`), exécution sous `foreign_keys = ON`, validation de cohérence relationnelle (`PRAGMA foreign_key_check`), et contre-audit post-application strict avec rollback en cas d'erreur.
+  - Résolution complète d'`ANOM-03` (rattachement à un prêt valide ou dissociation propre `linkedId = NULL`), politique anti-extinction totale sur les doublons `ANOM-09` (élection d'un `keepId` unique selon l'état `cleared` > `pending` > `isCustomized` > `planned` et purge douce uniquement des excédents `planned`), et interdiction formelle d'auto-réassignation aveugle sans compte bancaire cible (`ANOM-04`, `ANOM-05`).
+- **Interface UI DB Doctor & Safe Healer (`src/pages/Settings.tsx` & `src/services/apiClient.ts`) :**
+  - Refonte complète de la rubrique Maintenance : carte d'état de santé globale en temps réel (badge vert "100 % saine et intègre" ou alerte détaillée par niveau de gravité).
+  - Cartouche de métriques d'intégrité avec répartition dynamique des 30 contrats sans valeurs en dur.
+  - Formulaire d'arbitrage guidé pour les anomalies nécessitant un choix humain (comptes cibles, prêts cibles, arbitrage pointage vs corbeille pour les charges planifiées échues `ANOM-13`).
+  - Modale de prévisualisation Dry-Run avec tableau de diff interactif et badge d'avertissement de sécurité.
+  - Nouvelles méthodes API `apiClient.maintenance.getDoctorAudit`, `previewHealer` et `applyHealer`.
+
+### Fixed
+- **Sécurisation du Boot Système (Safe Boot) :**
+  - Éradication de toute mutation silencieuse au démarrage (`server/db.ts`) : retrait de l'appel automatique à `repairOrphans(db)` dans `runStartupMaintenance`, tout en préservant la signature de retour `{ repaired: 0, purged }`.
+  - Retrait de l'appel automatique à `rehabilitateOrphanRecurrentTransactions(db)` dans `runMigrations`, garantissant que le démarrage et les migrations sont 100 % passifs et non-destructifs.
+
+### QA & Testing
+- 13 tests unitaires exhaustifs pour le DB Doctor (`server/services/dbDoctorService.test.ts`).
+- 10 tests de sécurité et d'atomicité pour le DB Healer (`server/services/dbHealerService.test.ts`).
+- Tests d'intégration Front/Back de bout en bout dans `server/serverIntegration.test.ts` (GET doctor, POST dry-run, POST healer, avec nettoyage automatique de sauvegarde).
+- 2 tests d'intégration React UI dans `src/pages/Settings.test.tsx` (audit initial et flux complet Dry-Run -> choix corbeille -> modale diff -> confirmation).
+- 70 suites de tests Vitest, 675 tests au vert (100 % passants).
+
+---
+
 ## [1.5.0] - 2026-11-12
 
 ### Added

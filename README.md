@@ -1,9 +1,9 @@
-# Personal Budget Pro (v1.5.0)
+# Personal Budget Pro (v1.6.0)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/Node.js-v24_Alpine-green.svg)](https://nodejs.org/)
 [![Database](https://img.shields.io/badge/SQLite-node:sqlite_WAL-blueviolet.svg)](https://sqlite.org/)
-[![Tests](https://img.shields.io/badge/Tests-644%20passing-brightgreen.svg)](package.json)
+[![Tests](https://img.shields.io/badge/Tests-675%20passing-brightgreen.svg)](package.json)
 [![RAM Footprint](https://img.shields.io/badge/RAM-%3C_60_Mo-success.svg)](#2-stack-technique--architecture)
 
 **Personal Budget Pro** est une application web auto-hébergée (*self-hosted*) de gestion budgétaire, d'anticipation de trésorerie (*cash-flow*) et de pilotage d'endettement.
@@ -49,6 +49,8 @@ Console d'infrastructure affichant l'état du runtime Node.js 24, le contrôle B
   Suivi des opérations au fil de l'eau avec typologie des moyens de paiement (carte, virement, prélèvement, chèque avec préservation des zéros initiaux ex: `001482`).
 * **Mes Projets (Wishlist Priorisée) :**  
   Planification d'achats futurs avec degré d'urgence (`urgent`, `medium`, `low`), date cible et enveloppe estimée, sans impacter les comptes bancaires actifs.
+* **Diagnostic d'Intégrité (DB Doctor) & Réparations Sécurisées (Safe Healer) :**  
+  Scanner forensic 100 % passif vérifiant l'intégrité B-Tree SQLite et 13 règles d'anomalies structurelles réelles. Simulation à blanc (Dry-Run 100 % passif via Savepoint) et application chirurgicale avec sauvegarde physique préalable atomique (VACUUM INTO). Démarrage système 100 % passif (Safe Boot).
 * **Mode Discret & Thèmes :**  
   Floutage instantané des montants sensibles pour consultation sur écran partagé ou en lieu public. Support des thèmes sombre et clair.
 
@@ -61,7 +63,7 @@ Console d'infrastructure affichant l'état du runtime Node.js 24, le contrôle B
 * **Frontend :** SPA React 19, TypeScript strict, Vite, Tailwind CSS, Lucide Icons, Recharts v3.
 * **Sécurité :** Hachage des mots de passe par `scrypt` (dérivation de clé résistante aux attaques matérielles) couplé à une clé de secours déterministe (`BUDGET-XXXX-XXXX-XXXX`).
 * **Empreinte système :** Moins de 60 Mo de RAM consommée au repos, CPU négligeable (< 0,1 % sur Proxmox LXC).
-* **Qualité & Tests :** 65 suites de tests automatisées, 627 tests Vitest passants (100 %).
+* **Qualité & Tests :** 70 suites de tests automatisées, 675 tests Vitest passants (100 %).
 
 ---
 

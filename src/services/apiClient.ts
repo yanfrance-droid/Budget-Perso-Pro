@@ -30,6 +30,68 @@ export function getApiBaseUrl(): string {
   return inMemoryApiUrl;
 }
 
+export type AnomalySeverity = 'info' | 'warning' | 'critical' | 'blocker';
+
+export interface DoctorAnomaly {
+  id: string;
+  name: string;
+  severity: AnomalySeverity;
+  count: number;
+  description: string;
+  remediationPolicy: string;
+  affectedIds: string[];
+}
+
+export interface DoctorReport {
+  status: 'healthy' | 'warning' | 'critical';
+  timestamp: string;
+  sqliteIntegrity: string;
+  totalAnomalies: number;
+  anomalies: DoctorAnomaly[];
+  metrics: {
+    totalActiveTransactions: number;
+    totalAccounts: number;
+    totalLoans: number;
+    totalRecurrenceTemplates: number;
+    totalPlannedExpenses: number;
+    activeFixedTemplates: number;
+    activeIncomeTemplates: number;
+    activeVariableTemplates: number;
+    inactiveTemplates: number;
+  };
+}
+
+export interface HealerActionPlan {
+  ruleId: string;
+  targetIds: string[];
+  userParameters?: {
+    targetAccountId?: string;
+    targetLoanId?: string;
+    pastPlannedResolution?: 'clear' | 'trash';
+    duplicateKeepId?: string;
+  };
+}
+
+export interface HealerDiffItem {
+  table: string;
+  recordId: string;
+  field: string;
+  oldValue: any;
+  newValue: any;
+  action: 'UPDATE' | 'DELETE' | 'SOFT_DELETE';
+}
+
+export interface HealerResult {
+  dryRun: boolean;
+  success: boolean;
+  backupPath?: string;
+  totalModifications: number;
+  diffs: HealerDiffItem[];
+  preAudit: DoctorReport;
+  postAudit: DoctorReport;
+  errors?: string[];
+}
+
 export function setApiBaseUrl(url: string): void {
   inMemoryApiUrl = url.trim().replace(/\/+$/, '');
   if (typeof window !== 'undefined' && window.localStorage) {
@@ -438,6 +500,23 @@ export const apiClient = {
       repaired: number;
       message: string;
     }>('/api/maintenance/orphans/repair', { method: 'POST' }),
+    getDoctorAudit: (referenceMonth?: string) => request<DoctorReport>(
+      `/api/maintenance/doctor${referenceMonth ? `?referenceMonth=${encodeURIComponent(referenceMonth)}` : ''}`
+    ),
+    previewHealer: (plans: HealerActionPlan[], referenceMonth?: string) => request<HealerResult>(
+      '/api/maintenance/doctor/dry-run',
+      {
+        method: 'POST',
+        body: JSON.stringify({ plans, referenceMonth })
+      }
+    ),
+    applyHealer: (plans: HealerActionPlan[], referenceMonth?: string) => request<HealerResult>(
+      '/api/maintenance/healer',
+      {
+        method: 'POST',
+        body: JSON.stringify({ plans, referenceMonth })
+      }
+    ),
     reset: (reseedDefaults = true) => request<{
       success: boolean;
       safetyBackupPath: string;

@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { repairOrphans, purgeExpiredDeletedTransactions } from './services/maintenanceService.ts';
+import { purgeExpiredDeletedTransactions } from './services/maintenanceService.ts';
 import { syncRollingHorizon } from './services/recurrenceService.ts';
 import { writeTechnicalLog } from './services/loggerService.ts';
 
@@ -51,15 +51,8 @@ export function runStartupMaintenance(db: DatabaseSync): { repaired: number; pur
         `Maintenance au démarrage : ${purged} transaction(s) supprimée(s) définitivement (> 30 jours).`
       );
     }
-    const repairResult = repairOrphans(db);
-    if (repairResult.repaired > 0) {
-      writeTechnicalLog(
-        'INFO',
-        `Maintenance au démarrage : ${repairResult.repaired} anomalie(s) d'intégrité réparée(s).`
-      );
-    } else {
-      writeTechnicalLog('INFO', 'Maintenance au démarrage : base de données vérifiée et intègre.');
-    }
+    // Phase 0 (Safe Boot) : Aucune mutation silencieuse au démarrage. repairOrphans retiré du boot.
+    writeTechnicalLog('INFO', 'Maintenance au démarrage : base de données vérifiée et intègre.');
 
     // Synchronisation automatique de l'horizon glissant des récurrences (M-1 à M+12)
     try {
@@ -77,7 +70,7 @@ export function runStartupMaintenance(db: DatabaseSync): { repaired: number; pur
       writeTechnicalLog('WARN', `Avertissement horizon glissant au démarrage : ${horizonErr.message}`);
     }
 
-    return { repaired: repairResult.repaired, purged };
+    return { repaired: 0, purged };
   } catch (err: any) {
     writeTechnicalLog('WARN', `Avertissement maintenance au démarrage : ${err.message}`);
     return { repaired: 0, purged: 0 };
@@ -227,13 +220,6 @@ export function runMigrations(db: DatabaseSync) {
     initPreExistingFutureExpenses(db);
   } catch (e) {
     console.error("Migration initPreExistingFutureExpenses error:", e);
-  }
-
-  // Auto-réhabilitation idempotente des charges récurrentes orphelines (recurrenceDay sans templateId)
-  try {
-    rehabilitateOrphanRecurrentTransactions(db);
-  } catch (e) {
-    console.error("Migration rehabilitateOrphanRecurrentTransactions error:", e);
   }
 
   // Migration des index de performance pour filtres fréquents et intégrité

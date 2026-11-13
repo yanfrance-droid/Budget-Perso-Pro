@@ -53,6 +53,8 @@ import {
   restoreServerSnapshot,
   purgeServerBackups
 } from './services/maintenanceService.ts';
+import { runDoctorAudit } from './services/dbDoctorService.ts';
+import { previewHealerPlan, applyHealerPlan } from './services/dbHealerService.ts';
 import { 
   writeTechnicalLog, 
   getRecentTechnicalLogs, 
@@ -699,6 +701,41 @@ export function createServer(db: DatabaseSync, staticDir?: string) {
       if (pathname === '/api/maintenance/orphans/check' && req.method === 'GET') {
         try {
           return sendJson(200, checkOrphans(db));
+        } catch (err: any) {
+          return sendJson(500, { error: err.message });
+        }
+      }
+
+      // DB Doctor : Diagnostic complet de santé et d'intégrité de la base SQLite (100 % passif / lecture seule)
+      if (pathname === '/api/maintenance/doctor' && req.method === 'GET') {
+        try {
+          const refMonth = parsedUrl.searchParams.get('referenceMonth') || undefined;
+          const report = runDoctorAudit(db, refMonth);
+          return sendJson(200, report);
+        } catch (err: any) {
+          return sendJson(500, { error: err.message });
+        }
+      }
+
+      // DB Healer : Simulation de réparation à blanc (Dry-Run 100 % passif)
+      if (pathname === '/api/maintenance/doctor/dry-run' && req.method === 'POST') {
+        try {
+          const body = await readBody();
+          const plans = Array.isArray(body?.plans) ? body.plans : [];
+          const result = previewHealerPlan(db, plans, body?.referenceMonth);
+          return sendJson(200, result);
+        } catch (err: any) {
+          return sendJson(500, { error: err.message });
+        }
+      }
+
+      // DB Healer : Application chirurgicale des réparations avec transaction et sauvegarde
+      if (pathname === '/api/maintenance/healer' && req.method === 'POST') {
+        try {
+          const body = await readBody();
+          const plans = Array.isArray(body?.plans) ? body.plans : [];
+          const result = applyHealerPlan(db, plans, body?.referenceMonth);
+          return sendJson(200, result);
         } catch (err: any) {
           return sendJson(500, { error: err.message });
         }

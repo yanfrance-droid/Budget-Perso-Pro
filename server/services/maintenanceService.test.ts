@@ -243,7 +243,7 @@ describe('maintenanceService', () => {
     expect(reimbRow.linkedId).toBeNull();
   });
 
-  it('3d. runStartupMaintenance auto-répare silencieusement la base et trace l opération', () => {
+  it('3d. runStartupMaintenance exécute la purge et NE mute PAS les orphelins silencieusement (Phase 0 Safe Boot)', () => {
     const acc = db.prepare('SELECT id FROM accounts LIMIT 1').get() as { id: string };
 
     // Insérer une anomalie
@@ -253,10 +253,12 @@ describe('maintenanceService', () => {
     `).run('tx-start-orphan', '2026-10-01', 'loan_payment', 100, 'planned', acc.id, 'ghost-loan');
 
     const res = runStartupMaintenance(db);
-    expect(res.repaired).toBeGreaterThan(0);
+    // En Phase 0, le démarrage est en lecture seule sur les orphelins : zéro réparation silencieuse
+    expect(res.repaired).toBe(0);
 
     const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get('tx-start-orphan') as any;
-    expect(tx.linkedId).toBeNull();
+    // L'orpheline reste intacte, protégée contre toute altération sauvage
+    expect(tx.linkedId).toBe('ghost-loan');
   });
 
   it('4. réinitialise les données tout en conservant l utilisateur et en réensemençant des catégories propres', () => {
