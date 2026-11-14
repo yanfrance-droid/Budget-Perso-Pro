@@ -16,6 +16,7 @@ ENV NODE_ENV=production
 ENV PORT=3001
 ENV DB_PATH=/app/data/budget.db
 ENV STATIC_DIR=/app/dist
+ENV TZ=Europe/Paris
 
 # Configuration pour Puppeteer et Chromium système sous Alpine Linux
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -23,10 +24,12 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Dépendances système :
 # - curl & sqlite : santé du conteneur et maintenance locale de la base
+# - tzdata : gestion du fuseau horaire système sous Alpine Linux (Europe/Paris)
 # - chromium & polices : moteur de rendu headless pour les graphiques Donut Excel (Puppeteer)
 RUN apk add --no-cache \
     curl \
     sqlite \
+    tzdata \
     chromium \
     nss \
     freetype \

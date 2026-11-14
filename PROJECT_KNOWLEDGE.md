@@ -1,7 +1,7 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-14 (Version 1.7.1 — Harmonisation du KPI « Total des charges obligatoires », Ventilation Dynamique et Cohérence Inter-Pages)  
+> **Dernière mise à jour :** 2026-11-14 (Version 1.7.2 — Intégration Système tzdata et Fuseau Horaire Europe/Paris sous Docker)  
 > **Statut QA :** 70 suites de tests Vitest, 675 tests au vert (100 % passants).
 
 ---
@@ -234,6 +234,12 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 ---
 
 ## 7. Historique Récent des Versions Majeures
+
+- **v1.7.2 :** Intégration Système `tzdata` et Fuseau Horaire `Europe/Paris` sous Docker (`Dockerfile`, `docker-compose.yml`, `.env.example`) :
+  - *Intégration du paquet `tzdata` dans l'image Alpine Linux (`Dockerfile`) :* Ajout de `tzdata` dans la couche `runner` de `node:24-alpine`. Alpine Linux et sa `musl libc` ne disposant pas nativement des définitions de fuseaux horaires IANA, la présence de `tzdata` est indispensable pour résoudre `Europe/Paris` et éviter la retombée silencieuse en UTC.
+  - *Définition native de la variable d'environnement `TZ` :* Définition de `ENV TZ=Europe/Paris` dans le `Dockerfile` et transmission déclarative de `TZ=${TZ:-Europe/Paris}` dans `docker-compose.yml`.
+  - *Éradication définitive du décalage horaire des logs :* L'horodatage interne généré par `getLocalTimestamp()` dans `server/services/loggerService.ts` et les journaux de conteneur sont désormais strictement calés sur l'heure locale française (CET UTC+1 / CEST UTC+2) à chaque reconstruction ou mise à jour de conteneur.
+  - *Documentation & Stabilité :* Ajout de la variable `TZ=Europe/Paris` dans `.env.example`, compilation frontend `npm run build` validée et persistance des 496 opérations SQLite intactes.
 
 - **v1.7.1 :** Harmonisation du KPI « Total des charges obligatoires », Ventilation Dynamique et Cohérence Inter-Pages (`src/pages/Dashboard.tsx`, `src/pages/Incomes.tsx`, `src/pages/Incomes.test.tsx`) :
   - *Ventilation dynamique explicite sur le Dashboard (`src/pages/Dashboard.tsx`) :* Remplacement du sous-titre générique et obsolète (« Fixes, variables, crédit, épargne ») de la carte KPI « Total des charges obligatoires » par la décomposition dynamique en temps réel des trois composantes réelles du calcul : `<p className="kpi-card-subtext">Fixes : {formatCurrency(chargesMois.fixed)} • Crédits : {formatCurrency(chargesMois.loan)} • Variables : {formatCurrency(chargesMois.variable)}</p>`, apportant une transparence comptable totale et éliminant toute fausse mention d'épargne.

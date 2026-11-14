@@ -15,6 +15,7 @@ services:
       - LOG_DIR=/app/logs
       - STATIC_DIR=/app/dist
       - VITE_ENABLE_PERSONAL_LOAN_DATASET=${VITE_ENABLE_PERSONAL_LOAN_DATASET:-false}
+      - TZ=${TZ:-Europe/Paris}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s

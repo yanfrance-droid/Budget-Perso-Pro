@@ -6,6 +6,19 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.7.2] - 2026-11-14
+
+### Fixed
+- **Intégration du paquet système `tzdata` sous Alpine Linux (`Dockerfile`) :**
+  - Ajout du paquet `tzdata` dans la couche d'exécution `runner` (`apk add --no-cache tzdata`).
+  - Résolution de l'incapacité native de `musl libc` sous Alpine Linux à interpréter les fuseaux horaires IANA (`Europe/Paris`), empêchant la retombée automatique et silencieuse sur UTC.
+- **Paramétrage natif du fuseau horaire `Europe/Paris` (`Dockerfile`, `docker-compose.yml`, `.env.example`) :**
+  - Configuration de `ENV TZ=Europe/Paris` dans le `Dockerfile`.
+  - Transmission déclarative de `TZ=${TZ:-Europe/Paris}` dans `docker-compose.yml` et documentation dans `.env.example`.
+  - Élimination définitive du décalage d'une heure sur l'horodatage des logs internes (`getLocalTimestamp()`) et des journaux du conteneur à chaque reconstruction (`docker compose build / up`).
+
+---
+
 ## [1.7.1] - 2026-11-14
 
 ### Fixed

@@ -1,4 +1,4 @@
-# Personal Budget Pro (v1.7.1)
+# Personal Budget Pro (v1.7.2)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/Node.js-v24_Alpine-green.svg)](https://nodejs.org/)
