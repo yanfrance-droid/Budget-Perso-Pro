@@ -214,6 +214,10 @@ describe('Settings page - Protection des requêtes de maintenance', () => {
       fireEvent.click(navBtn);
     });
 
+    // Vérification de la console proactive affichée dès l'accès à l'onglet
+    expect(screen.getByText(/Console d'Intégrité DB Doctor & Réparateur Safe Healer/i)).toBeDefined();
+    expect(screen.getByText(/Prêt pour l'audit/i)).toBeDefined();
+
     const doctorBtn = screen.getByRole('button', { name: /Audit Intégrité \(DB Doctor\)/i });
     expect(doctorBtn).toBeDefined();
 
@@ -224,6 +228,7 @@ describe('Settings page - Protection des requêtes de maintenance', () => {
     expect(doctorSpy).toHaveBeenCalledTimes(1);
     const healthElements = await screen.findAllByText(/Base de données 100 % saine et intègre/i);
     expect(healthElements.length).toBeGreaterThan(0);
+    expect(screen.getByText(/DB Healer : En veille active/i)).toBeDefined();
     expect(screen.getAllByText(/23/i).length).toBeGreaterThan(0);
   });
 

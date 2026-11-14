@@ -1,4 +1,4 @@
-# Personal Budget Pro (v1.6.3)
+# Personal Budget Pro (v1.7.0)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/Node.js-v24_Alpine-green.svg)](https://nodejs.org/)
@@ -105,7 +105,42 @@ sudo ./gestion-personal-budget-pro.sh
 
 ---
 
-## 4. Persistance & Sauvegardes
+## 4. Intégrité des Données, DB Doctor & Réparations Sécurisées (Safe Healer)
+
+La pérennité d'un budget personnel sur 10 à 20 ans repose sur l'exactitude absolue des données comptables et relationnelles. Personal Budget Pro intègre une console d'ingénierie forensique accessible en permanence dans l'onglet **Paramètres > Serveur & Synchro**.
+
+### 4.1. Distinction Clé : VACUUM vs DB Doctor
+* **`VACUUM` (Compactage physique de bas niveau) :**  
+  Réorganise les pages B-Tree du fichier SQLite sur le disque, défragmente l'espace libre laissé par les lignes supprimées et vide le journal WAL (`-wal`). Cette opération purement mécanique optimise la vitesse d'accès et l'espace disque, mais ne contrôle ni ne garantit aucune règle financière.
+* **`DB Doctor` (Audit logique forensique de haut niveau) :**  
+  Exécute 13 requêtes forensiques strictes en **100 % lecture seule** (zéro écriture, zéro risque) pour vérifier la conformité comptable (transactions sans compte, doublons récurrents, mensualités de prêt décorrélées, orphelins de contrats supprimés, remboursements santé isolés).
+* **`Safe Boot` (Démarrage passif garanti) :**  
+  Le serveur Node.js et les migrations s'exécutent sans aucune mutation silencieuse aveugle au démarrage.
+
+### 4.2. Le Protocole de Réparation en 3 Étapes du DB Healer
+Lorsqu'une anomalie relationnelle est détectée par le DB Doctor, le moteur **Safe Healer** propose une résolution sécurisée sous contrôle humain :
+1. **Diagnostic Forensic Passif :** Détection et qualification de la gravité (`BLOCKER`, `CRITICAL`, `WARNING`, `INFO`). Si 0 anomalie, le Healer reste au repos en veille active.
+2. **Simulation à blanc (`Dry-Run`) :** Exécution sous `SAVEPOINT` SQLite éphémère immédiatement révoqué par `ROLLBACK TO`. Une modale présente le tableau comparatif exact du diff (*Table*, *ID*, *Champ*, *Avant*, *Après*, *Action*) avant toute confirmation.
+3. **Application Transactionnelle & Sauvegarde Conforme (`VACUUM INTO`) :** Lors de la validation définitive, une copie physique instantanée est créée dans `data/backups/auto/`. Les mutations sont exécutées avec clés étrangères obligatoires (`PRAGMA foreign_keys = ON;`), validation relationnelle (`PRAGMA foreign_key_check`) et contre-audit immédiat attestant de l'éradication de l'anomalie.
+
+### 4.3. Référentiel des 13 Sondes Forensiques
+* `ANOM-01` : Dépense récurrente orpheline de template
+* `ANOM-02` : Revenu récurrent orphelin de template
+* `ANOM-03` : Mensualité de crédit rattachée à un prêt inexistant
+* `ANOM-04` : Virement interne sans compte destinataire valide
+* `ANOM-05` : Transaction sans compte bancaire assigné
+* `ANOM-06` : Remboursement santé rattaché à une dépense inexistante
+* `ANOM-07` : Transaction liée à un organisme verseur supprimé
+* `ANOM-08` : Transaction liée à un contrat supprimé avec template_id résiduel
+* `ANOM-09` : Doublon de template actif généré dans un même mois
+* `ANOM-10` : Contrat récurrent avec compte bancaire invalide
+* `ANOM-11` : Catégorie inexistante ou orpheline
+* `ANOM-12` : Anomalie de formatage de date ou d'échéance invalide
+* `ANOM-13` : Dépenses ou charges prévues non pointées dans un mois clos passé
+
+---
+
+## 5. Persistance & Sauvegardes
 
 Deux volumes locaux suffisent à pérenniser l'ensemble des données :
 * `./data:/app/data` : Contient la base de données SQLite `budget.db` et le dossier des sauvegardes automatiques (`data/backups/`).
@@ -115,6 +150,6 @@ Les exports complets au format classeur **Microsoft Excel** / **LibreOffice Calc
 
 ---
 
-## 5. Licence & Avertissement
+## 6. Licence & Avertissement
 
 Ce projet est distribué sous licence libre **MIT** ([`LICENSE`](LICENSE)). Il est fourni en l'état (*As-Is*) pour un usage personnel et la communauté auto-hébergement. L'utilisateur demeure responsable de la sauvegarde et de la sécurisation de ses données d'infrastructure.

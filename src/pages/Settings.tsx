@@ -8,7 +8,8 @@ import {
   Wallet, Building, AlertCircle, Database, Wrench, HardDrive, RotateCcw,
   KeyRound, Lock, Terminal, FileText, Moon, Sun, Eye, EyeOff, Palette,
   TrendingDown, Cpu, Network, Activity, Clock, HelpCircle, BookOpen, ExternalLink, Heart, Power, Star,
-  Tag
+  Tag,
+  Info
 } from 'lucide-react';
 import LoanCapitalHistoryManager from '../components/settings/LoanCapitalHistoryManager';
 import { calculateRealBalance } from '../engine/calculations';
@@ -2145,7 +2146,7 @@ export default function Settings() {
               </div>
 
               {/* PANNEAU DB DOCTOR & SAFE HEALER */}
-              {doctorReport && (
+              {doctorReport ? (
                 <div style={{ 
                   marginTop: '1.25rem', 
                   padding: '1.25rem', 
@@ -2201,8 +2202,44 @@ export default function Settings() {
 
                   {/* Liste des anomalies ou message sain */}
                   {doctorReport.totalAnomalies === 0 ? (
-                    <div style={{ padding: '0.75rem', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#065f46', borderRadius: '6px', fontSize: '0.9rem' }}>
-                      Aucune incohérence relationnelle, aucun orphelin et aucun doublon. Votre base SQLite fonctionne à plein régime.
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      <div style={{ 
+                        padding: '0.85rem 1rem', 
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)', 
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        borderRadius: '6px', 
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.6rem'
+                      }}>
+                        <CheckCircle size={20} color="#059669" style={{ flexShrink: 0 }} />
+                        <div>
+                          <strong style={{ color: '#065f46' }}>🩺 DB Doctor : Base 100 % saine et intègre (0 anomalie)</strong>
+                          <div style={{ fontSize: '0.82rem', color: '#047857', marginTop: '0.15rem' }}>
+                            Les 13 sondes forensic ont validé l'intégrité relationnelle, l'absence d'orphelins ou de doublons et la stricte conformité comptable.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ 
+                        padding: '0.85rem 1rem', 
+                        backgroundColor: 'rgba(2, 132, 199, 0.08)', 
+                        border: '1px solid rgba(2, 132, 199, 0.2)',
+                        borderRadius: '6px', 
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.6rem'
+                      }}>
+                        <Wrench size={20} color="#0284c7" style={{ flexShrink: 0 }} />
+                        <div>
+                          <strong style={{ color: '#0369a1' }}>🛠️ DB Healer : En veille active (Au repos — Aucune réparation requise)</strong>
+                          <div style={{ fontSize: '0.82rem', color: '#0284c7', marginTop: '0.15rem' }}>
+                            Le moteur de réparation chirurgicale reste armé en arrière-plan. Si une anomalie venait à être détectée, vous pourrez simuler les correctifs à blanc (Dry-Run) avec sauvegarde automatique atomique <code>VACUUM INTO</code> avant validation.
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div>
@@ -2306,6 +2343,67 @@ export default function Settings() {
                       </Button>
                     </div>
                   )}
+                </div>
+              ) : (
+                <div style={{ 
+                  marginTop: '1.25rem', 
+                  padding: '1.25rem', 
+                  backgroundColor: 'var(--bg-secondary, #fafafa)', 
+                  border: '1px solid var(--border-color)', 
+                  borderRadius: '8px' 
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <ShieldCheck size={22} color="#059669" />
+                      <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-color)' }}>
+                        Console d'Intégrité DB Doctor & Réparateur Safe Healer
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(5, 150, 105, 0.1)', color: '#059669', fontWeight: 600 }}>
+                      Prêt pour l'audit
+                    </span>
+                  </div>
+
+                  <p style={{ margin: '0 0 0.85rem 0', fontSize: '0.88rem', color: 'var(--text-secondary, #555)', lineHeight: 1.5 }}>
+                    Ce module forensique surveille en continu la vérité financière et relationnelle de votre base comptable (13 sondes de détection d'anomalies, détection des doublons récurrents, orphelins de contrats, mensualités de prêts déconnectées).
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem', marginBottom: '0.85rem' }}>
+                    <div style={{ padding: '0.75rem', backgroundColor: 'var(--card-bg, #fff)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <strong style={{ color: '#059669', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.88rem' }}>
+                        <ShieldCheck size={16} /> 🩺 DB Doctor (Diagnostic 100 % passif)
+                      </strong>
+                      <p style={{ margin: '0.3rem 0 0', fontSize: '0.82rem', color: 'var(--text-secondary, #666)', lineHeight: 1.4 }}>
+                        Contrôle de bas niveau <code>quick_check</code> et 13 requêtes forensiques en lecture seule stricte (zéro mutation, zéro risque).
+                      </p>
+                    </div>
+
+                    <div style={{ padding: '0.75rem', backgroundColor: 'var(--card-bg, #fff)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <strong style={{ color: '#0284c7', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.88rem' }}>
+                        <Wrench size={16} /> 🛠️ Safe Healer (Réparation chirurgicale)
+                      </strong>
+                      <p style={{ margin: '0.3rem 0 0', fontSize: '0.82rem', color: 'var(--text-secondary, #666)', lineHeight: 1.4 }}>
+                        Armé en veille active. Simulation à blanc (<strong>Dry-Run</strong>) et sauvegarde physique atomique (<code>VACUUM INTO</code>) avant toute correction.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ 
+                    padding: '0.65rem 0.85rem', 
+                    backgroundColor: 'rgba(2, 132, 199, 0.06)', 
+                    border: '1px solid rgba(2, 132, 199, 0.15)', 
+                    borderRadius: '6px',
+                    fontSize: '0.82rem', 
+                    color: 'var(--text-secondary, #555)',
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem' 
+                  }}>
+                    <Info size={16} color="#0284c7" style={{ flexShrink: 0 }} />
+                    <span>
+                      <strong>Différence clé :</strong> Le compactage <code>VACUUM</code> défragmente l'espace disque du fichier SQLite, alors que <strong>DB Doctor</strong> garantit la stricte cohérence logique et comptable de vos finances. Cliquez sur le bouton vert <strong>« Audit Intégrité (DB Doctor) »</strong> ci-dessus pour lancer l'analyse en temps réel.
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -2748,11 +2846,66 @@ export default function Settings() {
                   </p>
                 </div>
 
-                <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '0.98rem' }}>🩺 Diagnostic d'Intégrité (DB Doctor) & Réparations Sécurisées (Safe Healer)</h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary, #666)', lineHeight: 1.5 }}>
-                    Le moteur <strong>DB Doctor</strong> ausculte la base SQLite en 100 % lecture seule (contrôle B-Tree natif et 13 règles forensic de cohérence financière : liens orphelins, doublons, remboursements décorrélés, comptes supprimés). Le démarrage système est strictement passif (<strong>Safe Boot</strong>). En cas d'anomalie, le <strong>DB Healer</strong> permet de tester les corrections à blanc (<code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>Dry-Run</code> avec restitution du diff complet) avant toute application chirurgicale sécurisée par une sauvegarde préalable <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>VACUUM INTO</code>.
+                <div style={{ padding: '1.25rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <h4 style={{ margin: '0 0 0.6rem 0', fontSize: '1.05rem', color: 'var(--text-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <ShieldCheck size={18} color="#059669" />
+                    <span>🩺 Guide Opérationnel : DB Doctor & Safe Healer (Intégrité & Réparations Sécurisées)</span>
+                  </h4>
+                  <p style={{ margin: '0 0 0.85rem 0', fontSize: '0.88rem', color: 'var(--text-secondary, #555)', lineHeight: 1.5 }}>
+                    La souveraineté des données exige une fiabilité absolue. Personal Budget Pro intègre une console forensique complète conçue pour ausculter, modéliser et corriger de façon 100 % transactionnelle toute incohérence de données sans risque de perte financière.
                   </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
+                    <div style={{ padding: '0.85rem', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <strong style={{ fontSize: '0.88rem', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <Database size={15} /> 🧹 Compactage Physique (VACUUM)
+                      </strong>
+                      <p style={{ margin: '0.35rem 0 0', fontSize: '0.82rem', color: 'var(--text-secondary, #666)', lineHeight: 1.45 }}>
+                        <strong>Niveau physique (disque) :</strong> Réorganise les pages B-Tree SQLite, compacte le fichier sur le disque dur, libère l'espace libre des lignes supprimées et vide le journal WAL (Write-Ahead Log). Il ne vérifie ni ne corrige aucune règle comptable.
+                      </p>
+                    </div>
+
+                    <div style={{ padding: '0.85rem', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <strong style={{ fontSize: '0.88rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <ShieldCheck size={15} /> 🩺 Diagnostic Forensique (DB Doctor)
+                      </strong>
+                      <p style={{ margin: '0.35rem 0 0', fontSize: '0.82rem', color: 'var(--text-secondary, #666)', lineHeight: 1.45 }}>
+                        <strong>Niveau logique & métier (comptabilité) :</strong> Analyse en <strong>100 % lecture seule</strong> (zéro mutation) l'état de votre base à travers 13 sondes de cohérence financière, de ventilation des contrats et d'intégrité B-Tree (<code>PRAGMA quick_check(1)</code>).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ backgroundColor: 'rgba(2, 132, 199, 0.05)', padding: '0.85rem', borderRadius: '6px', border: '1px solid rgba(2, 132, 199, 0.2)', marginBottom: '1rem' }}>
+                    <strong style={{ fontSize: '0.88rem', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Wrench size={16} /> 🛠️ Le Protocole de Réparation en 3 Étapes (Safe Healer) :
+                    </strong>
+                    <ol style={{ margin: '0.4rem 0 0', paddingLeft: '1.25rem', fontSize: '0.83rem', color: 'var(--text-secondary, #555)', lineHeight: 1.55 }}>
+                      <li><strong>1. Détection Passive :</strong> Le DB Doctor identifie les anomalies sans rien modifier. Si 0 anomalie, le Healer reste au repos en veille active.</li>
+                      <li><strong>2. Simulation à blanc (Dry-Run) :</strong> En cas d'anomalie, un Savepoint SQLite éphémère simule la réparation au bit près avec annulation immédiate (<code>ROLLBACK TO</code>). Une table comparative vous présente le diff complet (Table, ID, Champ, Avant, Après, Action).</li>
+                      <li><strong>3. Sauvegarde Atomique & Application :</strong> Lors de la validation, une copie physique instantanée conforme est créée dans <code>data/backups/auto/</code> via <code>VACUUM INTO</code>. Les corrections s'exécutent avec vérification stricte des clés étrangères (<code>PRAGMA foreign_key_check</code>) et contre-audit final certifiant l'éradication des anomalies.</li>
+                    </ol>
+                  </div>
+
+                  <details style={{ fontSize: '0.83rem', color: 'var(--text-secondary, #555)', backgroundColor: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                    <summary style={{ fontWeight: 600, color: 'var(--text-color)', cursor: 'pointer', outline: 'none' }}>
+                      📋 Consulter le Référentiel des 13 Sondes Forensiques (ANOM-01 à ANOM-13)
+                    </summary>
+                    <div style={{ marginTop: '0.65rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem', lineHeight: 1.4 }}>
+                      <div><code>ANOM-01</code> : Dépenses récurrentes orphelines de template</div>
+                      <div><code>ANOM-02</code> : Revenus récurrents orphelins de template</div>
+                      <div><code>ANOM-03</code> : Mensualités rattachées à un prêt supprimé</div>
+                      <div><code>ANOM-04</code> : Virements internes sans compte destinataire</div>
+                      <div><code>ANOM-05</code> : Transactions orphelines sans compte bancaire</div>
+                      <div><code>ANOM-06</code> : Remboursements santé orphelins de soin</div>
+                      <div><code>ANOM-07</code> : Opérations liées à un organisme supprimé</div>
+                      <div><code>ANOM-08</code> : Transactions liées à un contrat supprimé résiduel</div>
+                      <div><code>ANOM-09</code> : Doublons récurrents actifs dans un même mois</div>
+                      <div><code>ANOM-10</code> : Contrats récurrents pointant vers un compte invalide</div>
+                      <div><code>ANOM-11</code> : Transactions associées à une catégorie supprimée</div>
+                      <div><code>ANOM-12</code> : Anomalies de formatage de date ou d'échéance</div>
+                      <div><code>ANOM-13</code> : Dépenses prévues non pointées dans un mois clos passé</div>
+                    </div>
+                  </details>
                 </div>
 
                 <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary, #fafafa)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>

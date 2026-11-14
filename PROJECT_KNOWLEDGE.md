@@ -1,7 +1,7 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-13 (Version 1.6.3 — Bandeaux pleins haute visibilité, Navigation Solid Badge & En-têtes HTTP anti-cache mobile)  
+> **Dernière mise à jour :** 2026-11-14 (Version 1.7.0 — Console Proactive DB Doctor & Safe Healer, Guide Opérationnel In-App & Documentation Exhaustive)  
 > **Statut QA :** 70 suites de tests Vitest, 675 tests au vert (100 % passants).
 
 ---
@@ -174,9 +174,12 @@ La base SQLite contient 12 tables relationnelles initialisées et migrées dans 
     * *ANOM-09 (Doublon actif de template dans le même mois) :* Politique anti-extinction totale avec élection d'un gagnant unique selon la hiérarchie stricte d'états (`cleared` > `pending` > `isCustomized` > `planned`) et purge douce uniquement des excédents au statut `planned`.
     * *ANOM-13 (Dépenses prévues dans un mois passé clos) :* Arbitrage explicite guidé entre pointage en payé (`clear`) ou mise à la corbeille douce (`trash`).
 - **Interface Utilisateur Dédiée (`src/pages/Settings.tsx`) :**
-  - Rubrique Maintenance modernisée avec badge d'état de santé instantané (Vert émeraude / Ambré / Rouge).
-  - Cartouche KPI des métriques globales et répartition dynamique des contrats.
+  - **Console Proactive & Permanente (v1.7.0) :** Dès l'ouverture de la carte « Santé & Optimisation du fichier SQLite », affichage permanent d'un cartouche d'information rassurant expliquant les rôles de DB Doctor et DB Healer, éliminant tout sentiment de "fonction fantôme ou cachée".
+  - **Distinction Pédagogique VACUUM vs DB Doctor :** Rappel direct et visible dans l'interface et le manuel : `VACUUM` opère au niveau physique (défragmentation des pages B-Tree SQLite et vidage du WAL), tandis que `DB Doctor` opère au niveau logique (vérité comptable et relations de données).
+  - **Indicateur d'État DB Healer en Santé Nominale :** Lorsque la base est saine (`totalAnomalies === 0`), affichage simultané du badge émeraude Doctor (« Base 100 % saine et intègre ») et du badge bleu océan Healer (« En veille active / Au repos — Aucune réparation requise »), attestant de sa disponibilité continue.
+  - Cartouche KPI des métriques globales et répartition dynamique des 30 contrats (23 fixes, 4 revenus, 1 variable active, 2 inactifs).
   - Modale Dry-Run interactive affichant la table comparative des diffs (`Table`, `ID`, `Champ`, `Avant`, `Après`, `Action`) avant toute confirmation de l'utilisateur.
+  - **Guide Opérationnel In-App Complet :** Intégration dans la section Aide (`activeSection === 'help'`) du protocole de réparation en 3 étapes (Audit passif -> Dry-Run -> Sauvegarde préalable `VACUUM INTO` atomique) et du référentiel détaillé des 13 sondes forensiques (`ANOM-01` à `ANOM-13`).
   - Rafraîchissement automatique des états (`serverData?.refreshAll()`) et ré-audit instantané après réparation.
 
 ---
@@ -231,6 +234,14 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 ---
 
 ## 7. Historique Récent des Versions Majeures
+
+- **v1.7.0 :** Console Proactive DB Doctor & Safe Healer, Guide Opérationnel In-App et Documentation Exhaustive (`src/pages/Settings.tsx`, `README.md`, `CHANGELOG.md`) :
+  - *Console d'Intégrité Permanente et Proactive :* Fin de la perception de "fonction fantôme ou cachée" ; un cartouche d'information pédagogique est visible en permanence dès l'accès à la carte « Santé & Optimisation du fichier SQLite », expliquant le rôle de DB Doctor (diagnostic 100 % passif en lecture seule) et de Safe Healer (moteur chirurgical avec Dry-Run et sauvegarde atomique).
+  - *Différenciation VACUUM vs DB Doctor :* Explication limpide intégrée directement sous les boutons et dans le manuel : `VACUUM` traite le niveau physique (défragmentation des pages B-Tree du fichier SQLite sur le disque et vidage du WAL), alors que `DB Doctor` traite le niveau logique (vérité comptable et relations entre transactions, comptes, prêts et contrats).
+  - *Indicateur d'État DB Healer en Régime Nominal :* Lorsque la base est saine (`totalAnomalies === 0`), affichage simultané du statut vert émeraude du DB Doctor et du statut bleu océan du DB Healer (« En veille active / Au repos — Aucune réparation requise »), confirmant que le moteur reste armé et prêt à intervenir.
+  - *Guide Opérationnel Complet In-App (`activeSection === 'help'`) :* Ajout d'une section dédiée détaillant le protocole de réparation en 3 étapes (Audit passif -> Simulation à blanc Dry-Run par Savepoint éphémère avec tableau de diff -> Sauvegarde physique préalable atomique `VACUUM INTO` dans `data/backups/auto/` et application sous contrôle de clés étrangères) et le référentiel des 13 sondes forensiques (`ANOM-01` à `ANOM-13`).
+  - *Enrichissement de `README.md` :* Ajout d'une section entière (Section 4) dédiée à l'intégrité des données, aux mécanismes de diagnostic et aux garanties de l'architecture Safe Boot.
+  - *Non-régression & Tests :* Validation des 70 suites de tests Vitest (675 tests au vert), tests dédiés `Settings.test.tsx` passants et persistance des 496 opérations SQLite.
 
 - **v1.6.3 :** Bandeaux pleins haute visibilité pour les 4 cartes « Serveur & Synchro », Navigation Solid Badge et En-têtes HTTP anti-cache mobile (`src/pages/Settings.tsx` & `server/app.ts`) :
   - *Bandeaux de cartes pleins et contrastés :* Fin des teintes pâles translucides ; chaque en-tête de carte est désormais un bandeau plein et éclatant avec texte et icônes blanc pur (Bleu roi `#1d4ed8`, Vert émeraude `#059669`, Bleu océan `#0284c7`, Violet `#7c3aed`), offrant une visibilité immédiate et sans équivoque sur PC et smartphone.

@@ -6,6 +6,26 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.7.0] - 2026-11-14
+
+### Added
+- **Console d'Intégrité DB Doctor & Safe Healer permanente et proactive (`src/pages/Settings.tsx`) :**
+  - Affichage immédiat d'un cartouche d'information et d'état dès l'ouverture de la carte « Santé & Optimisation du fichier SQLite » (élimine toute perception de "fonction cachée ou fantôme").
+  - Présentation explicite des deux moteurs : DB Doctor (audit 100 % passif en lecture seule) et Safe Healer (moteur chirurgical transactionnel avec simulation à blanc et sauvegarde atomique).
+  - Explication pédagogique immédiate de la différence fondamentale entre le compactage physique `VACUUM` (disque, défragmentation des pages B-Tree, vidage du WAL) et l'audit logique `DB Doctor` (vérité financière et conformité relationnelle des données).
+- **Indicateur d'état actif pour le DB Healer en santé nominale :**
+  - Lorsque la base est 100 % saine (`totalAnomalies === 0`), affichage explicite du statut vert émeraude du DB Doctor doublé du statut bleu océan du DB Healer : « En veille active (Au repos — Aucune réparation requise) », attestant que le moteur est armé et prêt à intervenir.
+- **Guide Opérationnel complet dans le Manuel d'Aide in-app (`activeSection === 'help'`) :**
+  - Ajout d'une sous-section dédiée « Guide Opérationnel : DB Doctor & Safe Healer (Intégrité & Réparations Sécurisées) ».
+  - Détail du protocole de réparation en 3 étapes : Détection passive -> Simulation à blanc (Dry-Run via Savepoint éphémère avec tableau de diff) -> Sauvegarde atomique préalable `VACUUM INTO` dans `data/backups/auto/` et application sous clés étrangères obligatoires (`PRAGMA foreign_key_check`).
+  - Référentiel pliable et documenté des 13 sondes forensiques (`ANOM-01` à `ANOM-13`).
+- **Enrichissement de la documentation de référence (`README.md`, `PROJECT_KNOWLEDGE.md`) :**
+  - Ajout de la section 4 dans le `README.md` détaillant le fonctionnement de la console d'intégrité, la distinction `VACUUM` vs `DB Doctor`, et le cycle de vie du Safe Healer.
+- **Tests & Assurance Qualité :**
+  - Enrichissement de `Settings.test.tsx` pour valider la présence de la console proactive dès l'ouverture de l'onglet et le badge de veille du DB Healer.
+
+---
+
 ## [1.6.3] - 2026-11-13
 
 ### Changed
