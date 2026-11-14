@@ -1,7 +1,7 @@
 # Base de Connaissance Vivante — Personal Budget Pro (`PROJECT_KNOWLEDGE.md`)
 
 > **Document de référence absolu du projet**  
-> **Dernière mise à jour :** 2026-11-14 (Version 1.7.0 — Console Proactive DB Doctor & Safe Healer, Guide Opérationnel In-App & Documentation Exhaustive)  
+> **Dernière mise à jour :** 2026-11-14 (Version 1.7.1 — Harmonisation du KPI « Total des charges obligatoires », Ventilation Dynamique et Cohérence Inter-Pages)  
 > **Statut QA :** 70 suites de tests Vitest, 675 tests au vert (100 % passants).
 
 ---
@@ -234,6 +234,12 @@ Placé à la racine du dépôt, ce script Bash interactif s'exécute avec les pr
 ---
 
 ## 7. Historique Récent des Versions Majeures
+
+- **v1.7.1 :** Harmonisation du KPI « Total des charges obligatoires », Ventilation Dynamique et Cohérence Inter-Pages (`src/pages/Dashboard.tsx`, `src/pages/Incomes.tsx`, `src/pages/Incomes.test.tsx`) :
+  - *Ventilation dynamique explicite sur le Dashboard (`src/pages/Dashboard.tsx`) :* Remplacement du sous-titre générique et obsolète (« Fixes, variables, crédit, épargne ») de la carte KPI « Total des charges obligatoires » par la décomposition dynamique en temps réel des trois composantes réelles du calcul : `<p className="kpi-card-subtext">Fixes : {formatCurrency(chargesMois.fixed)} • Crédits : {formatCurrency(chargesMois.loan)} • Variables : {formatCurrency(chargesMois.variable)}</p>`, apportant une transparence comptable totale et éliminant toute fausse mention d'épargne.
+  - *Harmonisation inter-pages avec l'onglet Revenus (`src/pages/Incomes.tsx`) :* Alignement strict du calcul de `totalObligatoires` sur la formule du Dashboard (`roundCurrency(fixed + variable + totalLoanPlanned)`), en excluant définitivement les flux d'épargne volontaire (`transfer`) qui gonflaient indûment les charges obligatoires à 4 174,98 € au lieu des 2 314,40 € de charges réelles du foyer.
+  - *Reste à vivre brut théorique fiabilisé :* Synchronisation de la déduction dans la page Revenus (`totalPlanned - totalObligatoires`) garantissant une parfaite cohérence entre la trésorerie projetée et le livre des charges.
+  - *Non-régression & Tests :* Validation des 70 suites de tests Vitest (675 tests au vert), actualisation conforme de `Incomes.test.tsx` et persistance des 496 opérations SQLite intactes.
 
 - **v1.7.0 :** Console Proactive DB Doctor & Safe Healer, Guide Opérationnel In-App et Documentation Exhaustive (`src/pages/Settings.tsx`, `README.md`, `CHANGELOG.md`) :
   - *Console d'Intégrité Permanente et Proactive :* Fin de la perception de "fonction fantôme ou cachée" ; un cartouche d'information pédagogique est visible en permanence dès l'accès à la carte « Santé & Optimisation du fichier SQLite », expliquant le rôle de DB Doctor (diagnostic 100 % passif en lecture seule) et de Safe Healer (moteur chirurgical avec Dry-Run et sauvegarde atomique).

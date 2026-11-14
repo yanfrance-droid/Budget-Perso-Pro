@@ -6,6 +6,19 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ---
 
+## [1.7.1] - 2026-11-14
+
+### Fixed
+- **Alignement inter-pages du calcul de `totalObligatoires` (`src/pages/Incomes.tsx`) :**
+  - Retrait définitif de `+ transfer` (virements vers l'épargne) dans la formule des charges obligatoires de la page Revenus (`roundCurrency(fixed + variable + totalLoanPlanned)`).
+  - Suppression de la divergence historique : le montant correspond désormais exactement aux **2 314,40 €** calculés sur le Dashboard (au lieu de 4 174,98 € avec l'épargne volontaire), restaurant la cohérence stricte du Reste à vivre brut théorique.
+- **Ventilation dynamique sur la carte KPI « Total des charges obligatoires » (`src/pages/Dashboard.tsx`) :**
+  - Remplacement du sous-titre générique obsolète (`Fixes, variables, crédit, épargne`) par la décomposition dynamique en temps réel affichant les 3 composantes réelles : `Fixes : {formatCurrency(chargesMois.fixed)} • Crédits : {formatCurrency(chargesMois.loan)} • Variables : {formatCurrency(chargesMois.variable)}`.
+- **Actualisation des tests unitaires (`src/pages/Incomes.test.tsx`) :**
+  - Mise à jour des assertions du Reste à vivre brut théorique pour valider formellement l'exclusion des flux d'épargne volontaire des charges obligatoires (675 tests au vert sur 70 suites).
+
+---
+
 ## [1.7.0] - 2026-11-14
 
 ### Added

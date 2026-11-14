@@ -50,13 +50,13 @@ describe('Incomes component - Reste à vivre brut théorique', () => {
       { id: 'inc-2', date: `${currentMonth}-25`, type: 'income', amount: 500, status: 'pending', categoryId: 'cat-inc-1', accountId: 'acc-1' }
     ];
 
-    // Charges obligatoires du Dashboard :
+    // Charges obligatoires alignées sur le Dashboard :
     // - Charge fixe : 600 €
     // - Charge variable : 150 €
-    // - Épargne (transfer) : 250 €
+    // - Prêt actif : mensualité 400 €
+    // - Épargne (transfer) : 250 € (EXCLUE des charges obligatoires)
     // - Dépense de consommation (daily) : 300 € (NE DOIT PAS ÊTRE DÉDUITE)
     // - Santé (health_expense) : 80 € (NE DOIT PAS ÊTRE DÉDUITE)
-    // Prêt actif : mensualité 400 €
     mockAllTransactions = [
       ...mockIncomes,
       { id: 'exp-1', date: `${currentMonth}-01`, type: 'fixed_expense', amount: 600, status: 'cleared', categoryId: 'c1' },
@@ -91,7 +91,7 @@ describe('Incomes component - Reste à vivre brut théorique', () => {
     // Carte 0 (Total prévu) : 2500 €
     // Carte 1 (Montant encaissé) : 2000 €
     // Carte 2 (Restant à percevoir) : 500 €
-    // Carte 3 (Reste à vivre brut théorique) : 2500 - (600 + 150 + 400 + 250) = 2500 - 1400 = 1100 €
+    // Carte 3 (Reste à vivre brut théorique) : 2500 - (600 + 150 + 400) = 2500 - 1150 = 1350 €
     const kpiValues = Array.from(container.querySelectorAll('.cards-grid .kpi-value')).map(el => el.textContent?.trim());
     expect(kpiValues[0]).toContain('2');
     expect(kpiValues[0]).toContain('500,00');
@@ -102,7 +102,7 @@ describe('Incomes component - Reste à vivre brut théorique', () => {
     expect(kpiValues[2]).toContain('500,00');
 
     expect(kpiValues[3]).toContain('1');
-    expect(kpiValues[3]).toContain('100,00');
+    expect(kpiValues[3]).toContain('350,00');
   });
 
   it('actualise correctement le calcul lors d’un changement de mois', () => {

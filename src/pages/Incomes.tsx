@@ -92,11 +92,10 @@ export default function Incomes() {
     return { totalPlanned, totalCleared, totalPending };
   }, [monthIncomes]);
 
-  // Total des charges obligatoires du Dashboard pour selectedMonth (fixes, variables, crédit, épargne)
+  // Total des charges obligatoires aligné sur le Dashboard pour selectedMonth (fixes, variables, crédits - hors épargne)
   const totalObligatoires = useMemo(() => {
     if (!allTransactions || !loans) return 0;
 
-    const accountMap = new Map((accounts || []).map(a => [a.id, a]));
     const activeTx = allTransactions.filter(t => t.status !== 'disabled');
     const selectedMonthTx = activeTx.filter(t => {
       if (t.recurrenceDay && !t.templateId) return selectedMonth >= t.date.substring(0, 7);
@@ -105,21 +104,11 @@ export default function Incomes() {
 
     let fixed = 0;
     let variable = 0;
-    let transfer = 0;
 
     selectedMonthTx.forEach(t => {
       const amt = Math.abs(Number(t.amount) || 0);
       if (t.type === 'fixed_expense') fixed += amt;
       else if (t.type === 'variable_expense') variable += amt;
-      else if (t.type === 'transfer') {
-        const srcAcc = t.accountId ? accountMap.get(t.accountId) : undefined;
-        const destAcc = t.destinationAccountId ? accountMap.get(t.destinationAccountId) : undefined;
-        const isSrcSavings = srcAcc ? srcAcc.type === 'savings' : false;
-        const isDestSavings = destAcc ? destAcc.type === 'savings' : true;
-        if (isDestSavings && !isSrcSavings) {
-          transfer += amt;
-        }
-      }
     });
 
     let totalLoanPlanned = 0;
@@ -158,8 +147,8 @@ export default function Incomes() {
       }
     });
 
-    return roundCurrency(fixed + variable + totalLoanPlanned + transfer);
-  }, [allTransactions, loans, accounts, selectedMonth]);
+    return roundCurrency(fixed + variable + totalLoanPlanned);
+  }, [allTransactions, loans, selectedMonth]);
 
   const resteAVivreBrutTheorique = totalPlanned - totalObligatoires;
 

@@ -1007,7 +1007,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="kpi-card-value">{formatCurrency(totalObligatoires)}</div>
-          <p className="kpi-card-subtext">Fixes, variables, crédit, épargne</p>
+          <p className="kpi-card-subtext">Fixes : {formatCurrency(chargesMois.fixed)} • Crédits : {formatCurrency(chargesMois.loan)} • Variables : {formatCurrency(chargesMois.variable)}</p>
         </div>
       </div>
 
